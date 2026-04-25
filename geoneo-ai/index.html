@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GeoNeo AI | SEO, GEO, and AI Search Growth</title>
+  <meta name="description" content="GeoNeo AI helps businesses dominate SEO, GEO, and AI search visibility with a clear roadmap, technical fixes, and citation-first content systems." />
+  <meta name="robots" content="index, follow" />
+  <meta property="og:title" content="GeoNeo AI | SEO, GEO, and AI Search Growth" />
+  <meta property="og:description" content="Run a real-world search visibility audit in under a minute. See rankings, competitors, and technical causes with expert support options." />
+  <meta property="og:type" content="website" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "ProfessionalService",
+      "name": "GeoNeo AI",
+      "description": "SEO, GEO, and AI search optimization services for businesses.",
+      "areaServed": "United States",
+      "hasOfferCatalog": {
+        "@type": "OfferCatalog",
+        "name": "GeoNeo AI Plans",
+        "itemListElement": [
+          {
+            "@type": "Offer",
+            "name": "Full Audit",
+            "price": "199.00",
+            "priceCurrency": "USD"
+          },
+          {
+            "@type": "Offer",
+            "name": "Fixes + Strategy",
+            "price": "299.00",
+            "priceCurrency": "USD"
+          },
+          {
+            "@type": "Offer",
+            "name": "Priority",
+            "price": "399.00",
+            "priceCurrency": "USD"
+          }
+        ]
+      }
+    }
+  </script>
+</head>
+<body>
+  <div class="orb orb-a"></div>
+  <div class="orb orb-b"></div>
+
+  <header class="site-header container">
+    <a class="brand" href="#top" aria-label="GeoNeo AI home">
+      <span class="brand-mark" aria-hidden="true">G</span>
+      <span class="brand-text">GeoNeo AI</span>
+    </a>
+    <nav class="nav" aria-label="Primary">
+      <a href="#audit">Audit</a>
+      <a href="#results-preview">Preview</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#human-help">Expert Help</a>
+      <a href="#neo-club">Neo Club</a>
+      <a href="#final-cta">Run Audit</a>
+    </nav>
+    <a class="btn btn-sm" href="#audit">Get Started</a>
+  </header>
+
+  <main id="top">
+    <section id="audit" class="hero container section">
+      <div class="hero-copy reveal">
+        <p class="eyebrow" id="heroEyebrow">Real-World Visibility Audit</p>
+        <h1 id="heroTitle">See who owns your market before your customers ever reach your website.</h1>
+        <p class="lead" id="heroLead">Every audit starts with the top three buyer queries in your market so you can see where you rank before anyone talks about fixes.</p>
+      </div>
+      <div class="mode-tabs reveal" role="tablist" aria-label="Audit modes">
+        <button class="mode-tab active" type="button" data-mode="website" id="modeWebsiteBtn" aria-selected="true">Website Audit</button>
+        <button class="mode-tab" type="button" data-mode="market" id="modeMarketBtn" aria-selected="false">Industry and Area Rankings</button>
+      </div>
+      <div class="audit-wrap reveal">
+        <div id="websiteModePanel">
+          <form class="audit-form live-audit-form" id="websiteAuditForm" aria-label="Website audit form">
+            <label>
+              Website URL
+              <input name="url" type="text" inputmode="url" placeholder="https://example.com or www.example.com" required />
+            </label>
+            <button class="btn btn-hot" type="submit">Audit Website</button>
+            <p class="form-note"><strong>Takes 30–60 seconds • No signup required</strong></p>
+            <details class="optional-fields">
+              <summary>Optional Inputs</summary>
+              <label>
+                Industry (optional)
+                <input name="industry" type="text" placeholder="Roofing, legal, dental, etc." />
+              </label>
+              <div class="field-row">
+                <label>
+                  City (optional)
+                  <input name="city" type="text" placeholder="Dallas" />
+                </label>
+                <label>
+                  State (optional)
+                  <input name="state" type="text" placeholder="TX" />
+                </label>
+              </div>
+            </details>
+          </form>
+        </div>
+        <div id="marketModePanel" hidden>
+          <aside class="card market-mode" aria-label="Industry and Area Rankings Mode">
+            <h3>Industry and Area Rankings</h3>
+            <p class="form-note">Search an industry and area to see which businesses rank first in that market right now.</p>
+            <form class="audit-form" id="marketModeForm">
+              <label>
+                Industry
+                <input id="marketIndustry" name="industry" type="text" placeholder="Towing" required />
+              </label>
+              <div class="field-row">
+                <label>
+                  City
+                  <input id="marketCity" name="city" type="text" placeholder="Branson" />
+                </label>
+                <label>
+                  State
+                  <input id="marketState" name="state" type="text" placeholder="Missouri" />
+                </label>
+              </div>
+              <button class="btn btn-ghost" type="submit">Run Search Audit</button>
+            </form>
+          </aside>
+        </div>
+        <aside class="card mode-guide" aria-label="Mode guidance">
+          <p class="eyebrow" id="modeGuideEyebrow">Choose Your Path</p>
+          <h3 id="modeGuideTitle">Website Audit</h3>
+          <p class="form-note" id="modeGuideLead">Use this when you want to understand how one specific website performs in search and what to fix next.</p>
+          <ul class="audit-list" id="modeGuideList">
+            <li>See where the site ranks in live search.</li>
+            <li>See why it ranks there.</li>
+            <li>Get a prioritized fix path.</li>
+          </ul>
+        </aside>
+      </div>
+      <section class="trust-strip reveal" aria-label="Trust indicators">
+        <ul class="inline-metrics">
+          <li><strong id="metricOneTitle">Top 3 search queries</strong><span id="metricOneText">Industry + geo intent first</span></li>
+          <li><strong id="metricTwoTitle">Rank position proof</strong><span id="metricTwoText">See where you appear first</span></li>
+          <li><strong id="metricThreeTitle">Competitor pressure</strong><span id="metricThreeText">Who shows before you</span></li>
+          <li><strong id="metricFourTitle">Outcome + causes + fixes</strong><span id="metricFourText">No guesswork after the ranking check</span></li>
+        </ul>
+      </section>
+      <section class="results-preview reveal">
+        <p class="eyebrow" id="storyEyebrow">Search Has Changed</p>
+        <h2 id="storyTitle">The way products and services are found has changed, the way a company or product is ranked has changed.</h2>
+        <div class="card">
+          <p class="lead" id="storyLead">You must change your strategy. The good news is you have an opportunity to position yourself far ahead of your competitors, because very few people understand how much search has changed or what it now takes to rank.</p>
+        </div>
+      </section>
+      <section id="results-preview" class="results-preview reveal">
+        <p class="eyebrow" id="previewEyebrow">Results Preview</p>
+        <h2 id="previewTitle">The audit opens with real ranking proof, then shows what to fix.</h2>
+        <div class="card">
+          <p class="lead" id="previewLead">No sample rankings are shown here. Once you run the audit, each section is populated with live query, ranking, and competitor data from that specific market.</p>
+        </div>
+      </section>
+      <section id="dashboardResults" class="audit-results" aria-live="polite" hidden>
+        <h3>Internal Audit Dashboard</h3>
+        <p id="dashboardStatus" class="form-note">Run a query to view results.</p>
+        <article class="card" id="searchPositionPanel" hidden>
+          <h4 id="searchPositionTitle">Top Search Position Check</h4>
+          <p id="searchPositionLead" class="lead"></p>
+          <p id="searchPositionSummary" class="form-note"></p>
+          <div id="searchPositionQueries" class="audit-findings"></div>
+        </article>
+        <article class="card" id="marketSearchPanel" hidden>
+          <h4 id="marketSearchTitle">Market Search Results</h4>
+          <p id="marketSearchLead" class="lead"></p>
+          <p id="marketSearchSummary" class="form-note"></p>
+          <div id="marketSearchStats" class="audit-score-row"></div>
+        </article>
+        <article class="card" id="googleMatrixPanel" hidden>
+          <h4 id="googleMatrixTitle">Google Ranking Matrix</h4>
+          <p id="googleMatrixIntro" class="lead"></p>
+          <div id="googleMatrixRows" class="audit-findings"></div>
+        </article>
+        <div class="audit-score-row" id="summaryScoreCards"></div>
+        <article class="card" id="dashboardControlsCard">
+          <div class="field-row">
+            <label>
+              Package View
+              <select id="packageViewSelect">
+                <option value="score_only">Score Only</option>
+                <option value="scores_issues">Scores + Issues</option>
+                <option value="full_data" selected>Full Data + Fixes</option>
+              </select>
+            </label>
+            <label>
+              <input id="adminModeToggle" type="checkbox" />
+              Internal/Admin View (show all)
+            </label>
+          </div>
+          <p id="dataQualityBadge" class="form-note"></p>
+        </article>
+        <article class="card" id="packageComparisonCard">
+          <h4>Package Comparison</h4>
+          <div id="packageComparison" class="audit-findings"></div>
+        </article>
+        <article class="card" id="issuesPanel">
+          <h4>Issues</h4>
+          <ul id="issuesList" class="audit-list"></ul>
+        </article>
+        <article class="card" id="fixesPanel">
+          <h4>Fixes / Actions</h4>
+          <ul id="fixesList" class="audit-list"></ul>
+        </article>
+        <article class="card" id="competitorsPanel">
+          <h4>Competitor / Market Context</h4>
+          <div class="table-wrap">
+            <table id="competitorsTable">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Website</th>
+                  <th>City</th>
+                  <th>Category</th>
+                  <th>Notes</th>
+                  <th>Strengths</th>
+                  <th>Weaknesses</th>
+                  <th>Scores</th>
+                  <th>Source</th>
+                </tr>
+              </thead>
+              <tbody id="competitorsTableBody"></tbody>
+            </table>
+          </div>
+        </article>
+        <article class="card" id="adminPanel" hidden>
+          <h4>Internal Admin Panel</h4>
+          <p class="form-note">Includes all collected fields and package outputs.</p>
+          <div class="hero-cta">
+            <button class="btn btn-sm" type="button" id="copyReportBtn">Copy Report</button>
+            <button class="btn btn-sm" type="button" id="exportJsonBtn">Export JSON</button>
+            <button class="btn btn-sm" type="button" id="exportTextBtn">Export Text Summary</button>
+          </div>
+          <pre id="adminRawData"></pre>
+        </article>
+      </section>
+    </section>
+
+    <section id="pricing" class="container section reveal">
+      <p class="eyebrow" id="pricingEyebrow">Pricing</p>
+      <h2 id="pricingTitle">Choose the level of support you need.</h2>
+      <div class="card-grid pricing-focus">
+        <article class="card">
+          <h3>$199 Full Audit</h3>
+          <ul class="audit-list">
+            <li>Real-world search visibility review</li>
+            <li>Technical root-cause analysis</li>
+            <li>Competitor pressure snapshot</li>
+          </ul>
+        </article>
+        <article class="card featured-price">
+          <h3>$299 Fixes + Strategy</h3>
+          <ul class="audit-list">
+            <li>Everything in Full Audit</li>
+            <li>Fix priorities and implementation guidance</li>
+            <li>Consultation included with strategy walkthrough</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3>$399 Priority</h3>
+          <ul class="audit-list">
+            <li>Everything in Fixes + Strategy</li>
+            <li>Priority support and faster response windows</li>
+            <li>Hands-on expert consultation and follow-up</li>
+          </ul>
+        </article>
+      </div>
+      <p class="lead" id="pricingLead">Every paid tier includes human support, not just automated output.</p>
+    </section>
+
+    <section id="human-help" class="container section reveal">
+      <p class="eyebrow">Human Element</p>
+      <h2>Real experts help you interpret results and execute the right fixes.</h2>
+      <div class="card-grid">
+        <article class="card">
+          <h3>Not AI-only</h3>
+          <p>Most tools stop at generic suggestions. GeoNeo combines automation with practical expert guidance.</p>
+        </article>
+        <article class="card">
+          <h3>Consultation Focused</h3>
+          <p>We review your ranking context, market pressure, and technical issues with you directly.</p>
+        </article>
+        <article class="card">
+          <h3>Action Over Noise</h3>
+          <p>You get prioritized next steps tied to outcomes, not endless diagnostics with no direction.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="neo-club" class="container section reveal">
+      <p class="eyebrow">Neo Club</p>
+      <h2>Premium visibility intelligence for teams that want ongoing growth.</h2>
+      <div class="card neo-locked-preview">
+        <p><strong>Premium Access</strong></p>
+        <ul class="audit-list">
+          <li>Weekly strategies for ranking and conversion growth</li>
+          <li>Expert content and execution playbooks</li>
+          <li>Private podcast briefings for market moves</li>
+        </ul>
+        <a class="btn btn-ghost" href="/neo-club.html">Explore Neo Club</a>
+      </div>
+    </section>
+
+    <section id="final-cta" class="container section reveal">
+      <p class="eyebrow" id="finalCtaEyebrow">Final Step</p>
+      <h2 id="finalCtaTitle">Run your audit now and see exactly where competitors are winning.</h2>
+      <form class="audit-form" id="finalCtaForm" aria-label="Final call to action form">
+        <label>
+          <span id="finalCtaLabel">Website URL</span>
+          <input id="finalUrl" type="text" inputmode="url" placeholder="https://example.com" required />
+        </label>
+        <button class="btn btn-hot" type="submit" id="finalCtaButton">Run Audit</button>
+        <p class="form-note" id="finalCtaNote">Takes 30–60 seconds • No signup required</p>
+      </form>
+    </section>
+  </main>
+
+  <footer class="site-footer container">
+    <p><strong>GeoNeo AI</strong> | Search visibility built for the AI era.</p>
+    <a href="#top">Back to top</a>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
