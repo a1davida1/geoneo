@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Neo Club | GeoNeo AI</title>
+  <meta name="description" content="Neo Club gives Gold members weekly visibility strategy, expert tactical guides, private brief episodes, and focused knowledge assets." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="orb orb-a"></div>
+  <div class="orb orb-b"></div>
+
+  <header class="site-header container">
+    <a class="brand" href="/" aria-label="GeoNeo AI home">
+      <span class="brand-mark" aria-hidden="true">G</span>
+      <span class="brand-text">GeoNeo AI</span>
+    </a>
+    <nav class="nav" aria-label="Neo Club navigation">
+      <a href="#weekly">Weekly Strategy</a>
+      <a href="#topics">Expert Topics</a>
+      <a href="#podcast">Neo Visibility Brief</a>
+      <a href="#knowledge">Knowledge Base</a>
+    </nav>
+    <a class="btn btn-sm btn-ghost" href="/">Back To Audit</a>
+  </header>
+
+  <main class="container section neo-club-page">
+    <section class="neo-club-hero card reveal">
+      <p class="eyebrow">Premium Visibility System</p>
+      <h1>Neo Club</h1>
+      <p id="neoClubHeadline" class="lead">Stay ahead of your competitors.</p>
+      <p id="neoClubSupport" class="form-note">Keep your visibility growing. Know what to do before others do.</p>
+      <div class="neo-club-status-row">
+        <span id="neoClubStatus" class="neo-club-status">Checking membership...</span>
+        <a id="neoClubUpgradeTop" class="btn btn-sm" href="/#purchase" hidden>Upgrade to Gold ($199)</a>
+      </div>
+    </section>
+
+    <section id="neoLockedPreview" class="card neo-locked-preview" hidden>
+      <h2>Unlock Neo Club</h2>
+      <p class="form-note">Gold members get ongoing strategy and execution guidance beyond the audit.</p>
+      <ul id="neoClubBenefits" class="audit-list"></ul>
+      <a id="neoClubUpgradeMain" class="btn" href="/#purchase">Upgrade to Gold ($199)</a>
+    </section>
+
+    <div id="neoClubContentWrap" class="neo-club-content-wrap">
+      <section id="weekly" class="card neo-club-section reveal">
+        <h2>Weekly Visibility Strategy</h2>
+        <p class="form-note">Concise updates with direct actions.</p>
+        <div id="weeklyStrategyList" class="neo-card-grid"></div>
+      </section>
+
+      <section id="topics" class="card neo-club-section reveal">
+        <h2>Expert Topics</h2>
+        <p class="form-note">Tactical guides by category.</p>
+        <div id="topicTabs" class="neo-topic-tabs"></div>
+        <div id="topicGuides" class="neo-card-grid"></div>
+      </section>
+
+      <section id="podcast" class="card neo-club-section reveal">
+        <h2>Neo Visibility Brief</h2>
+        <p class="form-note">Private episodes in short 10-20 minute formats.</p>
+        <div id="podcastList" class="neo-card-grid"></div>
+      </section>
+
+      <section id="knowledge" class="card neo-club-section reveal">
+        <h2>Knowledge Base</h2>
+        <p class="form-note">Clear categorized articles with practical use cases.</p>
+        <div id="knowledgeBaseList" class="neo-card-grid"></div>
+      </section>
+    </div>
+  </main>
+
+  <script src="neo-club.js"></script>
+</body>
+</html>
