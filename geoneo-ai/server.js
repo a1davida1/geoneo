@@ -35,6 +35,16 @@ const PACKAGE_PRICES = {
   gold: 399,
   admin: 0
 };
+const LEAD_INTELLIGENCE_THRESHOLDS = {
+  HIGH_CONFIDENCE_SCORE_MAX: 50,
+  HIGH_CONFIDENCE_CPL_MIN: 60,
+  MEDIUM_CONFIDENCE_SCORE_MAX: 65,
+  MEDIUM_CONFIDENCE_MISSING_MIN: 2
+};
+const LEAD_INTELLIGENCE_METRICS = {
+  EST_MISSED_CLICKS_PER_QUERY: 45,
+  CONVERSION_RATE: 0.08
+};
 const NEO_CLUB_PREVIEW_BENEFITS = [
   'Stay ahead of your competitors with weekly strategy drops.',
   'Keep your visibility growing with short, execution-ready playbooks.',
@@ -820,6 +830,263 @@ function buildPrioritizedActionPlan(issueSolutions) {
     action: item.solutionTitle,
     outcome: item.solution
   }));
+}
+
+function generateReadyToUseFixes(result, input) {
+  const checks = Array.isArray(result?.checks) ? result.checks : [];
+  const failing = checks.filter((c) => c.status === 'FIX');
+  const biz = normalizeString(result?.siteProfile?.businessName || input?.website || 'Your Business');
+  const industry = normalizeString(input?.industry || result?.siteProfile?.visibleServiceKeywords?.[0] || 'services');
+  const city = normalizeString(input?.city || result?.siteProfile?.locationMentions?.[0]?.split(',')[0] || '');
+  const state = normalizeString(input?.state || '');
+  const location = [city, state].filter(Boolean).join(', ');
+  const url = normalizeString(result?.finalUrl || input?.website);
+  const domain = extractRootDomain(url);
+
+  const fixes = [];
+
+  const fixMap = {
+    title: () => {
+      const locationPart = location ? ` in ${location}` : '';
+      const title = `${capitalize(industry)}${locationPart} | ${biz}`;
+      return {
+        key: 'title',
+        checkMessage: 'Improve title structure',
+        generatedFix: `<title>${escapeHtml(title)}</title>`,
+        explanation: 'Combines primary service + location + brand in ~60 characters for maximum SERP relevance',
+        copyPasteReady: true
+      };
+    },
+    'meta-description': () => {
+      const desc = `${capitalize(industry)} in ${location}. ${biz} offers expert ${industry.toLowerCase()} services. Call today for a free estimate.`;
+      return {
+        key: 'meta-description',
+        checkMessage: 'Refine meta description',
+        generatedFix: `<meta name="description" content="${escapeHtml(desc)}">`,
+        explanation: 'Benefit-driven description with local intent and clear call to action (120-160 chars)',
+        copyPasteReady: true
+      };
+    },
+    h1: () => {
+      const h1 = `${capitalize(industry)} in ${location}`;
+      return {
+        key: 'h1',
+        checkMessage: 'Use one clear H1',
+        generatedFix: `<h1>${escapeHtml(h1)}</h1>`,
+        explanation: 'Single, service-focused H1 that mirrors title and primary search intent',
+        copyPasteReady: true
+      };
+    },
+    canonical: () => {
+      return {
+        key: 'canonical',
+        checkMessage: 'Add canonical signal',
+        generatedFix: `<link rel="canonical" href="${escapeHtml(url)}">`,
+        explanation: 'Prevents duplicate content issues by declaring the preferred URL version',
+        copyPasteReady: true
+      };
+    },
+    'og-tags': () => {
+      const ogTitle = `${capitalize(industry)} in ${location} | ${biz}`;
+      const ogDesc = `${biz} provides ${industry.toLowerCase()} in ${location}. Contact us today.`;
+      return {
+        key: 'og-tags',
+        checkMessage: 'Complete Open Graph tags',
+        generatedFix: `<meta property="og:title" content="${escapeHtml(ogTitle)}">\n<meta property="og:description" content="${escapeHtml(ogDesc)}">\n<meta property="og:url" content="${escapeHtml(url)}">\n<meta property="og:type" content="website">`,
+        explanation: 'Improves social sharing previews and cross-platform visibility',
+        copyPasteReady: true
+      };
+    },
+    'structured-data': () => {
+      const schema = {
+        '@context': 'https://schema.org',
+        '@type': 'LocalBusiness',
+        name: biz,
+        description: `${capitalize(industry)} in ${location}`,
+        url: url,
+        address: {
+          '@type': 'PostalAddress',
+          addressLocality: city,
+          addressRegion: state
+        }
+      };
+      return {
+        key: 'structured-data',
+        checkMessage: 'Implement structured data',
+        generatedFix: `<script type="application/ld+json">\n${JSON.stringify(schema, null, 2)}\n</script>`,
+        explanation: 'JSON-LD LocalBusiness schema helps search engines understand your business entity and location',
+        copyPasteReady: true
+      };
+    },
+    'faq-citation': () => {
+      const faqs = [
+        {
+          question: `How much does ${industry.toLowerCase()} cost in ${city}?`,
+          answer: `${biz} provides competitive ${industry.toLowerCase()} pricing in ${location}. Contact us for a free quote based on your specific needs.`
+        },
+        {
+          question: `Do you offer ${industry.toLowerCase()} services in ${city}?`,
+          answer: `Yes, ${biz} serves ${city}${state ? `, ${state}` : ''} and surrounding areas with professional ${industry.toLowerCase()} services.`
+        },
+        {
+          question: `What areas do you serve?`,
+          answer: `${biz} provides ${industry.toLowerCase()} in ${location} and nearby communities.`
+        }
+      ];
+      const faqSchema = {
+        '@context': 'https://schema.org',
+        '@type': 'FAQPage',
+        mainEntity: faqs.map((faq) => ({
+          '@type': 'Question',
+          name: faq.question,
+          acceptedAnswer: {
+            '@type': 'Answer',
+            text: faq.answer
+          }
+        }))
+      };
+      const faqHtml = faqs.map((faq) => `<details><summary>${faq.question}</summary><p>${faq.answer}</p></details>`).join('\n');
+      return {
+        key: 'faq-citation',
+        checkMessage: 'Add citation-ready FAQ blocks',
+        generatedFix: `<section class="faq-section">\n<h2>Frequently Asked Questions</h2>\n${faqHtml}\n</section>\n\n<script type="application/ld+json">\n${JSON.stringify(faqSchema, null, 2)}\n</script>`,
+        explanation: 'Q&A format with FAQ schema makes your content easier for AI systems to cite and quote',
+        copyPasteReady: true
+      };
+    },
+    'robots-meta': () => {
+      return {
+        key: 'robots-meta',
+        checkMessage: 'Set robots meta directives',
+        generatedFix: `<meta name="robots" content="index, follow">`,
+        explanation: 'Explicitly tells search engines to crawl and index this page',
+        copyPasteReady: true
+      };
+    },
+    sitemap: () => {
+      return {
+        key: 'sitemap',
+        checkMessage: 'Publish sitemap.xml',
+        generatedFix: `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>${escapeHtml(url)}</loc>\n    <lastmod>${new Date().toISOString().split('T')[0]}</lastmod>\n    <priority>1.0</priority>\n  </url>\n</urlset>`,
+        explanation: 'Save as sitemap.xml at site root and submit to Google Search Console',
+        copyPasteReady: true
+      };
+    },
+    'robots-txt': () => {
+      return {
+        key: 'robots-txt',
+        checkMessage: 'Publish robots.txt',
+        generatedFix: `User-agent: *\nAllow: /\n\nSitemap: ${escapeHtml(url)}/sitemap.xml`,
+        explanation: 'Save as robots.txt at site root. Allows crawling and references sitemap location',
+        copyPasteReady: true
+      };
+    },
+    'image-alt': () => {
+      return {
+        key: 'image-alt',
+        checkMessage: 'Fix image alt coverage',
+        generatedFix: `Example pattern: alt="${capitalize(industry)} project in ${city} by ${biz}"`,
+        explanation: 'Add descriptive alt text to images using this pattern: [Service] project in [City] by [Business Name]',
+        copyPasteReady: false
+      };
+    },
+    'local-geo': () => {
+      const proof = `${biz} proudly serves ${location}${state ? ` and surrounding communities in ${state}` : ''}. Our ${industry.toLowerCase()} team is locally owned and operated, bringing you expert service with local knowledge and commitment to the ${city} community.`;
+      return {
+        key: 'local-geo',
+        checkMessage: 'Strengthen local GEO signals',
+        generatedFix: `<p class="local-proof">${proof}</p>`,
+        explanation: 'Add this local proof paragraph to key service pages to strengthen geographic relevance signals',
+        copyPasteReady: true
+      };
+    },
+    'trust-signals': () => {
+      const block = `<div class="trust-block">\n  <p><strong>Trusted ${capitalize(industry)} in ${location}</strong></p>\n  <p>${biz} has served the ${city} community with ${industry.toLowerCase()} excellence. We back our work with a satisfaction guarantee and responsive customer service.</p>\n  <p><strong>Contact us today for a free estimate!</strong></p>\n</div>`;
+      return {
+        key: 'trust-signals',
+        checkMessage: 'Add trust conversion signals',
+        generatedFix: block,
+        explanation: 'Add this trust block above your main CTA to increase conversion confidence',
+        copyPasteReady: true
+      };
+    },
+    'thin-content': () => {
+      const expanded = `<h3>Our ${capitalize(industry)} Services in ${location}</h3>\n<p>${biz} provides comprehensive ${industry.toLowerCase()} services tailored to the needs of ${city} residents and businesses. Our approach combines technical expertise with local understanding to deliver results that matter.</p>\n<h3>Why Choose ${biz}?</h3>\n<p>We bring years of experience, proven methods, and a commitment to customer satisfaction to every project in ${location}. Our team is trained, certified, and equipped to handle ${industry.toLowerCase()} challenges of any scale.</p>\n<h3>Our Process</h3>\n<p>Every project begins with a thorough assessment of your needs. We provide clear communication, transparent pricing, and work that meets the highest standards. When the job is done, we don't leave until you're completely satisfied.</p>`;
+      return {
+        key: 'thin-content',
+        checkMessage: 'Increase page depth',
+        generatedFix: expanded,
+        explanation: 'Replace thin content with this expanded service page structure including process, differentiation, and outcomes',
+        copyPasteReady: true
+      };
+    },
+    'paragraph-depth': () => {
+      return {
+        key: 'paragraph-depth',
+        checkMessage: 'Improve paragraph clarity',
+        generatedFix: 'Guidance: Expand short paragraphs (2-3 sentences) into complete explanatory paragraphs (4-6 sentences) that include context, process details, and outcome expectations.',
+        explanation: 'Shallow paragraphs reduce perceived expertise. Expand each key paragraph to demonstrate deeper knowledge.',
+        copyPasteReady: false
+      };
+    },
+    'repetitive-content': () => {
+      return {
+        key: 'repetitive-content',
+        checkMessage: 'Reduce repetitive language',
+        generatedFix: 'Guidance: Audit your page for phrases that appear 3+ times. Rewrite each instance with varied, specific wording that addresses different aspects of the topic.',
+        explanation: 'Repetitive language signals thin content. Use synonyms and varied sentence structures to improve quality perception.',
+        copyPasteReady: false
+      };
+    },
+    grammar: () => {
+      return {
+        key: 'grammar',
+        checkMessage: 'Fix grammar and clarity',
+        generatedFix: 'Guidance: Run your content through a grammar checker. Fix flagged issues, simplify long sentences, and ensure consistent tense and voice throughout.',
+        explanation: 'Grammar errors reduce trust. Clean, professional language improves credibility and conversion.',
+        copyPasteReady: false
+      };
+    }
+  };
+
+  failing.forEach((check) => {
+    const key = normalizeString(check.key).toLowerCase();
+    if (fixMap[key]) {
+      const fix = fixMap[key]();
+      if (validateGeneratedFix(fix)) {
+        fixes.push(fix);
+      }
+    }
+  });
+
+  return fixes;
+}
+
+function validateGeneratedFix(fix) {
+  if (!fix || typeof fix !== 'object') return false;
+  if (!fix.key || typeof fix.key !== 'string') return false;
+  if (!fix.checkMessage || typeof fix.checkMessage !== 'string') return false;
+  if (!fix.generatedFix || typeof fix.generatedFix !== 'string') return false;
+  if (!fix.explanation || typeof fix.explanation !== 'string') return false;
+  if (typeof fix.copyPasteReady !== 'boolean') return false;
+  
+  // Validate JSON-LD schema if present
+  if (fix.generatedFix.includes('<script type="application/ld+json">')) {
+    const jsonMatch = fix.generatedFix.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        JSON.parse(jsonMatch[0]);
+      } catch (e) {
+        return false;
+      }
+    }
+  }
+  
+  return true;
+}
+
+function capitalize(str) {
+  return normalizeString(str).replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function normalizeQueryType(value) {
@@ -1806,6 +2073,7 @@ function buildUnifiedModelFromWebsiteAudit(result, input) {
   const competitors = buildCompetitorsFromAudit(result, input);
   const searchPositioning = buildWebsiteSearchPositioning(result, input);
   const googleRankingMatrix = buildGoogleRankingMatrix(result, competitors);
+  const generatedFixes = Array.isArray(result.generatedFixes) ? result.generatedFixes : [];
   const localStatus = normalizeString(result?.localSearchVisibility?.status).toLowerCase();
   const dataQuality = localStatus === 'ok' && result?.googleGradesSource === 'live_pagespeed'
     ? 'real'
@@ -1827,7 +2095,8 @@ function buildUnifiedModelFromWebsiteAudit(result, input) {
     googleRankingMatrix,
     issues,
     fixes,
-    competitors
+    competitors,
+    generatedFixes
   };
 }
 
@@ -2045,7 +2314,8 @@ function filterAuditResultByPackage(fullResult, packageLevel) {
       fullDiagnosis: Array.isArray(result.fullDiagnosis) ? result.fullDiagnosis : [],
       issueSolutions: Array.isArray(result.issueSolutions) ? result.issueSolutions : [],
       implementationRoadmap: Array.isArray(result.implementationRoadmap) ? result.implementationRoadmap : [],
-      prioritizedActionPlan: Array.isArray(result.prioritizedActionPlan) ? result.prioritizedActionPlan : []
+      prioritizedActionPlan: Array.isArray(result.prioritizedActionPlan) ? result.prioritizedActionPlan : [],
+      generatedFixes: Array.isArray(result.generatedFixes) ? result.generatedFixes : []
     };
   }
 
@@ -4052,6 +4322,22 @@ async function runAudit(targetInput, marketOrContext = '') {
     diagnosis: check.message
   }));
 
+  const siteProfileForFixes = {
+    businessName: detectedBusinessName,
+    visibleServiceKeywords: serviceKeywords,
+    locationMentions
+  };
+  const generatedFixes = generateReadyToUseFixes({
+    checks: checks,
+    siteProfile: siteProfileForFixes,
+    finalUrl
+  }, {
+    industry,
+    city,
+    state,
+    website: parsed.toString()
+  });
+
   let summary = 'You are likely losing business due to poor search visibility and site quality.';
   if (scores.overall >= 85) {
     summary = 'Strong foundation, but there is still room to improve visibility and conversions.';
@@ -4173,6 +4459,7 @@ async function runAudit(targetInput, marketOrContext = '') {
     issueSolutions,
     implementationRoadmap,
     prioritizedActionPlan,
+    generatedFixes,
     checks: checks.map((check) => ({
       key: check.key,
       status: check.status,
@@ -4194,24 +4481,94 @@ function isLocalRequest(req) {
     || remote === '';
 }
 
+function computeLeadIntelligence(record) {
+  const CPL_BY_INDUSTRY = {
+    roofing: 85,
+    plumber: 65,
+    plumbing: 65,
+    hvac: 75,
+    heating: 70,
+    cooling: 70,
+    electrician: 60,
+    electrical: 60,
+    dentist: 45,
+    dental: 45,
+    attorney: 120,
+    lawyer: 120,
+    landscaping: 40,
+    'tree service': 35,
+    painting: 45,
+    construction: 50,
+    remodeling: 55,
+    contractor: 50,
+    'garage door': 60,
+    'pest control': 50,
+    cleaning: 30,
+    restoration: 70,
+    default: 55
+  };
+
+  const industry = normalizeString(record.industry).toLowerCase();
+  const cpl = CPL_BY_INDUSTRY[industry] || CPL_BY_INDUSTRY.default;
+
+  const localSummary = record.localSearchVisibility?.summary
+    || record.fullAuditResult?.localSearchVisibility?.summary
+    || {};
+  const missingCount = Number(localSummary.missingCount) || 0;
+  const totalQueries = Number(localSummary.totalQueries) || 3;
+  const visibilityScore = Number(localSummary.visibilityScore) || 0;
+
+  const estMissedClicks = missingCount * LEAD_INTELLIGENCE_METRICS.EST_MISSED_CLICKS_PER_QUERY;
+  const estMissedLeads = Math.round(estMissedClicks * LEAD_INTELLIGENCE_METRICS.CONVERSION_RATE);
+  const estMonthlyLoss = estMissedLeads * cpl;
+  const lossRange = {
+    low: Math.round(estMonthlyLoss * 0.6),
+    high: Math.round(estMonthlyLoss * 1.4)
+  };
+
+  const checks = record.fullAuditResult?.checks || [];
+  const failing = checks.filter((c) => c.status === 'FIX');
+  const leverageOrder = ['local-geo', 'title', 'meta-description', 'faq-citation',
+    'structured-data', 'h1', 'trust-signals', 'thin-content', 'canonical', 'og-tags'];
+  const topFix = leverageOrder.find((key) => failing.some((c) => c.key === key))
+    || (failing[0]?.key)
+    || 'none';
+
+  const overall = Number(record.scores?.overall) || 50;
+  let confidence = 'low';
+  if (!record.scores || typeof record.scores.overall !== 'number') {
+    confidence = 'low';
+  } else if (overall < LEAD_INTELLIGENCE_THRESHOLDS.HIGH_CONFIDENCE_SCORE_MAX && cpl >= LEAD_INTELLIGENCE_THRESHOLDS.HIGH_CONFIDENCE_CPL_MIN) {
+    confidence = 'high';
+  } else if (overall < LEAD_INTELLIGENCE_THRESHOLDS.MEDIUM_CONFIDENCE_SCORE_MAX || missingCount >= LEAD_INTELLIGENCE_THRESHOLDS.MEDIUM_CONFIDENCE_MISSING_MIN) {
+    confidence = 'medium';
+  }
+
+  const city = normalizeString(record.city);
+  const brief = `${normalizeString(record.industry || 'Local business')} in ${city || 'their market'} — score ${overall}/100, missing from ${missingCount}/${totalQueries} searches, est. losing $${lossRange.low}-${lossRange.high}/mo. Top fix: ${topFix.replace(/-/g, ' ')}.`;
+
+  return {
+    estMonthlyLossLow: lossRange.low,
+    estMonthlyLossHigh: lossRange.high,
+    estMissedLeads,
+    topFix,
+    upgradeConfidence: confidence,
+    salesBrief: brief
+  };
+}
+
 function buildAdminLeadsHtml(records) {
   const safeRecords = Array.isArray(records) ? records : [];
-  const rows = safeRecords
+  const recordsWithIntelligence = safeRecords.map((record) => ({
+    ...record,
+    intelligence: computeLeadIntelligence(record)
+  }));
+  const rows = recordsWithIntelligence
     .slice()
     .sort((a, b) => {
-      const scoreA = Number(a && a.scores && a.scores.overall);
-      const scoreB = Number(b && b.scores && b.scores.overall);
-      const hasA = Number.isFinite(scoreA);
-      const hasB = Number.isFinite(scoreB);
-      if (hasA && hasB) {
-        if (scoreA !== scoreB) {
-          return scoreA - scoreB;
-        }
-        return String(b && b.createdAt || '').localeCompare(String(a && a.createdAt || ''));
-      }
-      if (hasA && !hasB) return -1;
-      if (!hasA && hasB) return 1;
-      return String(b && b.createdAt || '').localeCompare(String(a && a.createdAt || ''));
+      const lossA = a.intelligence.estMonthlyLossHigh || 0;
+      const lossB = b.intelligence.estMonthlyLossHigh || 0;
+      return lossB - lossA;
     })
     .map((record) => {
       const auditId = normalizeString(record && (record.auditId || record.id));
@@ -4229,6 +4586,9 @@ function buildAdminLeadsHtml(records) {
         : '';
       const overall = Number(scores.overall);
       const priorityClass = Number.isFinite(overall) && overall < 55 ? 'priority-high' : '';
+      const intel = record.intelligence || {};
+      const lossClass = intel.estMonthlyLossHigh >= 2000 ? 'priority-high' : '';
+      const confidenceClass = intel.upgradeConfidence === 'high' ? 'priority-high' : (intel.upgradeConfidence === 'medium' ? 'priority-medium' : '');
       return `<tr>
         <td class="${priorityClass}">${priorityClass ? 'High' : 'Normal'}</td>
         <td>${escapeHtml(record && record.createdAt || '')}</td>
@@ -4244,11 +4604,18 @@ function buildAdminLeadsHtml(records) {
         <td>${escapeHtml(localCompetitors || 'N/A')}</td>
         <td class="${priorityClass}">${escapeHtml(String(scores.overall || 'N/A'))}</td>
         <td>${escapeHtml(recommendation.recommendedPlan || '')}</td>
+        <td class="${lossClass}">$${intel.estMonthlyLossLow || 0} - $${intel.estMonthlyLossHigh || 0}/mo</td>
+        <td>${escapeHtml(intel.topFix || '').replace(/-/g, ' ')}</td>
+        <td class="${confidenceClass}">${escapeHtml(intel.upgradeConfidence || 'low')}</td>
+        <td>${escapeHtml(intel.salesBrief || '')}</td>
         <td>${escapeHtml(auditId)}</td>
         <td><a href="${escapeHtml(reportPath)}" target="_blank" rel="noreferrer">Open Report</a></td>
       </tr>`;
     })
     .join('');
+
+  const totalLoss = recordsWithIntelligence.reduce((sum, r) => sum + (r.intelligence.estMonthlyLossHigh || 0), 0);
+  const highConfidenceCount = recordsWithIntelligence.filter((r) => r.intelligence.upgradeConfidence === 'high').length;
 
   return `<!doctype html>
 <html lang="en">
@@ -4260,16 +4627,24 @@ function buildAdminLeadsHtml(records) {
     body { font-family: Arial, sans-serif; margin: 24px; color: #111; }
     h1 { margin-bottom: 4px; }
     p { color: #555; margin-top: 0; }
+    .summary { background: #f5f5f5; padding: 12px; border-radius: 8px; margin: 16px 0; font-size: 14px; }
+    .summary strong { color: #0b8f7b; }
     .table-wrap { overflow: auto; border: 1px solid #ddd; border-radius: 10px; }
-    table { width: 100%; border-collapse: collapse; min-width: 1300px; }
+    table { width: 100%; border-collapse: collapse; min-width: 1600px; }
     th, td { border-bottom: 1px solid #eee; text-align: left; padding: 10px; font-size: 14px; vertical-align: top; }
     thead th { background: #fafafa; position: sticky; top: 0; }
     .priority-high { color: #9b2d00; font-weight: 700; background: #fff2ea; }
+    .priority-medium { color: #da7f14; font-weight: 600; background: #fff8f0; }
   </style>
 </head>
 <body>
   <h1>GeoNeo AI Leads</h1>
   <p>Local internal view of saved audit leads.</p>
+  <div class="summary">
+    <strong>${safeRecords.length} leads</strong> | 
+    <strong>${highConfidenceCount} high-confidence</strong> | 
+    <strong>$${totalLoss.toLocaleString()}</strong> total estimated monthly loss across all leads
+  </div>
   <div class="table-wrap">
     <table>
       <thead>
@@ -4288,12 +4663,16 @@ function buildAdminLeadsHtml(records) {
           <th>Top Recurring Competitors</th>
           <th>Overall</th>
           <th>Recommended</th>
+          <th>Est. Monthly Loss</th>
+          <th>Top Fix</th>
+          <th>Upgrade Confidence</th>
+          <th>Sales Brief</th>
           <th>Audit ID</th>
           <th>Report</th>
         </tr>
       </thead>
       <tbody>
-        ${rows || '<tr><td colspan="16">No leads saved yet.</td></tr>'}
+        ${rows || '<tr><td colspan="20">No leads saved yet.</td></tr>'}
       </tbody>
     </table>
   </div>
@@ -4661,5 +5040,7 @@ module.exports = Object.assign(requestHandler, {
   ,
   isNeoClubMember,
   buildNeoClubPayload,
-  runAudit
+  runAudit,
+  generateReadyToUseFixes,
+  computeLeadIntelligence
 });

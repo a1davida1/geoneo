@@ -30,7 +30,9 @@ const {
   buildAuditReportHtml,
   isNeoClubMember,
   buildNeoClubPayload,
-  runAudit
+  runAudit,
+  generateReadyToUseFixes,
+  computeLeadIntelligence
 } = require('../server');
 const {
   generateLocalIntentQueries,
@@ -1178,4 +1180,160 @@ test('buildNeoClubPayload returns full content for gold package', () => {
   assert.ok(payload.neoClub.weeklyStrategies.length >= 2);
   assert.ok(Array.isArray(payload.neoClub.expertTopics));
   assert.ok(payload.neoClub.expertTopics.length >= 6);
+});
+
+test('generateReadyToUseFixes returns fixes for failing checks', () => {
+  const result = {
+    checks: [
+      { key: 'title', status: 'FIX', message: 'Title is missing' },
+      { key: 'meta-description', status: 'FIX', message: 'Meta description missing' },
+      { key: 'h1', status: 'PASS', message: 'H1 is present' }
+    ],
+    siteProfile: {
+      businessName: 'ABC Plumbing',
+      visibleServiceKeywords: ['plumbing'],
+      locationMentions: ['Dallas, TX']
+    },
+    finalUrl: 'https://abcplumbing.com'
+  };
+  const input = {
+    industry: 'plumbing',
+    city: 'Dallas',
+    state: 'TX',
+    website: 'https://abcplumbing.com'
+  };
+
+  const fixes = generateReadyToUseFixes(result, input);
+
+  assert.ok(Array.isArray(fixes));
+  assert.equal(fixes.length, 2);
+  assert.equal(fixes[0].key, 'title');
+  assert.ok(fixes[0].generatedFix.includes('<title>'));
+  assert.ok(fixes[0].generatedFix.includes('Plumbing'));
+  assert.ok(fixes[0].generatedFix.includes('Dallas'));
+  assert.equal(fixes[1].key, 'meta-description');
+  assert.ok(fixes[1].generatedFix.includes('<meta name="description"'));
+  assert.equal(fixes[0].copyPasteReady, true);
+});
+
+test('generateReadyToUseFixes returns empty array for no failing checks', () => {
+  const result = {
+    checks: [
+      { key: 'title', status: 'PASS', message: 'Title is present' },
+      { key: 'h1', status: 'PASS', message: 'H1 is present' }
+    ],
+    siteProfile: {},
+    finalUrl: 'https://example.com'
+  };
+  const input = {
+    industry: 'services',
+    city: '',
+    state: '',
+    website: 'https://example.com'
+  };
+
+  const fixes = generateReadyToUseFixes(result, input);
+
+  assert.ok(Array.isArray(fixes));
+  assert.equal(fixes.length, 0);
+});
+
+test('generateReadyToUseFixes generates valid JSON-LD schema', () => {
+  const result = {
+    checks: [
+      { key: 'structured-data', status: 'FIX', message: 'Schema missing' }
+    ],
+    siteProfile: {
+      businessName: 'Test Business',
+      visibleServiceKeywords: ['hvac'],
+      locationMentions: ['Houston, TX']
+    },
+    finalUrl: 'https://test.com'
+  };
+  const input = {
+    industry: 'hvac',
+    city: 'Houston',
+    state: 'TX',
+    website: 'https://test.com'
+  };
+
+  const fixes = generateReadyToUseFixes(result, input);
+
+  assert.equal(fixes.length, 1);
+  assert.ok(fixes[0].generatedFix.includes('<script type="application/ld+json">'));
+  const schemaMatch = fixes[0].generatedFix.match(/\{[\s\S]*\}/);
+  assert.ok(schemaMatch);
+  const schema = JSON.parse(schemaMatch[0]);
+  assert.equal(schema['@type'], 'LocalBusiness');
+  assert.equal(schema.name, 'Test Business');
+});
+
+test('computeLeadIntelligence returns all expected fields', () => {
+  const record = {
+    industry: 'plumbing',
+    city: 'Dallas',
+    state: 'TX',
+    scores: { overall: 45 },
+    localSearchVisibility: {
+      summary: {
+        missingCount: 2,
+        totalQueries: 3,
+        visibilityScore: 30
+      }
+    },
+    fullAuditResult: {
+      checks: [
+        { key: 'local-geo', status: 'FIX' },
+        { key: 'title', status: 'FIX' }
+      ]
+    }
+  };
+
+  const intel = computeLeadIntelligence(record);
+
+  assert.ok(typeof intel.estMonthlyLossLow === 'number');
+  assert.ok(typeof intel.estMonthlyLossHigh === 'number');
+  assert.ok(typeof intel.estMissedLeads === 'number');
+  assert.ok(typeof intel.topFix === 'string');
+  assert.ok(['high', 'medium', 'low'].includes(intel.upgradeConfidence));
+  assert.ok(typeof intel.salesBrief === 'string');
+});
+
+test('computeLeadIntelligence high CPL + low score = high confidence', () => {
+  const record = {
+    industry: 'attorney',
+    city: 'Chicago',
+    state: 'IL',
+    scores: { overall: 40 },
+    localSearchVisibility: {
+      summary: {
+        missingCount: 3,
+        totalQueries: 3,
+        visibilityScore: 20
+      }
+    },
+    fullAuditResult: { checks: [] }
+  };
+
+  const intel = computeLeadIntelligence(record);
+
+  assert.equal(intel.upgradeConfidence, 'high');
+  assert.ok(intel.estMonthlyLossHigh > 0);
+});
+
+test('computeLeadIntelligence handles missing data gracefully', () => {
+  const record = {
+    industry: 'unknown',
+    city: '',
+    state: '',
+    scores: {},
+    fullAuditResult: { checks: [] }
+  };
+
+  const intel = computeLeadIntelligence(record);
+
+  assert.ok(typeof intel.estMonthlyLossLow === 'number');
+  assert.ok(typeof intel.estMonthlyLossHigh === 'number');
+  assert.equal(intel.topFix, 'none');
+  assert.equal(intel.upgradeConfidence, 'low');
 });

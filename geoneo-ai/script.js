@@ -539,23 +539,176 @@
       .join('');
   }
 
+  function createSafeStorageKey(website) {
+    const normalized = String(website || 'default').toLowerCase().trim();
+    const hash = normalized.split('').reduce((acc, char) => {
+      return ((acc << 5) - acc) + char.charCodeAt(0);
+    }, 0);
+    return `geoneo_fixes_${Math.abs(hash)}`;
+  }
+
   function renderFixes(view) {
+    const fixesPanel = document.getElementById('fixesPanel');
+    const fixesList = document.getElementById('fixesList');
     if (!fixesPanel || !fixesList) return;
-    if (isMarketDashboard(state.dashboard)) {
-      fixesPanel.hidden = true;
-      fixesList.innerHTML = '';
-      return;
-    }
-    panelTitle(fixesPanel, 'How To Fix It');
     const fixes = safeArray(view.fixes);
     if (!fixes.length) {
       fixesPanel.hidden = true;
-      fixesList.innerHTML = '';
       return;
     }
     fixesPanel.hidden = false;
+
+    const website = state.dashboard?.input?.website || 'default';
+    const progressKey = createSafeStorageKey(website);
+    const savedProgress = JSON.parse(localStorage.getItem(progressKey) || '{}');
+
+    const updateProgressText = () => {
+      const completed = document.querySelectorAll('#fixesList input:checked').length;
+      const total = fixes.length;
+      const progressText = document.getElementById('fixProgressText');
+      if (progressText) {
+        progressText.textContent = `${completed}/${total} completed`;
+      }
+    };
+
     fixesList.innerHTML = fixes
-      .map((item) => `<li><strong>[${String(item.priority || '').toUpperCase()}]</strong> ${item.category}: ${item.title} - ${item.description}</li>`)
+      .map((item, index) => {
+        const fixId = `fix-${index}`;
+        const isChecked = savedProgress[fixId] ? 'checked' : '';
+        const completedClass = savedProgress[fixId] ? 'completed' : '';
+        return `<li class="${completedClass}">
+          <label>
+            <input type="checkbox" id="${fixId}" data-fix-index="${index}" ${isChecked}>
+            <strong>[${String(item.priority || '').toUpperCase()}]</strong> ${item.category}: ${item.title} - ${item.description}
+          </label>
+        </li>`;
+      })
+      .join('');
+
+    updateProgressText();
+
+    fixesList.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
+      checkbox.addEventListener('change', () => {
+        const fixId = checkbox.id;
+        const progress = JSON.parse(localStorage.getItem(progressKey) || '{}');
+        progress[fixId] = checkbox.checked;
+        localStorage.setItem(progressKey, JSON.stringify(progress));
+        const li = checkbox.closest('li');
+        if (checkbox.checked) {
+          li.classList.add('completed');
+        } else {
+          li.classList.remove('completed');
+        }
+        updateProgressText();
+      });
+    });
+  }
+
+  function renderGeneratedFixes(view) {
+    const generatedPanel = document.getElementById('generatedFixesPanel');
+    const generatedList = document.getElementById('generatedFixesList');
+    if (!generatedPanel || !generatedList) return;
+    if (isMarketDashboard(state.dashboard)) {
+      generatedPanel.hidden = true;
+      generatedList.innerHTML = '';
+      return;
+    }
+    const fixes = safeArray(view.generatedFixes);
+    if (!fixes.length) {
+      generatedPanel.hidden = true;
+      generatedList.innerHTML = '';
+      return;
+    }
+    panelTitle(generatedPanel, 'Ready-To-Use Fixes');
+    generatedPanel.hidden = false;
+    generatedList.innerHTML = fixes
+      .map((item, index) => {
+        const copyButtonId = `copy-fix-${index}`;
+        return `<article class="fix-card" data-key="${item.key}">
+          <div class="fix-header">
+            <h5>${item.checkMessage}</h5>
+            ${item.copyPasteReady ? `<button id="${copyButtonId}" class="copy-btn" data-fix-index="${index}">Copy</button>` : ''}
+          </div>
+          <p class="fix-explanation">${item.explanation}</p>
+          <pre class="fix-code"><code>${escapeHtml(item.generatedFix)}</code></pre>
+        </article>`;
+      })
+      .join('');
+
+    fixes.forEach((item, index) => {
+      if (!item.copyPasteReady) return;
+      const btn = document.getElementById(`copy-fix-${index}`);
+      if (btn) {
+        btn.addEventListener('click', () => {
+          navigator.clipboard.writeText(item.generatedFix).then(() => {
+            btn.textContent = 'Copied!';
+            setTimeout(() => {
+              btn.textContent = 'Copy';
+            }, 2000);
+          }).catch(() => {
+            btn.textContent = 'Failed';
+            setTimeout(() => {
+              btn.textContent = 'Copy';
+            }, 2000);
+          });
+        });
+      }
+    });
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  function renderComparison(view) {
+    const comparisonPanel = document.getElementById('comparisonPanel');
+    const comparisonTableBody = document.getElementById('comparisonTableBody');
+    if (!comparisonPanel || !comparisonTableBody) return;
+    if (isMarketDashboard(state.dashboard)) {
+      comparisonPanel.hidden = true;
+      comparisonTableBody.innerHTML = '';
+      return;
+    }
+    const summaryScores = view.summaryScores || {};
+    const competitors = safeArray(view.competitors);
+    if (!competitors.length) {
+      comparisonPanel.hidden = true;
+      comparisonTableBody.innerHTML = '';
+      return;
+    }
+    panelTitle(comparisonPanel, 'Score Comparison vs Competitors');
+    comparisonPanel.hidden = false;
+
+    const metrics = [
+      { key: 'seo', label: 'SEO' },
+      { key: 'technical', label: 'Technical' },
+      { key: 'aiVisibility', label: 'AI Visibility' },
+      { key: 'localPresence', label: 'Local Presence' },
+      { key: 'reputation', label: 'Reputation' },
+      { key: 'conversionUx', label: 'Conversion/UX' }
+    ];
+
+    const avgCompetitorScore = (key) => {
+      const sum = competitors.reduce((acc, c) => acc + (c.scoreSummary?.[key] || 0), 0);
+      return competitors.length ? Math.round(sum / competitors.length) : 0;
+    };
+
+    comparisonTableBody.innerHTML = metrics
+      .map((metric) => {
+        const yourScore = Number(summaryScores[metric.key]) || 0;
+        const compScore = avgCompetitorScore(metric.key);
+        const gap = yourScore - compScore;
+        const gapClass = gap >= 0 ? 'gap-positive' : 'gap-negative';
+        const gapText = gap > 0 ? `+${gap}` : gap;
+        return `<tr>
+          <td>${metric.label}</td>
+          <td><strong>${yourScore}</strong></td>
+          <td>${compScore}</td>
+          <td class="${gapClass}">${gapText}</td>
+        </tr>`;
+      })
       .join('');
   }
 
@@ -706,6 +859,8 @@
     }
     renderIssues(view);
     renderFixes(view);
+    renderGeneratedFixes(view);
+    renderComparison(view);
     renderCompetitors(view);
     renderAdmin(view);
   }
@@ -936,6 +1091,72 @@
       a.download = `geoneo-summary-${Date.now()}.txt`;
       a.click();
       URL.revokeObjectURL(url);
+    });
+  }
+
+  const printReportBtn = document.getElementById('printReportBtn');
+  if (printReportBtn) {
+    printReportBtn.addEventListener('click', () => {
+      window.print();
+    });
+  }
+
+  const shareReportBtn = document.getElementById('shareReportBtn');
+  if (shareReportBtn) {
+    shareReportBtn.addEventListener('click', () => {
+      const shareUrl = window.location.href.split('#')[0] + '#audit';
+      navigator.clipboard.writeText(shareUrl).then(() => {
+        const originalText = shareReportBtn.textContent;
+        shareReportBtn.textContent = 'Link Copied!';
+        setTimeout(() => {
+          shareReportBtn.textContent = originalText;
+        }, 2000);
+      }).catch(() => {
+        shareReportBtn.textContent = 'Failed';
+        setTimeout(() => {
+          shareReportBtn.textContent = 'Share Report';
+        }, 2000);
+      });
+    });
+  }
+
+  const reAuditBtn = document.getElementById('reAuditBtn');
+  if (reAuditBtn) {
+    reAuditBtn.addEventListener('click', () => {
+      const input = state.dashboard?.input;
+      if (!input || !input.website) {
+        alert('No website to re-audit.');
+        return;
+      }
+      websiteInput.value = input.website || '';
+      industryInput.value = input.industry || '';
+      cityInput.value = input.city || '';
+      stateInput.value = input.state || '';
+      state.dashboard = null;
+      state.selectedPackageView = 'score_only';
+      dashboardResults.hidden = true;
+      auditWrap.hidden = false;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      websiteInput.focus();
+    });
+  }
+
+  const resetProgressBtn = document.getElementById('resetProgressBtn');
+  if (resetProgressBtn) {
+    resetProgressBtn.addEventListener('click', () => {
+      const website = state.dashboard?.input?.website || 'default';
+      const progressKey = createSafeStorageKey(website);
+      localStorage.removeItem(progressKey);
+      const checkboxes = document.querySelectorAll('#fixesList input[type="checkbox"]');
+      checkboxes.forEach((cb) => {
+        cb.checked = false;
+        cb.closest('li').classList.remove('completed');
+      });
+      const progressText = document.getElementById('fixProgressText');
+      if (progressText) {
+        const total = checkboxes.length;
+        progressText.textContent = `0/${total} completed`;
+      }
     });
   }
 

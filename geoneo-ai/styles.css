@@ -718,6 +718,101 @@ body[data-audit-mode="website"] #fixesPanel {
   border-color: rgba(11, 143, 123, 0.35);
 }
 
+.fix-card {
+  border: 1px solid var(--line);
+  background: linear-gradient(170deg, rgba(11, 143, 123, 0.08), rgba(255, 255, 255, 0.92));
+  border-radius: 14px;
+  padding: 1rem;
+  margin-bottom: 0.9rem;
+}
+
+.fix-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.6rem;
+}
+
+.fix-header h5 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.copy-btn {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.8rem;
+  border-radius: 999px;
+  border: 1px solid rgba(11, 143, 123, 0.3);
+  background: var(--panel);
+  color: var(--brand-strong);
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.copy-btn:hover {
+  background: rgba(11, 143, 123, 0.12);
+  border-color: var(--brand);
+}
+
+.fix-explanation {
+  margin: 0 0 0.8rem;
+  font-size: 0.86rem;
+  color: var(--muted);
+}
+
+.fix-code {
+  background: rgba(15, 32, 27, 0.04);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.75rem;
+  margin: 0;
+  font-size: 0.82rem;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.fix-code code {
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  color: var(--ink);
+}
+
+.gap-positive {
+  color: #0b8f7b;
+  font-weight: 600;
+}
+
+.gap-negative {
+  color: #9b2d00;
+  font-weight: 600;
+}
+
+.fix-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--line);
+}
+
+#fixProgressText {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.audit-list input[type="checkbox"] {
+  margin-right: 0.5rem;
+  cursor: pointer;
+}
+
+.audit-list li.completed {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
 .site-footer {
   padding: 2rem 0 3rem;
   border-top: 1px solid var(--line);
@@ -857,5 +952,80 @@ body[data-audit-mode="website"] #fixesPanel {
   *::after {
     animation: none !important;
     transition: none !important;
+  }
+}
+
+@media print {
+  .site-header,
+  .hero,
+  .pricing-focus,
+  .contact-wrap,
+  .testimonial-grid,
+  .faq-grid,
+  .site-footer,
+  .orb,
+  .audit-wrap .mode-guide,
+  #marketSearchPanel,
+  #competitorsPanel,
+  .dashboard-controls,
+  .btn:not(.btn-print),
+  form,
+  .mode-tabs,
+  #finalCtaSection {
+    display: none !important;
+  }
+
+  .container {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .section {
+    padding: 1rem 0 !important;
+  }
+
+  .audit-results {
+    display: block !important;
+  }
+
+  .card,
+  .audit-block {
+    break-inside: avoid;
+    border: 1px solid #ccc !important;
+    background: white !important;
+    box-shadow: none !important;
+    margin-bottom: 1rem !important;
+  }
+
+  .fix-code {
+    background: #f5f5f5 !important;
+    border: 1px solid #ddd !important;
+    page-break-inside: avoid;
+  }
+
+  body {
+    background: white !important;
+    color: black !important;
+    font-size: 11pt;
+  }
+
+  h1, h2, h3, h4, h5 {
+    color: black !important;
+  }
+
+  .audit-score-row,
+  .audit-findings {
+    display: block !important;
+  }
+
+  table {
+    font-size: 9pt;
+    page-break-inside: avoid;
+  }
+
+  thead th {
+    background: #eee !important;
   }
 }

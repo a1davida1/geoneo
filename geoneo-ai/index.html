@@ -210,7 +210,31 @@
         </article>
         <article class="card" id="fixesPanel">
           <h4>Fixes / Actions</h4>
+          <div class="fix-progress-header">
+            <span id="fixProgressText">0/0 completed</span>
+            <button class="btn btn-sm" type="button" id="resetProgressBtn">Reset Progress</button>
+          </div>
           <ul id="fixesList" class="audit-list"></ul>
+        </article>
+        <article class="card" id="generatedFixesPanel" hidden>
+          <h4>Ready-To-Use Fixes</h4>
+          <div id="generatedFixesList"></div>
+        </article>
+        <article class="card" id="comparisonPanel" hidden>
+          <h4>Score Comparison</h4>
+          <div class="table-wrap">
+            <table id="comparisonTable">
+              <thead>
+                <tr>
+                  <th>Metric</th>
+                  <th>Your Site</th>
+                  <th>Avg Competitor</th>
+                  <th>Gap</th>
+                </tr>
+              </thead>
+              <tbody id="comparisonTableBody"></tbody>
+            </table>
+          </div>
         </article>
         <article class="card" id="competitorsPanel">
           <h4>Competitor / Market Context</h4>
@@ -233,10 +257,28 @@
             </table>
           </div>
         </article>
+        <div id="dashboardControls" class="card" hidden>
+        <h4>Dashboard Controls</h4>
+        <p class="form-note">Select a package view to see different detail levels. Use Internal mode to see all data.</p>
+        <div class="mode-tabs">
+          <button class="btn btn-sm" data-package="score_only" type="button">Score Only</button>
+          <button class="btn btn-sm" data-package="scores_issues" type="button">Scores + Issues</button>
+          <button class="btn btn-sm" data-package="full_data" type="button">Full Data</button>
+        </div>
+        <div class="hero-cta" style="margin-top: 1rem;">
+          <button class="btn btn-sm" type="button" id="reAuditBtn">Re-run Audit</button>
+          <label class="form-note" style="display: flex; align-items: center; gap: 0.5rem;">
+            <input type="checkbox" id="internalModeToggle" />
+            Internal/Admin override
+          </label>
+        </div>
+      </div>
         <article class="card" id="adminPanel" hidden>
           <h4>Internal Admin Panel</h4>
           <p class="form-note">Includes all collected fields and package outputs.</p>
           <div class="hero-cta">
+            <button class="btn btn-sm btn-print" type="button" id="printReportBtn">Print / Save as PDF</button>
+            <button class="btn btn-sm" type="button" id="shareReportBtn">Share Report</button>
             <button class="btn btn-sm" type="button" id="copyReportBtn">Copy Report</button>
             <button class="btn btn-sm" type="button" id="exportJsonBtn">Export JSON</button>
             <button class="btn btn-sm" type="button" id="exportTextBtn">Export Text Summary</button>
