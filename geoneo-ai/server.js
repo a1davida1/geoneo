@@ -1,3 +1,4 @@
+require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 const http = require('http');
 const https = require('https');
 const fs = require('fs');
@@ -483,6 +484,10 @@ function buildCheck(key, ok, goodMessage, badMessage) {
 
 function normalizeString(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function safeArray(value) {
+  return Array.isArray(value) ? value : [];
 }
 
 function normalizeBool(value) {
@@ -1011,6 +1016,292 @@ function normalizeDifficultyLevel(score) {
   return 'hard';
 }
 
+function sanitizeAreaLabel(value) {
+  return normalizeString(value)
+    .replace(/\s*,\s*/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function createAreaLabel({ city, state, zip, area }) {
+  const explicitArea = sanitizeAreaLabel(area);
+  if (explicitArea) {
+    return explicitArea;
+  }
+  return sanitizeAreaLabel([city, state, zip].filter(Boolean).join(' '));
+}
+
+function normalizeIndustrySeed(value) {
+  return normalizeString(value)
+    .replace(/[|/]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function inferIndustryIntentTerms(industry) {
+  const normalized = normalizeIndustrySeed(industry).toLowerCase();
+  const terms = [];
+
+  if (/tow|roadside/.test(normalized)) {
+    terms.push('tow truck', 'towing company', '24 hour towing', 'roadside assistance', 'car lockout', 'flat tire help', 'emergency towing', 'best towing');
+  } else if (/locksmith|lock out|lockout/.test(normalized)) {
+    terms.push('locksmith', 'emergency locksmith', 'car lockout', '24 hour locksmith', 'mobile locksmith', 'locksmith service', 'best locksmith');
+  } else if (/tree/.test(normalized)) {
+    terms.push('tree service', 'tree removal', 'stump grinding', 'emergency tree service', 'tree trimming', 'best tree service');
+  } else if (/roof/.test(normalized)) {
+    terms.push('roof repair', 'roofing company', 'emergency roofing', 'roof replacement', 'best roofer');
+  } else if (/plumb/.test(normalized)) {
+    terms.push('plumber', 'emergency plumber', 'drain cleaning', 'water heater repair', 'best plumber');
+  } else if (/hvac|air conditioning|heating|cooling/.test(normalized)) {
+    terms.push('hvac repair', 'ac repair', 'heating repair', 'furnace repair', 'best hvac company');
+  } else {
+    const seed = normalized || 'local service';
+    terms.push(seed, `${seed} company`, `best ${seed}`, `emergency ${seed}`, `${seed} service`);
+  }
+
+  return [...new Set(terms.map((item) => normalizeString(item)).filter(Boolean))];
+}
+
+function generateLocalBuyerQueries(industry, area) {
+  const cleanIndustry = normalizeIndustrySeed(industry);
+  const cleanArea = sanitizeAreaLabel(area);
+  if (!cleanIndustry || !cleanArea) {
+    return [];
+  }
+
+  const areaTokens = cleanArea.split(' ').filter(Boolean);
+  if (areaTokens.length < 2) {
+    return [];
+  }
+
+  const intentTerms = inferIndustryIntentTerms(cleanIndustry);
+  const exactIndustry = cleanIndustry.toLowerCase();
+  const candidateQueries = [
+    ...intentTerms.map((term) => `${term} ${cleanArea}`),
+    `${cleanIndustry} near ${cleanArea}`,
+    /\bservice\b/i.test(cleanIndustry) ? '' : `${cleanIndustry} service ${cleanArea}`,
+    `best ${cleanIndustry} ${cleanArea}`,
+    `emergency ${cleanIndustry} ${cleanArea}`
+  ];
+
+  return candidateQueries
+    .map((query) => normalizeString(query))
+    .filter((query) => {
+      const lower = query.toLowerCase();
+      if (!lower || !lower.includes(cleanArea.toLowerCase())) {
+        return false;
+      }
+      if (lower === `${exactIndustry} ${cleanArea.toLowerCase()}` && areaTokens.length < 2) {
+        return false;
+      }
+      return true;
+    })
+    .filter((query, index, list) => list.findIndex((item) => item.toLowerCase() === query.toLowerCase()) === index)
+    .slice(0, 8);
+}
+
+function unwrapSearchRedirectUrl(url) {
+  const original = normalizeString(url);
+  if (!original) {
+    return '';
+  }
+
+  try {
+    const parsed = new URL(original);
+    const host = parsed.hostname.toLowerCase();
+
+    if (host.includes('bing.com')) {
+      const encoded = parsed.searchParams.get('u') || parsed.searchParams.get('url') || '';
+      if (encoded) {
+        const cleaned = encoded.replace(/^a1/i, '');
+        return safeDecodeUri(cleaned);
+      }
+    }
+
+    if (host.includes('google.com')) {
+      const encoded = parsed.searchParams.get('q') || parsed.searchParams.get('url') || '';
+      if (encoded) {
+        return safeDecodeUri(encoded);
+      }
+    }
+
+    if (host.includes('duckduckgo.com')) {
+      const encoded = parsed.searchParams.get('uddg') || parsed.searchParams.get('rut') || '';
+      if (encoded) {
+        return safeDecodeUri(encoded);
+      }
+    }
+
+    return original;
+  } catch {
+    return original;
+  }
+}
+
+function looksLikeBusinessName(value) {
+  const text = normalizeString(value);
+  if (!text) {
+    return false;
+  }
+  if (text.length < 3 || text.length > 120) {
+    return false;
+  }
+  if (/[^\x00-\x7F]/.test(text) && !/[&'().-]/.test(text)) {
+    return false;
+  }
+  return /\b(llc|inc|co|company|service|services|repair|towing|locksmith|tree|recovery|transport|garage|auto|truck|roadside)\b/i.test(text)
+    || /^[a-z0-9&'().,\- ]+$/i.test(text);
+}
+
+function hasDirectoryHost(host) {
+  const normalized = normalizeString(host).toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+  return [
+    'yelp.com',
+    'angi.com',
+    'thumbtack.com',
+    'mapquest.com',
+    'yellowpages.com',
+    'superpages.com',
+    'tripadvisor.com'
+  ].some((blocked) => normalized === blocked || normalized.endsWith(`.${blocked}`));
+}
+
+function isSocialHost(host) {
+  const normalized = normalizeString(host).toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+  return [
+    'facebook.com',
+    'instagram.com',
+    'linkedin.com',
+    'x.com',
+    'twitter.com',
+    'tiktok.com'
+  ].some((blocked) => normalized === blocked || normalized.endsWith(`.${blocked}`));
+}
+
+function isReviewHost(host) {
+  const normalized = normalizeString(host).toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+  return [
+    'yelp.com',
+    'bbb.org',
+    'tripadvisor.com',
+    'birdeye.com'
+  ].some((blocked) => normalized === blocked || normalized.endsWith(`.${blocked}`));
+}
+
+function isJunkMarketResult(result) {
+  const host = normalizeString(result && result.host).toLowerCase();
+  const title = normalizeString(result && (result.title || result.name));
+  const url = normalizeString(result && result.url).toLowerCase();
+  if (!title && !url) {
+    return true;
+  }
+  if (!url || /^javascript:|^data:|^about:|^#/.test(url)) {
+    return true;
+  }
+  if ((host === 'google.com' || host.endsWith('.google.com')) && /\/(search|url|aclk|ads|maps|imgres|policies)\b/.test(url)) {
+    return true;
+  }
+  if ((host === 'bing.com' || host.endsWith('.bing.com')) && /\/(search|ck\/a|aclick)\b/.test(url)) {
+    return true;
+  }
+  if ((host === 'duckduckgo.com' || host.endsWith('.duckduckgo.com')) && /\/(html|lite)\b/.test(url) && !/[?&](uddg|rut)=/.test(url)) {
+    return true;
+  }
+  if (/doubleclick\.net|googleadservices\.com|adurl=|utm_(source|medium|campaign)=|gclid=|fbclid=/.test(url)) {
+    return true;
+  }
+  return false;
+}
+
+function evaluateMarketResult(entry, context = {}) {
+  const url = unwrapSearchRedirectUrl(entry && entry.url);
+  const host = extractHostFromUrl(url);
+  const title = normalizeString(entry && (entry.title || entry.name));
+  const snippet = normalizeString(entry && entry.snippet);
+  const area = sanitizeAreaLabel(context.area);
+  const industry = normalizeIndustrySeed(context.industry).toLowerCase();
+  const text = `${title} ${snippet}`.toLowerCase();
+  const isDirectory = hasDirectoryHost(host);
+  const isSocial = isSocialHost(host);
+  const isReviewSite = isReviewHost(host);
+  const resultType = isSocial
+    ? 'social'
+    : (isReviewSite ? 'review' : (isDirectory ? 'directory' : (host.includes('google.') ? 'google' : (looksLikeBusinessName(title) ? 'local_business' : 'unknown'))));
+  const businessSignals = {
+    serviceKeyword: Boolean(industry && text.includes(industry)),
+    intentKeyword: /\b(tow|towing|tow truck|roadside|lockout|locksmith|tree|stump|emergency|24 hour|repair|service|company)\b/i.test(text),
+    areaMention: Boolean(area && text.includes(area.toLowerCase())),
+    nearbyMention: Boolean(area && area.split(' ').some((token) => token.length >= 3 && text.includes(token.toLowerCase()))),
+    businessName: looksLikeBusinessName(title),
+    websiteDomain: Boolean(host && !isJunkMarketResult({ host, title, snippet, url })),
+    reviews: Number.isFinite(Number(entry && entry.reviewCount)) || Number.isFinite(Number(entry && entry.reviews)),
+    localSignals: /\b(call|open|24 hour|hours|directions|review|reviews|address|phone|roadside|service area)\b/i.test(text)
+  };
+
+  const matchedSignals = Object.values(businessSignals).filter(Boolean).length;
+  const junk = isJunkMarketResult({ host, title, snippet, url });
+  const warnings = [];
+  if (!businessSignals.serviceKeyword && !businessSignals.intentKeyword) {
+    warnings.push('No direct service-keyword match in title/snippet.');
+  }
+  if (!businessSignals.areaMention && !businessSignals.nearbyMention) {
+    warnings.push('No exact area match detected.');
+  }
+  if (isDirectory) warnings.push('Directory listing, not a standalone business website.');
+  if (isSocial) warnings.push('Social profile, not a standalone website.');
+  if (isReviewSite) warnings.push('Review or reputation profile.');
+
+  let confidence = 40;
+  if (businessSignals.businessName) confidence += 12;
+  if (businessSignals.websiteDomain) confidence += 8;
+  if (businessSignals.serviceKeyword) confidence += 12;
+  if (businessSignals.intentKeyword) confidence += 8;
+  if (businessSignals.areaMention) confidence += 10;
+  if (businessSignals.nearbyMention) confidence += 6;
+  if (businessSignals.localSignals) confidence += 8;
+  if (businessSignals.reviews) confidence += 6;
+  if (isDirectory || isReviewSite) confidence -= 6;
+  if (isSocial) confidence -= 10;
+  confidence = clampScore(confidence, 25, 95);
+
+  const isLikelyLocalBusiness = !junk && !isDirectory && !isSocial && !isReviewSite
+    && (businessSignals.businessName || businessSignals.websiteDomain || businessSignals.localSignals);
+  const inclusionReason = junk
+    ? 'Dropped as true junk or unusable result.'
+    : (isLikelyLocalBusiness
+      ? 'Visible result with business-like signals.'
+      : (isDirectory || isReviewSite || isSocial
+        ? 'Visible market asset occupying search results.'
+        : 'Visible organic result with limited structured business signals.'));
+
+  return {
+    url,
+    host,
+    title,
+    snippet,
+    junk,
+    resultType,
+    confidence,
+    inclusionReason,
+    warnings,
+    isLikelyLocalBusiness,
+    isDirectory,
+    isSocial,
+    isReviewSite,
+    businessSignals,
+    signalCount: matchedSignals
+  };
+}
+
 function hasLiveSerpCredentials() {
   const provider = normalizeString(process.env.SERP_PROVIDER || 'serpapi').toLowerCase();
   if (provider === 'dataforseo') {
@@ -1080,6 +1371,14 @@ function buildIndustryAnalysis({
       companyName: item.companyName,
       domain: item.domain,
       website: item.website,
+      resultType: item.resultType || 'unknown',
+      confidence: Number(item.confidence || 0),
+      inclusionReason: item.inclusionReason || '',
+      warnings: Array.isArray(item.warnings) ? item.warnings : [],
+      queriesAppearedIn: item.queriesAppearedIn || [],
+      firstObservedRank: Number(item.firstObservedRank || item.averagePosition || 99),
+      totalAppearances: Number(item.totalAppearances || (Number(item.searchAppearances || 0) + Number(item.mapPackAppearances || 0))),
+      source: item.source || '',
       searchAppearances: Number(item.searchAppearances || 0),
       mapPackAppearances: Number(item.mapPackAppearances || 0),
       averagePosition: Number(item.averagePosition || 99),
@@ -1088,8 +1387,17 @@ function buildIndustryAnalysis({
       authorityIndicator: Number(item.authorityIndicator || 0),
       contentSignal: Number(item.contentSignal || 0),
       hasStructuredData: Boolean(item.hasStructuredData),
+      rating: Number.isFinite(Number(item.rating)) ? Number(item.rating) : null,
+      reviews: Number.isFinite(Number(item.reviews)) ? Number(item.reviews) : null,
+      reputationScore: item.reputationScore === null ? null : Number(item.reputationScore || 0),
+      websiteStrength: Number(item.websiteStrength || 0),
+      localPresence: Number(item.localPresence || 0),
+      conversionUx: Number(item.conversionUx || 0),
       visibilityControlPct: visibilityPct,
-      aiCitationScore
+      aiCitationScore,
+      aiVisibility: Number(item.aiVisibility || aiCitationScore),
+      consistencyCount: Number(item.searchAppearances || 0) + Number(item.mapPackAppearances || 0),
+      consistencyLabel: `Appeared in ${Number(item.searchAppearances || 0) + Number(item.mapPackAppearances || 0)} of ${Number(queryCount || 0)} searches`
     };
   });
 
@@ -1213,6 +1521,9 @@ function buildIndustryAnalysis({
       expectedImpact: 'Prevents ranking regression after initial gains.'
     }
   ];
+  const summaryNarrative = weakCompetitorsInTop10.length
+    ? `This market has visible competitors, but many appear to rely mostly on Google Business Profile strength instead of strong websites. Several sites lack clear service pages, emergency-call messaging, structured data, and AI-citable business information. A focused local SEO/GEO campaign could target high-intent ${serviceLabel} searches in ${marketLabel} and win more calls.`
+    : `This market is active and competitive. Stronger local proof, clearer service pages, and AI-citable business information can still separate a better-positioned ${serviceLabel} company in ${marketLabel}.`;
 
   return {
     overview: {
@@ -1227,13 +1538,27 @@ function buildIndustryAnalysis({
       rank: item.rank,
       companyName: item.companyName,
       domain: item.domain,
+      website: item.website,
+      queriesAppearedIn: item.queriesAppearedIn || [],
+      firstObservedRank: Number(item.firstObservedRank || item.rank),
+      totalAppearances: Number(item.totalAppearances || item.consistencyCount || 0),
+      source: item.source || '',
       searchAppearances: item.searchAppearances,
       mapPackAppearances: item.mapPackAppearances,
       averagePosition: Number(item.averagePosition.toFixed(1)),
       strengthLabel: item.strengthLabel,
       strengthScore: item.strengthScore,
       visibilityControlPct: item.visibilityControlPct,
-      hasStructuredData: item.hasStructuredData
+      hasStructuredData: item.hasStructuredData,
+      rating: Number.isFinite(Number(item.rating)) ? Number(item.rating) : null,
+      reviews: Number.isFinite(Number(item.reviews)) ? Number(item.reviews) : null,
+      reputationScore: item.reputationScore === null ? null : Number(item.reputationScore || 0),
+      websiteStrength: Number(item.websiteStrength || 0),
+      localPresence: Number(item.localPresence || 0),
+      conversionUx: Number(item.conversionUx || 0),
+      aiVisibility: Number(item.aiVisibility || 0),
+      consistencyCount: item.consistencyCount,
+      consistencyLabel: item.consistencyLabel
     })),
     dominance: {
       topRecurringCompetitors: top3.map((item) => ({
@@ -1287,7 +1612,385 @@ function buildIndustryAnalysis({
         'AI Citation Readiness',
         'Defensive Growth'
       ]
+    },
+    summaryNarrative
+  };
+}
+
+function buildMarketQueries({ industry, city, state, zip }) {
+  const area = createAreaLabel({ city, state, zip });
+  return generateLocalBuyerQueries(industry, area);
+}
+
+function buildDedupedMarketRankingRows(orderedResults, competitorStatsByKey) {
+  const deduped = [];
+  const seenKeys = new Set();
+
+  (Array.isArray(orderedResults) ? orderedResults : []).forEach((item) => {
+    const key = normalizeString(item && (item.businessKey || item.domain || item.companyName)).toLowerCase();
+    if (!key || seenKeys.has(key)) {
+      return;
     }
+    seenKeys.add(key);
+    const stats = competitorStatsByKey.get(key) || {};
+    const domain = normalizeString(item && item.domain).toLowerCase() || normalizeString(stats.domain).toLowerCase();
+    const queriesAppearedIn = Array.isArray(stats.queriesAppearedIn) ? stats.queriesAppearedIn : [];
+    const titlesSeen = Array.isArray(stats.titlesSeen) ? stats.titlesSeen : [];
+    const consistencyCount = Number(stats.searchAppearances || 0) + Number(stats.mapPackAppearances || 0);
+    deduped.push({
+      rank: deduped.length + 1,
+      page: Math.floor(deduped.length / 10) + 1,
+      companyName: item.companyName || stats.companyName || '-',
+      domain,
+      website: item.website || stats.website || (domain ? `https://${domain}` : ''),
+      resultType: item.resultType || stats.resultType || 'unknown',
+      confidence: Number(item.confidence || stats.confidence || 0),
+      inclusionReason: item.inclusionReason || stats.inclusionReason || '',
+      warnings: Array.isArray(item.warnings) ? item.warnings : (Array.isArray(stats.warnings) ? stats.warnings : []),
+      observedRank: Number(item.rank || deduped.length + 1),
+      observedQuery: item.query || '',
+      queriesAppearedIn,
+      firstObservedRank: Number(stats.firstObservedRank || item.rank || deduped.length + 1),
+      averagePosition: Number(stats.averagePosition || item.rank || 0),
+      searchAppearances: Number(stats.searchAppearances || 0),
+      mapPackAppearances: Number(stats.mapPackAppearances || 0),
+      totalAppearances: Number(stats.totalAppearances || consistencyCount),
+      consistencyCount,
+      consistencyLabel: consistencyCount > 0 ? `Appeared in ${consistencyCount} searches` : '',
+      source: stats.source || item.source || '',
+      titlesSeen,
+      whyRank: [
+        Number.isFinite(Number(stats.firstObservedRank || item.rank)) ? `Observed first at #${Number(stats.firstObservedRank || item.rank)}` : '',
+        queriesAppearedIn.length ? `Queries: ${queriesAppearedIn.join(' | ')}` : (item.query ? `From "${item.query}"` : ''),
+        Number.isFinite(Number(stats.averagePosition)) ? `Avg position ${Number(stats.averagePosition).toFixed(1)}` : '',
+        Number(stats.totalAppearances || 0) > 0 ? `Total appearances ${Number(stats.totalAppearances || 0)}` : '',
+        Number(stats.searchAppearances || 0) > 0 ? `Organic appearances ${Number(stats.searchAppearances || 0)}` : '',
+        Number(stats.mapPackAppearances || 0) > 0 ? `Map pack appearances ${Number(stats.mapPackAppearances || 0)}` : ''
+      ].filter(Boolean).join(' | ')
+    });
+  });
+
+  return deduped.slice(0, 10);
+}
+
+function createBusinessKey({ domain, companyName }) {
+  const safeDomain = normalizeString(domain).toLowerCase();
+  if (safeDomain) {
+    return safeDomain;
+  }
+  return normalizeString(companyName).toLowerCase().replace(/[^a-z0-9]+/g, '-');
+}
+
+function estimateWebsiteStrength({ domain, website }) {
+  if (!domain && !website) return 20;
+  if (hasDirectoryHost(domain)) return 25;
+  return 78;
+}
+
+function estimateLocalPresence({ signalCount, reviews, areaMatch }) {
+  const reviewBoost = Number.isFinite(Number(reviews)) ? Math.min(15, Math.round(Math.log10(Number(reviews) + 1) * 8)) : 0;
+  return clampScore((signalCount * 12) + (areaMatch ? 14 : 0) + reviewBoost, 15, 95);
+}
+
+function estimateConversionUx({ title, snippet }) {
+  const text = `${normalizeString(title)} ${normalizeString(snippet)}`.toLowerCase();
+  let score = 35;
+  if (/\b24 hour\b|\bemergency\b/.test(text)) score += 18;
+  if (/\bcall\b|\bphone\b|\bcontact\b/.test(text)) score += 14;
+  if (/\broadside\b|\blockout\b|\btire\b|\btow truck\b|\btree removal\b/.test(text)) score += 12;
+  return clampScore(score, 20, 95);
+}
+
+function estimateAiVisibility({ hasStructuredData, contentSignal, signalCount }) {
+  return clampScore((hasStructuredData ? 30 : 12) + (Number(contentSignal || 0) * 5) + (signalCount * 4), 20, 95);
+}
+
+function estimateReputation({ rating, reviews }) {
+  if (!Number.isFinite(Number(rating)) && !Number.isFinite(Number(reviews))) {
+    return null;
+  }
+  const ratingScore = Number.isFinite(Number(rating)) ? Math.round((Number(rating) / 5) * 70) : 35;
+  const reviewScore = Number.isFinite(Number(reviews)) ? Math.min(30, Math.round(Math.log10(Number(reviews) + 1) * 12)) : 0;
+  return clampScore(ratingScore + reviewScore, 20, 98);
+}
+
+function upsertMarketCompetitor({
+  competitorMap,
+  orderedResults,
+  directorySignals,
+  entry,
+  query,
+  source,
+  marketContext,
+  isMapResult = false
+}) {
+  const evaluation = evaluateMarketResult(entry, marketContext);
+  const domain = extractRootDomain(evaluation.host || evaluation.url || '');
+  const companyName = evaluation.title || domain || 'Unknown business';
+  const website = normalizeString(evaluation.url) || (domain ? `https://${domain}` : '');
+  const businessKey = createBusinessKey({ domain, companyName });
+  const rating = Number.isFinite(Number(entry.rating)) ? Number(entry.rating) : null;
+  const reviews = Number.isFinite(Number(entry.reviews)) ? Number(entry.reviews) : (Number.isFinite(Number(entry.reviewCount)) ? Number(entry.reviewCount) : null);
+
+  if (evaluation.isDirectory || evaluation.isReviewSite) {
+    directorySignals.push({
+      companyName,
+      domain,
+      website,
+      query,
+      source,
+      resultType: evaluation.resultType,
+      confidence: evaluation.confidence
+    });
+    return { accepted: false, reason: 'directory' };
+  }
+
+  if (evaluation.junk) {
+    return { accepted: false, reason: 'junk' };
+  }
+
+  const row = competitorMap.get(businessKey) || {
+    businessKey,
+    companyName,
+    domain,
+    website,
+    queriesAppearedIn: [],
+    titlesSeen: [],
+    snippetsSeen: [],
+    searchAppearances: 0,
+    mapPackAppearances: 0,
+    positions: [],
+    firstObservedRank: null,
+    source,
+    authorityIndicator: seededInt(`${businessKey}:authority`, 3, 10),
+    contentSignal: seededInt(`${businessKey}:content`, 3, 10),
+    hasStructuredData: seededInt(`${businessKey}:schema`, 0, 10) >= 5,
+    rating: null,
+    reviews: null,
+    localSignalCount: 0,
+    areaMatch: false,
+    websiteStrength: 0,
+    conversionUx: 0,
+    aiVisibility: 0,
+    reputationScore: null,
+    resultType: evaluation.resultType,
+    confidence: evaluation.confidence,
+    inclusionReason: evaluation.inclusionReason,
+    warnings: [],
+    isLikelyLocalBusiness: evaluation.isLikelyLocalBusiness,
+    isDirectory: evaluation.isDirectory,
+    isSocial: evaluation.isSocial,
+    isReviewSite: evaluation.isReviewSite
+  };
+
+  row.companyName = row.companyName || companyName;
+  row.domain = row.domain || domain;
+  row.website = row.website || website;
+  row.source = row.source || source;
+  row.queriesAppearedIn = [...new Set(row.queriesAppearedIn.concat(query))];
+  row.titlesSeen = [...new Set(row.titlesSeen.concat(companyName))].slice(0, 6);
+  row.snippetsSeen = [...new Set(row.snippetsSeen.concat(normalizeString(entry.snippet)))].filter(Boolean).slice(0, 6);
+  row.localSignalCount = Math.max(row.localSignalCount, evaluation.signalCount);
+  row.areaMatch = row.areaMatch || evaluation.businessSignals.areaMention || evaluation.businessSignals.nearbyMention;
+  row.websiteStrength = Math.max(row.websiteStrength, estimateWebsiteStrength({ domain, website }));
+  row.conversionUx = Math.max(row.conversionUx, estimateConversionUx({ title: companyName, snippet: entry.snippet }));
+  row.aiVisibility = Math.max(row.aiVisibility, estimateAiVisibility({
+    hasStructuredData: row.hasStructuredData,
+    contentSignal: row.contentSignal,
+    signalCount: evaluation.signalCount
+  }));
+  row.reputationScore = estimateReputation({ rating, reviews }) ?? row.reputationScore;
+  row.resultType = row.resultType === 'local_business' ? row.resultType : evaluation.resultType;
+  row.confidence = Math.max(Number(row.confidence || 0), Number(evaluation.confidence || 0));
+  row.inclusionReason = row.inclusionReason || evaluation.inclusionReason;
+  row.warnings = [...new Set((Array.isArray(row.warnings) ? row.warnings : []).concat(Array.isArray(evaluation.warnings) ? evaluation.warnings : []))].slice(0, 4);
+  row.isLikelyLocalBusiness = row.isLikelyLocalBusiness || evaluation.isLikelyLocalBusiness;
+  row.isDirectory = row.isDirectory || evaluation.isDirectory;
+  row.isSocial = row.isSocial || evaluation.isSocial;
+  row.isReviewSite = row.isReviewSite || evaluation.isReviewSite;
+  if (rating !== null) row.rating = rating;
+  if (reviews !== null) row.reviews = reviews;
+
+  if (isMapResult) {
+    row.mapPackAppearances += 1;
+  } else {
+    row.searchAppearances += 1;
+  }
+  if (Number.isFinite(Number(entry.position))) {
+    row.positions.push(Number(entry.position));
+    row.firstObservedRank = row.firstObservedRank === null
+      ? Number(entry.position)
+      : Math.min(row.firstObservedRank, Number(entry.position));
+  }
+  row.totalAppearances = Number(row.searchAppearances || 0) + Number(row.mapPackAppearances || 0);
+  row.localPresence = estimateLocalPresence({
+    signalCount: row.localSignalCount,
+    reviews: row.reviews,
+    areaMatch: row.areaMatch
+  });
+
+  competitorMap.set(businessKey, row);
+  orderedResults.push({
+    businessKey,
+    rank: Number(entry.position) || row.firstObservedRank || 99,
+    page: Math.floor(((Number(entry.position) || row.firstObservedRank || 99) - 1) / 10) + 1,
+    companyName: row.companyName,
+    domain: row.domain,
+    website: row.website,
+    query,
+    source,
+    resultType: evaluation.resultType,
+    confidence: evaluation.confidence,
+    inclusionReason: evaluation.inclusionReason,
+    warnings: evaluation.warnings
+  });
+
+  return { accepted: true, key: businessKey };
+}
+
+function hasBraveSearchCredentials() {
+  return Boolean(normalizeString(process.env.BRAVE_SEARCH_API_KEY));
+}
+
+async function fetchBraveSearchResults(query, market, options = {}) {
+  const apiKey = normalizeString(process.env.BRAVE_SEARCH_API_KEY);
+  if (!apiKey) {
+    throw new Error('BRAVE_SEARCH_API_KEY is required for Brave Search.');
+  }
+  const endpoint = new URL('https://api.search.brave.com/res/v1/web/search');
+  endpoint.searchParams.set('q', `${query} ${market}`.trim());
+  endpoint.searchParams.set('count', String(Math.max(10, Number(options.num) || 20)));
+  endpoint.searchParams.set('search_lang', 'en');
+  endpoint.searchParams.set('country', 'us');
+  endpoint.searchParams.set('safesearch', 'moderate');
+
+  const response = await fetch(endpoint.toString(), {
+    headers: {
+      Accept: 'application/json',
+      'X-Subscription-Token': apiKey
+    }
+  });
+  if (!response.ok) {
+    throw new Error(`Brave Search request failed with status ${response.status}`);
+  }
+  const payload = await response.json();
+  const results = Array.isArray(payload?.web?.results) ? payload.web.results : [];
+  return results.map((entry, index) => ({
+    position: index + 1,
+    title: normalizeString(entry.title),
+    url: normalizeString(entry.url),
+    host: extractHostFromUrl(entry.url),
+    snippet: normalizeString(entry.description),
+    reviewCount: null
+  }));
+}
+
+async function getLocalCompetitors({ industry, market, queries, locationOverride = '' }) {
+  const location = normalizeString(locationOverride) || market || 'United States';
+  const results = [];
+
+  if (hasLiveSerpCredentials()) {
+    const provider = createSerpProvider();
+    try {
+      for (const query of queries) {
+        const raw = await provider.getSearchResults(query, location, { num: 10 });
+        const normalized = provider.normalizeResults(raw, {
+          query,
+          location
+        });
+        const combinedResults = [
+          ...safeArray(normalized.localPackResults).map((row) => ({ ...row, sourceType: 'local_pack' })),
+          ...safeArray(normalized.organicResults).map((row) => ({ ...row, sourceType: 'organic' }))
+        ];
+        console.log('[market-search] provider:', provider.name);
+        console.log('[market-search] query:', query);
+        console.log('[market-search] organic:', safeArray(normalized.organicResults).length);
+        console.log('[market-search] localPack:', safeArray(normalized.localPackResults).length);
+        results.push({
+          query,
+          source: provider.name,
+          confidence: 'high',
+          raw,
+          normalized: {
+            ...normalized,
+            combinedResults
+          }
+        });
+      }
+      return {
+        provider: provider.name,
+        confidence: 'high',
+        sourceNote: 'SerpAPI',
+        results
+      };
+    } catch (error) {
+      console.log('[market-search] serp provider failed:', normalizeString(error && error.message) || 'unknown error');
+    }
+  }
+
+  if (hasBraveSearchCredentials()) {
+    for (const query of queries) {
+      const braveRows = await fetchBraveSearchResults(query, location, { num: 20 });
+      results.push({
+        query,
+        source: 'brave search api',
+        confidence: 'medium',
+        raw: { braveRows },
+        normalized: {
+          query,
+          location,
+          organicResults: braveRows.map((entry) => ({
+            position: entry.position,
+            title: entry.title,
+            domain: extractRootDomain(entry.host || entry.url),
+            url: unwrapSearchRedirectUrl(entry.url)
+          })),
+          localPackResults: [],
+          screenshotUrl: ''
+        }
+      });
+    }
+    return {
+      provider: 'brave search api',
+      confidence: 'medium',
+      sourceNote: 'Brave Search API',
+      results
+    };
+  }
+
+  if (!queries.length) {
+    return { provider: 'none', confidence: 'low', sourceNote: 'No search provider is configured.', results };
+  }
+
+  for (const query of queries) {
+    const crawl = await searchCompetitorsWithFallback(query, { pages: 3 });
+    results.push({
+      query,
+      source: crawl.source,
+      confidence: 'low',
+      raw: crawl,
+      normalized: {
+        query,
+        location,
+        organicResults: Array.isArray(crawl.results) ? crawl.results.map((entry) => ({
+          position: Number(entry.position) || 0,
+          title: normalizeString(entry.title || entry.name),
+          domain: extractRootDomain(unwrapSearchRedirectUrl(entry.url || entry.host || '')),
+          url: unwrapSearchRedirectUrl(entry.url || '')
+        })) : [],
+        localPackResults: [],
+        screenshotUrl: ''
+      }
+    });
+  }
+  const lastSource = results[results.length - 1]?.source || 'fallback crawler';
+  return {
+    provider: lastSource,
+    confidence: 'low',
+    sourceNote: lastSource.includes('bing')
+      ? 'Bing fallback (lower confidence)'
+      : (lastSource.includes('duckduckgo') ? 'DuckDuckGo fallback (lower confidence)' : 'Google fallback (lower confidence)'),
+    results
   };
 }
 
@@ -1295,156 +1998,124 @@ async function runMarketOnlyAudit(input) {
   const industry = normalizeString(input.industry);
   const city = normalizeString(input.city);
   const state = normalizeString(input.state);
-  const market = normalizeString([city, state].filter(Boolean).join(', '));
-  const primaryQuery = `${industry} ${city} ${state}`.trim();
-  const queries = [primaryQuery].filter(Boolean);
+  const zip = normalizeString(input.zip);
+  const market = createAreaLabel({ city, state, zip });
+  const serpLocation = normalizeString(process.env.SERP_LOCATION) || [city, state, 'United States'].filter(Boolean).join(', ') || 'United States';
+  const primaryQuery = `${industry} ${market}`.trim();
+  const queries = buildMarketQueries({ industry, city, state, zip });
 
   const competitorMap = new Map();
   const screenshotRows = [];
   const orderedResults = [];
+  const rawVisibleResults = [];
   const localPackRows = [];
+  const directorySignals = [];
   let queryCount = 0;
   let dataQuality = 'unavailable';
   let sourceNote = 'no live provider data returned';
-
-  if (!hasLiveSerpCredentials()) {
-    sourceNote = 'live SERP provider is not configured';
-  }
+  let sourceConfidence = 'low';
 
   try {
-    if (hasLiveSerpCredentials()) {
-      const provider = createSerpProvider();
-      for (const query of queries) {
-        const raw = await provider.getSearchResults(query, market || 'United States', { num: 30 });
-        const normalized = provider.normalizeResults(raw, {
+    const providerResults = await getLocalCompetitors({ industry, market, queries, locationOverride: serpLocation });
+    sourceNote = providerResults.sourceNote;
+    sourceConfidence = providerResults.confidence || 'low';
+
+    for (const resultSet of providerResults.results) {
+      const query = resultSet.query;
+      const normalized = resultSet.normalized || {};
+      const source = resultSet.source || providerResults.provider || 'unknown';
+      queryCount += 1;
+
+      if (normalizeString(normalized.screenshotUrl)) {
+        screenshotRows.push({
           query,
-          location: market || 'United States',
-          maxOrganic: 30,
-          maxLocalPack: 10
+          type: 'first_page',
+          screenshotUrl: normalizeString(normalized.screenshotUrl)
         });
-        queryCount += 1;
-        let screenshotUrl = normalizeString(normalized.screenshotUrl || '');
-        if (!screenshotUrl && typeof provider.getSerpScreenshot === 'function') {
-          try {
-            const snap = await provider.getSerpScreenshot(query, market || 'United States', { rawResult: raw });
-            screenshotUrl = normalizeString(snap && snap.screenshotUrl);
-          } catch {
-            screenshotUrl = '';
-          }
-        }
-        if (screenshotUrl) {
-          screenshotRows.push({
+      }
+
+      const mapRows = Array.isArray(normalized.localPackResults) ? normalized.localPackResults : [];
+      mapRows.forEach((entry, index) => {
+        const normalizedEntry = {
+          ...entry,
+          url: unwrapSearchRedirectUrl(entry.url)
+        };
+        const evaluation = evaluateMarketResult(normalizedEntry, { industry, area: market });
+        if (!evaluation.junk) {
+          rawVisibleResults.push({
+            rank: Number(normalizedEntry.position) || (index + 1),
             query,
-            type: 'first_page',
-            screenshotUrl
+            source,
+            title: evaluation.title,
+            domain: extractRootDomain(normalizedEntry.domain || evaluation.url || ''),
+            url: evaluation.url,
+            resultType: evaluation.resultType,
+            confidence: evaluation.confidence,
+            inclusionReason: evaluation.inclusionReason,
+            warnings: evaluation.warnings
           });
-          if (Array.isArray(normalized.localPackResults) && normalized.localPackResults.length) {
-            screenshotRows.push({
-              query,
-              type: 'map_pack',
-              screenshotUrl
-            });
-          }
         }
-        const mapRows = Array.isArray(normalized.localPackResults) ? normalized.localPackResults : [];
-        mapRows.forEach((entry, index) => {
-          localPackRows.push({
-            rank: Number(entry.position) || (index + 1),
-            companyName: normalizeString(entry.title) || extractRootDomain(entry.domain || entry.url || '') || 'Unknown business',
-            domain: extractRootDomain(entry.domain || entry.url || ''),
-            website: normalizeString(entry.url) || '',
-            rating: Number.isFinite(Number(entry.rating)) ? Number(entry.rating) : null,
-            reviews: Number.isFinite(Number(entry.reviews)) ? Number(entry.reviews) : null,
-            query
+        localPackRows.push({
+          rank: Number(entry.position) || (index + 1),
+          companyName: normalizeString(entry.title) || extractRootDomain(entry.domain || entry.url || '') || 'Unknown business',
+          domain: extractRootDomain(entry.domain || entry.url || ''),
+          website: normalizeString(unwrapSearchRedirectUrl(entry.url)) || '',
+          rating: Number.isFinite(Number(entry.rating)) ? Number(entry.rating) : null,
+          reviews: Number.isFinite(Number(entry.reviews)) ? Number(entry.reviews) : null,
+          query
+        });
+        upsertMarketCompetitor({
+          competitorMap,
+          orderedResults,
+          directorySignals,
+          entry: normalizedEntry,
+          query,
+          source,
+          marketContext: { industry, area: market },
+          isMapResult: true
+        });
+      });
+
+      const organicRows = Array.isArray(normalized.organicResults) ? normalized.organicResults : [];
+      organicRows.forEach((entry) => {
+        const normalizedEntry = {
+          ...entry,
+          url: unwrapSearchRedirectUrl(entry.url)
+        };
+        const evaluation = evaluateMarketResult(normalizedEntry, { industry, area: market });
+        if (!evaluation.junk) {
+          rawVisibleResults.push({
+            rank: Number(normalizedEntry.position) || 0,
+            query,
+            source,
+            title: evaluation.title,
+            domain: extractRootDomain(normalizedEntry.domain || evaluation.url || ''),
+            url: evaluation.url,
+            resultType: evaluation.resultType,
+            confidence: evaluation.confidence,
+            inclusionReason: evaluation.inclusionReason,
+            warnings: evaluation.warnings
           });
+        }
+        upsertMarketCompetitor({
+          competitorMap,
+          orderedResults,
+          directorySignals,
+          entry: normalizedEntry,
+          query,
+          source,
+          marketContext: { industry, area: market },
+          isMapResult: false
         });
-        const organicRows = Array.isArray(normalized.organicResults) ? normalized.organicResults : [];
-        organicRows.forEach((entry, index) => {
-          orderedResults.push({
-            rank: Number(entry.position) || (index + 1),
-            page: Math.floor(((Number(entry.position) || (index + 1)) - 1) / 10) + 1,
-            companyName: normalizeString(entry.title) || extractRootDomain(entry.domain || entry.url || '') || 'Unknown result',
-            domain: extractRootDomain(entry.domain || entry.url || ''),
-            website: normalizeString(entry.url) || '',
-            query
-          });
-        });
-        const combined = []
-          .concat(organicRows)
-          .concat(Array.isArray(normalized.localPackResults) ? normalized.localPackResults : []);
-        combined.forEach((entry) => {
-          const domain = extractRootDomain(entry.domain || entry.url || '');
-          if (!domain) {
-            return;
-          }
-          const isMap = Array.isArray(normalized.localPackResults) && normalized.localPackResults.some((item) => extractRootDomain(item.domain || item.url || '') === domain);
-          const row = competitorMap.get(domain) || {
-            companyName: normalizeString(entry.title) || domain,
-            domain,
-            website: normalizeString(entry.url) || `https://${domain}`,
-            searchAppearances: 0,
-            mapPackAppearances: 0,
-            positions: [],
-            authorityIndicator: seededInt(`${domain}:authority`, 2, 10),
-            contentSignal: seededInt(`${domain}:content`, 2, 10),
-            hasStructuredData: seededInt(`${domain}:schema`, 0, 10) >= 5
-          };
-          if (isMap) {
-            row.mapPackAppearances += 1;
-          } else {
-            row.searchAppearances += 1;
-          }
-          if (Number.isFinite(Number(entry.position))) {
-            row.positions.push(Number(entry.position));
-          }
-          competitorMap.set(domain, row);
-        });
-      }
-      if (competitorMap.size > 0) {
-        dataQuality = 'real';
-        sourceNote = 'live provider results';
-      }
+      });
+    }
+
+    if (rawVisibleResults.length > 0) {
+      dataQuality = sourceConfidence === 'high' ? 'real' : 'estimated';
     } else {
-      for (const query of queries) {
-        const scrapedResults = await searchCompetitors(query, { pages: 3 });
-        queryCount += 1;
-        scrapedResults.slice(0, 30).forEach((entry, index) => {
-          const domain = extractRootDomain(entry.host || entry.url || '');
-          orderedResults.push({
-            rank: Number(entry.position) || (index + 1),
-            page: Math.floor(((Number(entry.position) || (index + 1)) - 1) / 10) + 1,
-            companyName: normalizeString(entry.title || entry.name) || domain || 'Unknown result',
-            domain,
-            website: normalizeString(entry.url) || '',
-            query
-          });
-          if (!domain) {
-            return;
-          }
-          const row = competitorMap.get(domain) || {
-            companyName: normalizeString(entry.title || entry.name) || domain,
-            domain,
-            website: normalizeString(entry.url) || `https://${domain}`,
-            searchAppearances: 0,
-            mapPackAppearances: 0,
-            positions: [],
-            authorityIndicator: seededInt(`${domain}:authority`, 2, 10),
-            contentSignal: seededInt(`${domain}:content`, 2, 10),
-            hasStructuredData: seededInt(`${domain}:schema`, 0, 10) >= 5
-          };
-          row.searchAppearances += 1;
-          if (Number.isFinite(Number(entry.position))) {
-            row.positions.push(Number(entry.position));
-          }
-          competitorMap.set(domain, row);
-        });
-      }
-      if (orderedResults.length > 0) {
-        dataQuality = 'real';
-        sourceNote = 'live google crawl results';
-      } else {
-        sourceNote = 'google crawl returned no usable ranking rows';
-      }
+      sourceNote = providerResults.provider === 'none'
+        ? 'No live or fallback search provider returned visible results.'
+        : `${providerResults.sourceNote}. Search returned no visible usable rows.`;
     }
   } catch (error) {
     dataQuality = 'estimated';
@@ -1456,7 +2127,7 @@ async function runMarketOnlyAudit(input) {
       ? (item.positions.reduce((sum, val) => sum + val, 0) / item.positions.length)
       : Number(item.averagePosition || 12);
     const strengthScore = clampScore(
-      Math.round((Number(item.searchAppearances || 0) * 16) + (Number(item.mapPackAppearances || 0) * 12) + (Number(item.authorityIndicator || 0) * 4) + (Number(item.contentSignal || 0) * 3) - avgPosition),
+      Math.round((Number(item.searchAppearances || 0) * 6) + (Number(item.mapPackAppearances || 0) * 8) + (Number(item.authorityIndicator || 0) * 4) + (Number(item.contentSignal || 0) * 3) + (Number.isFinite(Number(item.rating)) ? Number(item.rating) * 4 : 0) + (Number.isFinite(Number(item.reviews)) ? Math.min(15, Math.round(Math.log10(Number(item.reviews) + 1) * 6)) : 0) - (avgPosition * 2)),
       20,
       95
     );
@@ -1464,15 +2135,33 @@ async function runMarketOnlyAudit(input) {
       companyName: item.companyName || item.name || item.domain,
       domain: item.domain,
       website: item.website || `https://${item.domain}`,
+      queriesAppearedIn: item.queriesAppearedIn || [],
+      firstObservedRank: Number(item.firstObservedRank || avgPosition || 99),
+      totalAppearances: Number(item.totalAppearances || 0),
+      source: item.source || '',
+      titlesSeen: item.titlesSeen || [],
+      snippetsSeen: item.snippetsSeen || [],
       searchAppearances: Number(item.searchAppearances || 0),
       mapPackAppearances: Number(item.mapPackAppearances || 0),
       averagePosition: Number(avgPosition.toFixed(1)),
       authorityIndicator: Number(item.authorityIndicator || 0),
       contentSignal: Number(item.contentSignal || 0),
       hasStructuredData: Boolean(item.hasStructuredData),
+      rating: Number.isFinite(Number(item.rating)) ? Number(item.rating) : null,
+      reviews: Number.isFinite(Number(item.reviews)) ? Number(item.reviews) : null,
+      reputationScore: item.reputationScore === null ? null : Number(item.reputationScore || 0),
+      websiteStrength: Number(item.websiteStrength || 0),
+      localPresence: Number(item.localPresence || 0),
+      conversionUx: Number(item.conversionUx || 0),
+      aiVisibility: Number(item.aiVisibility || 0),
       strengthScore
     };
   });
+  const competitorStatsByKey = new Map(
+    competitors
+      .filter((item) => createBusinessKey(item))
+      .map((item) => [createBusinessKey(item), item])
+  );
 
   const uniqueScreenshots = [];
   const seenScreenshotKey = new Set();
@@ -1492,28 +2181,46 @@ async function runMarketOnlyAudit(input) {
     screenshots: uniqueScreenshots,
     queryCount
   });
-
+  const dedupedOrderedResults = buildDedupedMarketRankingRows(orderedResults, competitorStatsByKey);
+  const hasVisibleResults = rawVisibleResults.length > 0;
   const hasLiveCompetitors = competitors.length > 0;
+  const directoryOrReviewCount = dedupedOrderedResults.filter((row) => row.resultType === 'directory' || row.resultType === 'review').length;
+  const localBusinessCount = dedupedOrderedResults.filter((row) => row.resultType === 'local_business').length;
+  const socialCount = dedupedOrderedResults.filter((row) => row.resultType === 'social').length;
+  const limitedWarning = hasVisibleResults && (sourceConfidence !== 'high' || localBusinessCount < 3)
+    ? 'Search returned limited structured business data, so GeoNeo is showing visible market results with confidence labels.'
+    : '';
   const difficultyScore = Number(industryAnalysis.difficulty && industryAnalysis.difficulty.score) || 0;
+  const avgReputation = competitors
+    .map((item) => item.reputationScore)
+    .filter((value) => Number.isFinite(Number(value)));
+  const avgWebsiteStrength = competitors.length
+    ? Math.round(competitors.reduce((sum, item) => sum + Number(item.websiteStrength || 0), 0) / competitors.length)
+    : 0;
+  const avgLocalPresence = competitors.length
+    ? Math.round(competitors.reduce((sum, item) => sum + Number(item.localPresence || 0), 0) / competitors.length)
+    : 0;
+  const avgConversionUx = competitors.length
+    ? Math.round(competitors.reduce((sum, item) => sum + Number(item.conversionUx || 0), 0) / competitors.length)
+    : 0;
+  const avgAiVisibility = competitors.length
+    ? Math.round(competitors.reduce((sum, item) => sum + Number(item.aiVisibility || 0), 0) / competitors.length)
+    : 0;
+  const competitionLevel = hasLiveCompetitors ? clampScore(Math.round(difficultyScore * 10), 20, 95) : 0;
+  const directoryDominance = hasVisibleResults ? clampScore(Math.round(((directoryOrReviewCount + socialCount) / Math.max(dedupedOrderedResults.length, 1)) * 100), 0, 100) : 0;
+  const localBusinessVisibility = hasVisibleResults ? clampScore(Math.round((localBusinessCount / Math.max(dedupedOrderedResults.length, 1)) * 100), 0, 100) : 0;
+  const marketActivity = hasVisibleResults ? clampScore(Math.round((Math.min(rawVisibleResults.length, 30) / 30) * 100), 20, 100) : 0;
+  const opportunityScore = hasVisibleResults ? clampScore(Math.round((100 - competitionLevel) * 0.45 + directoryDominance * 0.35 + (100 - localBusinessVisibility) * 0.2), 10, 95) : 0;
+  const leadPotential = hasVisibleResults ? clampScore(Math.round((marketActivity * 0.45) + (opportunityScore * 0.55)), 10, 95) : 0;
   const summaryScores = {
-    seo: hasLiveCompetitors ? clampScore(Math.round(100 - (difficultyScore * 6.5)), 35, 92) : 0,
-    technical: 0,
-    aiVisibility: hasLiveCompetitors
-      ? clampScore(
-        Math.round(
-          (Array.isArray(industryAnalysis.opportunities?.aiCitationPotential?.topCandidates)
-            ? industryAnalysis.opportunities.aiCitationPotential.topCandidates.reduce((sum, item) => sum + (item.citationLikelihood === 'High' ? 85 : (item.citationLikelihood === 'Medium' ? 65 : 45)), 0)
-            : 0) / Math.max(1, (industryAnalysis.opportunities?.aiCitationPotential?.topCandidates || []).length || 1)
-        ),
-        0,
-        90
-      )
-      : 0,
-    localPresence: hasLiveCompetitors ? clampScore(Math.round(100 - (difficultyScore * 7)), 35, 95) : 0,
-    reputation: 0,
-    conversionUx: 0
+    marketActivity,
+    competitionLevel,
+    directoryDominance,
+    localBusinessVisibility,
+    opportunityScore,
+    leadPotential
   };
-  const issues = hasLiveCompetitors ? [
+  const issues = hasVisibleResults ? [
     {
       category: 'market',
       title: 'Competitive landscape',
@@ -1531,15 +2238,25 @@ async function runMarketOnlyAudit(input) {
       title: 'Entry opportunity',
       severity: industryAnalysis.opportunities.weakCompetitorsInTop10.length ? 'low' : 'medium',
       description: industryAnalysis.opportunities.keyOpportunities[0] || 'No clear easy entry positions were detected.'
-    }
+    },
+    {
+      category: 'quality',
+      title: 'Weak competitor websites still rank',
+      severity: 'medium',
+      description: industryAnalysis.summaryNarrative || 'Several visible competitors still depend more on local presence than strong websites.'
+    },
+    ...(limitedWarning ? [{
+      category: 'quality',
+      title: 'Structured local business signals are limited',
+      severity: 'medium',
+      description: limitedWarning
+    }] : [])
   ] : [
     {
       category: 'market',
       title: 'Live market data unavailable',
       severity: 'high',
-      description: sourceNote === 'live SERP provider is not configured'
-        ? 'No live SERP provider is configured. Add SERP_API_KEY, or SERP_API_LOGIN + SERP_API_KEY for DataForSEO, before deploying this market search.'
-        : 'No live competitor data was returned for this market. This section will remain empty until provider data is available.'
+      description: 'Search returned no results for this market query set.'
     }
   ];
   const fixes = hasLiveCompetitors ? (industryAnalysis.strategy.howToBreakIntoTop10 || []).map((step) => ({
@@ -1554,7 +2271,8 @@ async function runMarketOnlyAudit(input) {
     input: {
       industry,
       city,
-      state
+      state,
+      zip
     },
     dataQuality,
     sourceNote,
@@ -1564,8 +2282,15 @@ async function runMarketOnlyAudit(input) {
       overview: {
         ...industryAnalysis.overview,
         primaryQuery,
-        orderedResults,
-        localPackResults: localPackRows
+        executedQueries: queries,
+        orderedResults: dedupedOrderedResults,
+        rawVisibleResults,
+        rawOrderedResults: orderedResults,
+        localPackResults: localPackRows,
+        directorySignals,
+        warning: hasVisibleResults ? limitedWarning : 'Search returned no results.',
+        sourceConfidence,
+        sourceLabel: sourceNote
       }
     },
     issues,
@@ -3156,6 +3881,15 @@ function normalizeLabel(value) {
     .trim();
 }
 
+function isIrrelevantMarketResult(entry) {
+  const cleanUrl = unwrapSearchRedirectUrl(entry && entry.url);
+  return isJunkMarketResult({
+    ...entry,
+    url: cleanUrl,
+    host: extractHostFromUrl(cleanUrl) || entry?.host
+  });
+}
+
 function decodeHtmlEntities(value) {
   return String(value || '')
     .replace(/&amp;/g, '&')
@@ -3176,7 +3910,7 @@ function safeDecodeUri(value) {
 
 function extractHostFromUrl(url) {
   try {
-    return new URL(url).hostname.replace(/^www\./i, '').toLowerCase();
+    return new URL(unwrapSearchRedirectUrl(url)).hostname.replace(/^www\./i, '').toLowerCase();
   } catch {
     return '';
   }
@@ -3346,13 +4080,55 @@ function parseGoogleSearchHtml(html, startOffset = 0) {
     return [];
   }
 
+  const normalizeGoogleHref = (href) => {
+    const rawHref = normalizeString(href);
+    if (!rawHref) return '';
+    if (/^https?:\/\//i.test(rawHref)) {
+      return rawHref;
+    }
+    if (!rawHref.startsWith('/')) {
+      return '';
+    }
+    try {
+      const parsed = new URL(`https://www.google.com${rawHref}`);
+      const redirected = parsed.searchParams.get('q') || parsed.searchParams.get('url') || '';
+      return redirected || '';
+    } catch {
+      return '';
+    }
+  };
+
+  const decodeAnchorTitle = (anchorHtml) => {
+    const h3Match = anchorHtml.match(/<h3[^>]*>([\s\S]*?)<\/h3>/i);
+    if (h3Match) {
+      return stripHtml(decodeHtmlEntities(h3Match[1] || ''));
+    }
+    const ariaMatch = anchorHtml.match(/\baria-label="([^"]+)"/i);
+    if (ariaMatch) {
+      return decodeHtmlEntities(ariaMatch[1] || '');
+    }
+    return stripHtml(decodeHtmlEntities(anchorHtml || ''));
+  };
+
+  const isLikelyResultTitle = (title) => {
+    const normalized = normalizeString(title);
+    if (!normalized || normalized.length < 4) return false;
+    if (/^cached$/i.test(normalized)) return false;
+    if (/^translate this page$/i.test(normalized)) return false;
+    if (/^about this result$/i.test(normalized)) return false;
+    if (/^more results$/i.test(normalized)) return false;
+    if (/^people also ask$/i.test(normalized)) return false;
+    return true;
+  };
+
   const snippetMatches = [...html.matchAll(/<div class="VwiC3b[^"]*"[^>]*>([\s\S]*?)<\/div>/gi)]
     .map((match) => stripHtml(decodeHtmlEntities(match[1] || '')));
-  const linkMatches = [...html.matchAll(/<a[^>]+href="\/url\?q=([^"&]+)[^"]*"[^>]*>[\s\S]*?<h3[^>]*>([\s\S]*?)<\/h3>[\s\S]*?<\/a>/gi)];
   const seenHost = new Set();
-  const results = linkMatches
+
+  const anchorMatches = [...html.matchAll(/<a\b[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
+  const results = anchorMatches
     .map((match, index) => {
-      const rawUrl = safeDecodeUri(match[1] || '');
+      const rawUrl = safeDecodeUri(normalizeGoogleHref(match[1] || ''));
       const host = extractHostFromUrl(rawUrl);
       if (!host || /(^|\.)google\./i.test(host)) {
         return null;
@@ -3360,9 +4136,12 @@ function parseGoogleSearchHtml(html, startOffset = 0) {
       if (seenHost.has(host)) {
         return null;
       }
-      seenHost.add(host);
-      const title = stripHtml(decodeHtmlEntities(match[2] || ''));
+      const title = decodeAnchorTitle(match[2] || '');
+      if (!isLikelyResultTitle(title)) {
+        return null;
+      }
       const snippet = snippetMatches[index] || '';
+      seenHost.add(host);
       return {
         name: title || host,
         title,
@@ -3409,15 +4188,138 @@ async function searchCompetitors(query, options = {}) {
 
     for (let pageIndex = 0; pageIndex < pages; pageIndex += 1) {
       const start = pageIndex * 10;
-      const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}&num=10&start=${start}`;
-      const res = await fetch(searchUrl, {
+      const searchUrls = [
+        `https://www.google.com/search?q=${encodeURIComponent(query)}&num=10&start=${start}`,
+        `https://www.google.com/search?gbv=1&q=${encodeURIComponent(query)}&num=10&start=${start}`
+      ];
+      let pageResults = [];
+      for (const searchUrl of searchUrls) {
+        const res = await fetch(searchUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0'
+          }
+        });
+        const html = await res.text();
+        pageResults = parseGoogleSearchHtml(html, start)
+          .filter((entry) => !isIrrelevantMarketResult(entry))
+          .filter((entry) => {
+            const host = normalizeString(entry.host || '').toLowerCase();
+            if (!host) {
+              return true;
+            }
+            if (seenHostGlobal.has(host)) {
+              return false;
+            }
+            seenHostGlobal.add(host);
+            return true;
+          });
+        if (pageResults.length) {
+          break;
+        }
+      }
+      combined.push(...pageResults);
+      if (pageResults.length < 3) {
+        break;
+      }
+    }
+
+    return combined;
+  } catch {
+    return [];
+  }
+}
+
+function parseDuckDuckGoSearchHtml(html, startOffset = 0) {
+  const unreliablePage = /captcha|detected unusual traffic|enable javascript/i.test(html);
+  if (unreliablePage) {
+    return [];
+  }
+
+  const seenHost = new Set();
+  return [...html.matchAll(/<a[^>]+class="[^"]*result__a[^"]*"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)]
+    .map((match) => {
+      const rawUrl = unwrapSearchRedirectUrl(safeDecodeUri(decodeHtmlEntities(match[1] || '')));
+      const host = extractHostFromUrl(rawUrl);
+      if (!host || seenHost.has(host)) {
+        return null;
+      }
+      seenHost.add(host);
+      const title = stripHtml(decodeHtmlEntities(match[2] || ''));
+      return {
+        name: title || host,
+        title: title || host,
+        url: rawUrl,
+        host,
+        snippet: '',
+        reviewCount: null
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 10)
+    .map((entry, index) => ({
+      ...entry,
+      position: startOffset + index + 1
+    }));
+}
+
+function parseBingSearchHtml(html, startOffset = 0) {
+  const unreliablePage = /captcha|detected unusual traffic|enable javascript/i.test(html);
+  if (unreliablePage) {
+    return [];
+  }
+
+  const seenHost = new Set();
+  return [...html.matchAll(/<li[^>]+class="[^"]*\bb_algo\b[^"]*"[\s\S]*?<h2[^>]*><a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a><\/h2>/gi)]
+    .map((match) => {
+      const rawUrl = unwrapSearchRedirectUrl(safeDecodeUri(decodeHtmlEntities(match[1] || '')));
+      const host = extractHostFromUrl(rawUrl);
+      if (!host || seenHost.has(host)) {
+        return null;
+      }
+      seenHost.add(host);
+      const title = stripHtml(decodeHtmlEntities(match[2] || ''));
+      return {
+        name: title || host,
+        title: title || host,
+        url: rawUrl,
+        host,
+        snippet: '',
+        reviewCount: null
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 10)
+    .map((entry, index) => ({
+      ...entry,
+      position: startOffset + index + 1
+    }));
+}
+
+async function searchCompetitorsWithFallback(query, options = {}) {
+  const googleResults = await searchCompetitors(query, options);
+  if (googleResults.length) {
+    return {
+      source: 'google crawl',
+      results: googleResults
+    };
+  }
+
+  try {
+    const pages = Math.max(1, Math.min(3, Number(options.pages) || 1));
+    const combined = [];
+    const seenHostGlobal = new Set();
+
+    for (let pageIndex = 0; pageIndex < pages; pageIndex += 1) {
+      const start = pageIndex * 10;
+      const ddgUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}&s=${start}`;
+      const res = await fetch(ddgUrl, {
         headers: {
           'User-Agent': 'Mozilla/5.0'
         }
       });
-
       const html = await res.text();
-      const pageResults = parseGoogleSearchHtml(html, start)
+      const pageResults = parseDuckDuckGoSearchHtml(html, start)
+        .filter((entry) => !isIrrelevantMarketResult(entry))
         .filter((entry) => {
           const host = normalizeString(entry.host || '').toLowerCase();
           if (!host) {
@@ -3435,10 +4337,63 @@ async function searchCompetitors(query, options = {}) {
       }
     }
 
-    return combined;
+    if (combined.length) {
+      return {
+        source: 'duckduckgo crawl fallback',
+        results: combined
+      };
+    }
   } catch {
-    return [];
+    // no-op
   }
+
+  try {
+    const pages = Math.max(1, Math.min(3, Number(options.pages) || 1));
+    const combined = [];
+    const seenHostGlobal = new Set();
+
+    for (let pageIndex = 0; pageIndex < pages; pageIndex += 1) {
+      const start = pageIndex * 10 + 1;
+      const bingUrl = `https://www.bing.com/search?q=${encodeURIComponent(query)}&first=${start}`;
+      const res = await fetch(bingUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0'
+        }
+      });
+      const html = await res.text();
+      const pageResults = parseBingSearchHtml(html, pageIndex * 10)
+        .filter((entry) => !isIrrelevantMarketResult(entry))
+        .filter((entry) => {
+          const host = normalizeString(entry.host || '').toLowerCase();
+          if (!host) {
+            return true;
+          }
+          if (seenHostGlobal.has(host)) {
+            return false;
+          }
+          seenHostGlobal.add(host);
+          return true;
+        });
+      combined.push(...pageResults);
+      if (pageResults.length < 3) {
+        break;
+      }
+    }
+
+    if (combined.length) {
+      return {
+        source: 'bing crawl fallback',
+        results: combined
+      };
+    }
+  } catch {
+    // no-op
+  }
+
+  return {
+    source: 'no usable crawl rows',
+    results: []
+  };
 }
 
 function sanitizeCompetitorResultsDetailed(results, { domainToken, businessHints }) {
@@ -4434,6 +5389,7 @@ async function requestHandler(req, res) {
       const streetAddress = reqUrl.searchParams.get('streetAddress') || '';
       const city = reqUrl.searchParams.get('city') || '';
       const state = reqUrl.searchParams.get('state') || '';
+      const zip = reqUrl.searchParams.get('zip') || '';
       const competitorsInput = reqUrl.searchParams.get('competitors') || '';
       const competitorUrl = reqUrl.searchParams.get('competitorUrl') || '';
       const competitorNotes = reqUrl.searchParams.get('competitorNotes') || '';
@@ -4441,19 +5397,20 @@ async function requestHandler(req, res) {
       const bestContactTime = reqUrl.searchParams.get('bestContactTime') || '';
       const followupConsent = reqUrl.searchParams.get('followupConsent') || '';
       const auditMode = normalizeAuditMode(reqUrl.searchParams.get('auditMode') || 'business');
-      const market = reqUrl.searchParams.get('market') || [city, state].filter(Boolean).join(', ');
+      const market = reqUrl.searchParams.get('market') || [city, state, zip].filter(Boolean).join(', ');
       const packageLevel = normalizePackageLevel(reqUrl.searchParams.get('package') || 'free');
       const amountPaid = resolveAmountPaid(reqUrl.searchParams.get('amountPaid'), packageLevel);
       const createdAt = new Date().toISOString();
 
-      const hasMarketInputs = Boolean(normalizeString(industry) || normalizeString(city) || normalizeString(state));
+      const hasMarketInputs = Boolean(normalizeString(industry) || normalizeString(city) || normalizeString(state) || normalizeString(zip));
       const effectiveQueryType = (!targetUrl && hasMarketInputs) ? 'market' : queryType;
 
       if (effectiveQueryType === 'market') {
         const marketModel = await runMarketOnlyAudit({
           industry,
           city,
-          state
+          state,
+          zip
         });
         const packageViews = buildDashboardPackageViews(marketModel);
         const selectedPackageView = dashboardPackage || normalizeDashboardPackage(packageLevel);
@@ -4502,6 +5459,7 @@ async function requestHandler(req, res) {
           searchQuery,
           city,
           state,
+          zip,
           auditMode
         });
         filteredResult = filterAuditResultByPackage(result, packageLevel);
@@ -4522,6 +5480,7 @@ async function requestHandler(req, res) {
           streetAddress,
           city,
           state,
+          zip,
           competitorsInput,
           competitorUrl,
           competitorNotes,
@@ -4635,6 +5594,12 @@ if (require.main === module) {
 
 module.exports = Object.assign(requestHandler, {
   requestHandler,
+  generateLocalBuyerQueries,
+  unwrapSearchRedirectUrl,
+  isJunkMarketResult,
+  evaluateMarketResult,
+  getLocalCompetitors,
+  runMarketOnlyAudit,
   safeUrl,
   htmlToText,
   calculateOverallScore,

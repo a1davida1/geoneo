@@ -73,6 +73,9 @@
   const marketIndustry = document.getElementById('marketIndustry');
   const marketCity = document.getElementById('marketCity');
   const marketState = document.getElementById('marketState');
+  const marketZip = document.getElementById('marketZip');
+  const websiteState = document.getElementById('websiteState');
+  const websiteZip = document.getElementById('websiteZip');
   const finalUrl = document.getElementById('finalUrl');
   const pricingEyebrow = document.getElementById('pricingEyebrow');
   const pricingTitle = document.getElementById('pricingTitle');
@@ -89,6 +92,60 @@
     selectedPackageView: 'full_data',
     internalMode: false
   };
+
+  const US_STATES = [
+    ['AL', 'Alabama'],
+    ['AK', 'Alaska'],
+    ['AZ', 'Arizona'],
+    ['AR', 'Arkansas'],
+    ['CA', 'California'],
+    ['CO', 'Colorado'],
+    ['CT', 'Connecticut'],
+    ['DE', 'Delaware'],
+    ['FL', 'Florida'],
+    ['GA', 'Georgia'],
+    ['HI', 'Hawaii'],
+    ['ID', 'Idaho'],
+    ['IL', 'Illinois'],
+    ['IN', 'Indiana'],
+    ['IA', 'Iowa'],
+    ['KS', 'Kansas'],
+    ['KY', 'Kentucky'],
+    ['LA', 'Louisiana'],
+    ['ME', 'Maine'],
+    ['MD', 'Maryland'],
+    ['MA', 'Massachusetts'],
+    ['MI', 'Michigan'],
+    ['MN', 'Minnesota'],
+    ['MS', 'Mississippi'],
+    ['MO', 'Missouri'],
+    ['MT', 'Montana'],
+    ['NE', 'Nebraska'],
+    ['NV', 'Nevada'],
+    ['NH', 'New Hampshire'],
+    ['NJ', 'New Jersey'],
+    ['NM', 'New Mexico'],
+    ['NY', 'New York'],
+    ['NC', 'North Carolina'],
+    ['ND', 'North Dakota'],
+    ['OH', 'Ohio'],
+    ['OK', 'Oklahoma'],
+    ['OR', 'Oregon'],
+    ['PA', 'Pennsylvania'],
+    ['RI', 'Rhode Island'],
+    ['SC', 'South Carolina'],
+    ['SD', 'South Dakota'],
+    ['TN', 'Tennessee'],
+    ['TX', 'Texas'],
+    ['UT', 'Utah'],
+    ['VT', 'Vermont'],
+    ['VA', 'Virginia'],
+    ['WA', 'Washington'],
+    ['WV', 'West Virginia'],
+    ['WI', 'Wisconsin'],
+    ['WY', 'Wyoming'],
+    ['DC', 'District of Columbia']
+  ];
 
   const modeContent = {
     website: {
@@ -164,6 +221,15 @@
     if (!trimmed) return '';
     if (/^https?:\/\//i.test(trimmed)) return trimmed;
     return `https://${trimmed}`;
+  }
+
+  function populateStateSelect(selectEl) {
+    if (!selectEl) return;
+    const existing = String(selectEl.value || '');
+    selectEl.innerHTML = `<option value="">Select state</option>${US_STATES
+      .map(([abbr, name]) => `<option value="${abbr}">${name}</option>`)
+      .join('')}`;
+    selectEl.value = existing;
   }
 
   function onScroll() {
@@ -345,16 +411,25 @@
   function renderScoreCards(view) {
     if (!summaryScoreCards) return;
     const scores = view.summaryScores || {};
-    const cards = [
-      ['SEO', scores.seo],
-      ['Technical', scores.technical],
-      ['AI Visibility', scores.aiVisibility],
-      ['Local Presence', scores.localPresence],
-      ['Reputation', scores.reputation],
-      ['Conversion / UX', scores.conversionUx]
-    ];
+    const cards = isMarketDashboard(state.dashboard)
+      ? [
+        ['Market Activity', scores.marketActivity],
+        ['Competition Level', scores.competitionLevel],
+        ['Directory Dominance', scores.directoryDominance],
+        ['Local Business Visibility', scores.localBusinessVisibility],
+        ['Opportunity Score', scores.opportunityScore],
+        ['Lead Potential', scores.leadPotential]
+      ]
+      : [
+        ['SEO', scores.seo],
+        ['Technical', scores.technical],
+        ['AI Visibility', scores.aiVisibility],
+        ['Local Presence', scores.localPresence],
+        ['Reputation', scores.reputation],
+        ['Conversion / UX', scores.conversionUx]
+      ];
     summaryScoreCards.innerHTML = cards
-      .map(([label, value]) => `<article class="card"><h4>${label}</h4><p class="plan-price">${Number.isFinite(Number(value)) ? Number(value) : 0}/100</p></article>`)
+      .map(([label, value]) => `<article class="card"><h4>${label}</h4><p class="plan-price">${Number.isFinite(Number(value)) ? Number(value) : 0}${isMarketDashboard(state.dashboard) ? '' : '/100'}</p></article>`)
       .join('');
   }
 
@@ -421,6 +496,9 @@
     const analysis = view.industryAnalysis || {};
     const overview = analysis.overview || {};
     const orderedRows = safeArray(overview.orderedResults);
+    const executedQueries = safeArray(overview.executedQueries);
+    const warning = overview.warning || '';
+    const summaryNarrative = analysis.summaryNarrative || '';
     const orderedCount = orderedRows.length;
     const pageOneCount = orderedRows.filter((row) => Number(row.page) === 1).length;
     const pageTwoCount = orderedRows.filter((row) => Number(row.page) === 2).length;
@@ -429,16 +507,16 @@
       marketSearchTitle.textContent = 'Industry and Area Rankings';
     }
     if (marketSearchLead) {
-      marketSearchLead.textContent = 'This is a ranked market report. It shows which businesses appear first when someone searches this industry in this area.';
+      marketSearchLead.textContent = warning || summaryNarrative || 'This is a ranked market report. It shows which businesses appear first when someone searches this industry in this area.';
     }
     if (marketSearchSummary) {
-      marketSearchSummary.textContent = `Primary query: ${overview.primaryQuery || 'n/a'} | Page 1: ${pageOneCount} | Page 2: ${pageTwoCount} | Page 3: ${pageThreeCount} | Total rows: ${orderedCount} | Source: ${state.dashboard?.sourceNote || 'n/a'}`;
+      marketSearchSummary.textContent = `Primary query: ${overview.primaryQuery || 'n/a'} | Queries used: ${executedQueries.join(' | ') || 'n/a'} | Page 1: ${pageOneCount} | Page 2: ${pageTwoCount} | Page 3: ${pageThreeCount} | Total rows: ${orderedCount} | Source: ${overview.sourceLabel || state.dashboard?.sourceNote || 'n/a'}${overview.sourceConfidence ? ` | Confidence: ${overview.sourceConfidence}` : ''}`;
     }
     if (marketSearchStats) {
       const topThree = orderedRows.slice(0, 3);
       const topThreeText = topThree.length
         ? topThree.map((row) => `#${row.rank} ${row.companyName}`).join(' | ')
-        : 'No live businesses returned';
+        : 'No visible market results returned';
       marketSearchStats.innerHTML = [
         ['Page 1', pageOneCount],
         ['Page 2', pageTwoCount],
@@ -570,35 +648,37 @@
     if (isMarketDashboard(state.dashboard)) {
       panelTitle(competitorsPanel, 'Businesses Ranking In This Market');
       const orderedResults = safeArray(view.industryAnalysis?.overview?.orderedResults);
-      const competitors = safeArray(view.industryAnalysis?.competitors || view.competitors);
       if (tableHeadRow) {
         tableHeadRow.innerHTML = `
           <th>Rank</th>
-          <th>Page</th>
-          <th>Company Name</th>
+          <th>Ranking Asset</th>
+          <th>Type / Confidence</th>
           <th>Domain</th>
           <th>Website</th>
-          <th>Query</th>
+          <th>Why Included</th>
         `;
       }
       if (!orderedResults.length) {
         competitorsPanel.hidden = false;
-        competitorsTableBody.innerHTML = '<tr><td colspan="6">No live Google ranking rows were returned for this market.</td></tr>';
+        const warning = view.industryAnalysis?.overview?.warning || 'Search returned limited structured business data, so GeoNeo is showing visible market results with confidence labels.';
+        competitorsTableBody.innerHTML = `<tr><td colspan="6">${warning}</td></tr>`;
         return;
       }
       competitorsPanel.hidden = false;
       competitorsTableBody.innerHTML = orderedResults
         .map((item) => {
           const rank = Number(item.rank || 0);
-          const page = Number(item.page || 0);
           const rankLabel = rank <= 3 ? 'Top 3' : (rank <= 10 ? 'Page 1' : (rank <= 20 ? 'Page 2' : 'Page 3'));
+          const consistencyLabel = item.consistencyLabel || '';
+          const whyRank = item.whyRank || '';
+          const whyIncluded = [item.inclusionReason || '', ...(safeArray(item.warnings).slice(0, 2))].filter(Boolean).join(' ');
           return `<tr>
           <td><strong>#${rank}</strong><br/><span class="form-note">${rankLabel}</span></td>
-          <td>${page}</td>
-          <td>${item.companyName || '-'}</td>
+          <td>${item.companyName || '-'}${consistencyLabel ? `<br/><span class="form-note">${consistencyLabel}</span>` : ''}${whyRank ? `<br/><span class="form-note">${whyRank}</span>` : ''}</td>
+          <td>${String(item.resultType || 'unknown').replace(/_/g, ' ')}<br/><span class="form-note">${Number(item.confidence || 0)} confidence</span></td>
           <td>${item.domain || '-'}</td>
           <td>${item.website ? `<a href="${item.website}" target="_blank" rel="noreferrer">${item.website}</a>` : '-'}</td>
-          <td>${item.query || '-'}</td>
+          <td>${whyIncluded || 'Appears in visible search results.'}</td>
         </tr>`;
         })
         .join('');
@@ -683,7 +763,7 @@
       dataQualityBadge.textContent = `Data Quality: ${state.dashboard.dataQuality || 'unknown'} | Source: ${state.dashboard.sourceNote || 'n/a'}`;
     }
     if (summaryScoreCards) {
-      summaryScoreCards.hidden = marketMode;
+      summaryScoreCards.hidden = false;
     }
     if (dashboardControlsCard) {
       dashboardControlsCard.hidden = marketMode;
@@ -764,12 +844,13 @@
       params.set('internalMode', state.internalMode ? '1' : '0');
       if (mode === 'website') {
         const normalizedUrl = normalizeWebsiteInput(payload.url);
-        const hasMarketSeed = Boolean(payload.industry || payload.city || payload.state);
+        const hasMarketSeed = Boolean(payload.industry || payload.city || payload.state || payload.zip);
         if (!normalizedUrl && hasMarketSeed) {
           params.set('queryType', 'market');
           params.set('industry', String(payload.industry || '').trim());
           if (payload.city) params.set('city', payload.city);
           if (payload.state) params.set('state', payload.state);
+          if (payload.zip) params.set('zip', payload.zip);
         } else if (!normalizedUrl) {
           throw new Error('Enter a website URL, or use Industry and Area Rankings mode.');
         } else {
@@ -777,6 +858,7 @@
           if (payload.industry) params.set('industry', payload.industry);
           if (payload.city) params.set('city', payload.city);
           if (payload.state) params.set('state', payload.state);
+          if (payload.zip) params.set('zip', payload.zip);
         }
       } else {
         if (!payload.industry) {
@@ -785,6 +867,7 @@
         params.set('industry', payload.industry);
         if (payload.city) params.set('city', payload.city);
         if (payload.state) params.set('state', payload.state);
+        if (payload.zip) params.set('zip', payload.zip);
       }
 
       const response = await fetch(`/api/audit?${params.toString()}`);
@@ -836,7 +919,8 @@
         url: String(formData.get('url') || '').trim(),
         industry: String(formData.get('industry') || '').trim(),
         city: String(formData.get('city') || '').trim(),
-        state: String(formData.get('state') || '').trim()
+        state: String(formData.get('state') || '').trim(),
+        zip: String(formData.get('zip') || '').trim()
       });
     });
   }
@@ -847,7 +931,8 @@
       await runQuery('market', {
         industry: String(marketIndustry?.value || '').trim(),
         city: String(marketCity?.value || '').trim(),
-        state: String(marketState?.value || '').trim()
+        state: String(marketState?.value || '').trim(),
+        zip: String(marketZip?.value || '').trim()
       });
     });
   }
@@ -865,7 +950,8 @@
         await runQuery('market', {
           industry: target,
           city: String(marketCity?.value || '').trim(),
-          state: String(marketState?.value || '').trim()
+          state: String(marketState?.value || '').trim(),
+          zip: String(marketZip?.value || '').trim()
         });
       } else {
         const target = normalizeWebsiteInput(String(finalUrl?.value || ''));
@@ -878,7 +964,8 @@
           url: target,
           industry: '',
           city: '',
-          state: ''
+          state: '',
+          zip: ''
         });
       }
     });
@@ -939,6 +1026,8 @@
     });
   }
 
+  populateStateSelect(websiteState);
+  populateStateSelect(marketState);
   setMode('website');
   onScroll();
   window.addEventListener('scroll', onScroll, { passive: true });
