@@ -1,0 +1,17 @@
+{
+  "name": "geoneo-ai",
+  "version": "1.0.0",
+  "description": "GeoNeo AI — Search visibility platform for local businesses",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "dotenv": "16.4.7"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "private": true
+}

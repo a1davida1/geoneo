@@ -4,6 +4,26 @@ const { createSerpProvider, extractRootDomain, normalizeDomain } = require('./se
 
 const QUERY_COUNT = 3;
 
+const US_STATE_NAMES = {
+  AL:'Alabama',AK:'Alaska',AZ:'Arizona',AR:'Arkansas',CA:'California',CO:'Colorado',CT:'Connecticut',DE:'Delaware',FL:'Florida',GA:'Georgia',HI:'Hawaii',ID:'Idaho',IL:'Illinois',IN:'Indiana',IA:'Iowa',KS:'Kansas',KY:'Kentucky',LA:'Louisiana',ME:'Maine',MD:'Maryland',MA:'Massachusetts',MI:'Michigan',MN:'Minnesota',MS:'Mississippi',MO:'Missouri',MT:'Montana',NE:'Nebraska',NV:'Nevada',NH:'New Hampshire',NJ:'New Jersey',NM:'New Mexico',NY:'New York',NC:'North Carolina',ND:'North Dakota',OH:'Ohio',OK:'Oklahoma',OR:'Oregon',PA:'Pennsylvania',RI:'Rhode Island',SC:'South Carolina',SD:'South Dakota',TN:'Tennessee',TX:'Texas',UT:'Utah',VT:'Vermont',VA:'Virginia',WA:'Washington',WV:'West Virginia',WI:'Wisconsin',WY:'Wyoming',DC:'District of Columbia'
+};
+
+function buildSerpLocation({ city, state }) {
+  const cityVal = normalizeText(city);
+  const stateVal = normalizeText(state);
+  const fullState = US_STATE_NAMES[stateVal.toUpperCase()] || stateVal;
+
+  // User-supplied city/state always wins over any env default.
+  if (cityVal && fullState) return `${cityVal}, ${fullState}, United States`;
+  if (fullState) return `${fullState}, United States`;
+
+  // Fall back to SERP_LOCATION only when no city/state was provided by the caller.
+  const envLocation = normalizeText(process.env.SERP_LOCATION);
+  if (envLocation) return envLocation;
+
+  return 'United States';
+}
+
 function normalizeText(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
 }
@@ -32,11 +52,19 @@ function inferIndustry({
     return keywords[0];
   }
   const source = toLabel(`${title || ''} ${h1 || ''}`);
+  // Target verticals per docs/POSITIONING.md (Year 1):
+  // plumbing, HVAC, roofing, electrical, pest control, tree service,
+  // garage door, restoration. Secondary patterns kept for broader coverage.
   const patterns = [
     { pattern: /roof|roofing/, value: 'roofing' },
-    { pattern: /plumb|drain|water heater/, value: 'plumber' },
-    { pattern: /hvac|heating|cooling|air conditioning/, value: 'hvac' },
+    { pattern: /plumb|drain|water heater|sewer/, value: 'plumber' },
+    { pattern: /hvac|heating|cooling|air conditioning|furnace|\bac\b/, value: 'hvac' },
     { pattern: /electri/, value: 'electrician' },
+    { pattern: /pest|exterminat|termite|rodent/, value: 'pest control' },
+    { pattern: /tree service|tree removal|stump|arborist/, value: 'tree service' },
+    { pattern: /garage door/, value: 'garage door' },
+    { pattern: /restoration|water damage|fire damage|mold remediation|mitigation/, value: 'restoration' },
+    // Secondary (not Year-1 target but we still detect them to avoid falling back to 'local service'):
     { pattern: /dental|dentist/, value: 'dentist' },
     { pattern: /attorney|law firm|legal/, value: 'attorney' },
     { pattern: /landscap|lawn/, value: 'landscaping' },
@@ -67,14 +95,24 @@ function inferLocation({ market, city, state, siteProfile }) {
 function inferServiceVariantTerms(industrySeed) {
   const base = toLabel(industrySeed);
   const variants = [];
+  // Year-1 target verticals (docs/POSITIONING.md):
   if (/plumb/.test(base)) {
     variants.push('emergency plumber', 'water heater repair', 'drain cleaning');
   } else if (/roof/.test(base)) {
     variants.push('roof repair', 'roof replacement', 'emergency roofing');
-  } else if (/hvac|heating|cooling/.test(base)) {
+  } else if (/hvac|heating|cooling|furnace|\bac\b/.test(base)) {
     variants.push('ac repair', 'furnace repair', 'hvac installation');
   } else if (/electric/.test(base)) {
     variants.push('emergency electrician', 'electrical repair', 'panel upgrade');
+  } else if (/pest|exterminat|termite/.test(base)) {
+    variants.push('pest control service', 'termite treatment', 'exterminator');
+  } else if (/tree/.test(base)) {
+    variants.push('tree removal', 'tree trimming', 'stump grinding');
+  } else if (/garage door/.test(base)) {
+    variants.push('garage door repair', 'garage door opener', 'garage door installation');
+  } else if (/restoration|water damage|fire damage|mold/.test(base)) {
+    variants.push('water damage restoration', 'fire damage restoration', 'mold remediation');
+  // Secondary verticals:
   } else if (/dent/.test(base)) {
     variants.push('emergency dentist', 'teeth cleaning', 'family dentist');
   } else {
@@ -336,7 +374,7 @@ async function runLocalSearchVisibilityAudit({
     title,
     h1
   });
-  const location = inferLocation({ market, city, state, siteProfile }) || 'United States';
+  const location = buildSerpLocation({ city, state });
   const fallbackQueries = uniqueStrings([
     `${industry || businessCategory || 'local service'} ${market || `${city || ''} ${state || ''}`.trim()}`.trim(),
     `${industry || businessCategory || 'local service'} near me`

@@ -18,4 +18,7 @@ node --check "$ROOT_DIR/services/localSearchVisibility.js"
 echo "[bot-check] unit/regression tests"
 node --test "$ROOT_DIR/test/server.test.js"
 
+echo "[bot-check] market guard agents"
+node --test "$ROOT_DIR/test/market-guard-agents.test.js"
+
 echo "[bot-check] PASS"

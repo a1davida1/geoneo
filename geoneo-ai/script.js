@@ -34,6 +34,11 @@
 
   const dashboardResults = document.getElementById('dashboardResults');
   const dashboardStatus = document.getElementById('dashboardStatus');
+  const auditModalOverlay = document.getElementById('auditModalOverlay');
+  const auditModalTitle = document.getElementById('auditModalTitle');
+  const auditModalCloseBtn = document.getElementById('auditModalCloseBtn');
+  const auditLoadingOverlay = document.getElementById('auditLoadingOverlay');
+  const auditLoadingText = document.getElementById('auditLoadingText');
   const searchPositionPanel = document.getElementById('searchPositionPanel');
   const searchPositionTitle = document.getElementById('searchPositionTitle');
   const searchPositionLead = document.getElementById('searchPositionLead');
@@ -60,9 +65,16 @@
   const issuesList = document.getElementById('issuesList');
   const fixesPanel = document.getElementById('fixesPanel');
   const fixesList = document.getElementById('fixesList');
+  const questionsPanel = document.getElementById('questionsPanel');
+  const questionsList = document.getElementById('questionsList');
   const competitorsPanel = document.getElementById('competitorsPanel');
   const competitorsTable = document.getElementById('competitorsTable');
   const competitorsTableBody = document.getElementById('competitorsTableBody');
+  const marketOpportunityPanel = document.getElementById('marketOpportunityPanel');
+  const marketLeaderboardTabBtn = document.getElementById('marketLeaderboardTabBtn');
+  const marketTakeoverTabBtn = document.getElementById('marketTakeoverTabBtn');
+  const marketLeaderboardTab = document.getElementById('marketLeaderboardTab');
+  const marketTakeoverTab = document.getElementById('marketTakeoverTab');
 
   const adminPanel = document.getElementById('adminPanel');
   const adminRawData = document.getElementById('adminRawData');
@@ -70,6 +82,7 @@
   const exportJsonBtn = document.getElementById('exportJsonBtn');
   const exportTextBtn = document.getElementById('exportTextBtn');
 
+  const marketBusinessName = document.getElementById('marketBusinessName');
   const marketIndustry = document.getElementById('marketIndustry');
   const marketCity = document.getElementById('marketCity');
   const marketState = document.getElementById('marketState');
@@ -90,7 +103,8 @@
     activeMode: 'website',
     dashboard: null,
     selectedPackageView: 'full_data',
-    internalMode: false
+    internalMode: false,
+    marketTab: 'leaderboard'
   };
 
   const US_STATES = [
@@ -150,8 +164,8 @@
   const modeContent = {
     website: {
       heroEyebrow: 'Website Audit',
-      heroTitle: 'When people search for what you offer, where does your website rank and what is stopping it from ranking higher?',
-      heroLead: 'Use this to audit one specific website, see how it appears in search, understand the reasons behind that position, and get a clear fix path.',
+      heroTitle: 'Know Where You Are',
+      heroLead: 'Outrank Your Competition',
       guideEyebrow: 'Best For',
       guideTitle: 'Website Audit',
       guideLead: 'Use this when the goal is to understand one business website, not the broader market.',
@@ -250,7 +264,7 @@
   );
   revealEls.forEach((el) => observer.observe(el));
 
-  function setMode(mode) {
+  function setMode(mode, scroll) {
     state.activeMode = mode === 'market' ? 'market' : 'website';
     document.body.setAttribute('data-audit-mode', state.activeMode);
     const websiteActive = state.activeMode === 'website';
@@ -265,6 +279,10 @@
       modeMarketBtn.setAttribute('aria-selected', !websiteActive ? 'true' : 'false');
     }
     applyModeContent(state.activeMode);
+    if (scroll) {
+      const target = websiteActive ? websiteModePanel : marketModePanel;
+      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   }
 
   function applyModeContent(mode) {
@@ -317,9 +335,19 @@
 
   function issueSeverityTag(severity) {
     const s = String(severity || '').toLowerCase();
+    if (s === 'critical') return 'CRITICAL';
+    if (s === 'urgent') return 'URGENT';
     if (s === 'high') return 'HIGH';
-    if (s === 'medium') return 'MED';
+    if (s === 'moderate' || s === 'medium') return 'MODERATE';
     return 'LOW';
+  }
+
+  function severityColor(tag) {
+    if (tag === 'CRITICAL') return '#c0392b';
+    if (tag === 'URGENT') return '#d35400';
+    if (tag === 'HIGH') return '#e67e22';
+    if (tag === 'MODERATE') return '#f39c12';
+    return '#7f8c8d';
   }
 
   function isMarketDashboard(dashboardOrView) {
@@ -330,6 +358,12 @@
     if (!panel) return;
     const heading = panel.querySelector('h4');
     if (heading) heading.textContent = text;
+  }
+
+  function titleCase(value) {
+    return String(value || '')
+      .replace(/[_-]+/g, ' ')
+      .replace(/\w\S*/g, (word) => word.charAt(0).toUpperCase() + word.slice(1));
   }
 
   function buildTextSummary(view, dashboard) {
@@ -411,14 +445,15 @@
   function renderScoreCards(view) {
     if (!summaryScoreCards) return;
     const scores = view.summaryScores || {};
+    const marketState = view.marketOpportunity?.marketState || {};
     const cards = isMarketDashboard(state.dashboard)
       ? [
-        ['Market Activity', scores.marketActivity],
-        ['Competition Level', scores.competitionLevel],
-        ['Directory Dominance', scores.directoryDominance],
-        ['Local Business Visibility', scores.localBusinessVisibility],
-        ['Opportunity Score', scores.opportunityScore],
-        ['Lead Potential', scores.leadPotential]
+        ['Visible Businesses', Number(marketState.visibleBusinesses || 0)],
+        ['Directory Dominance', `${Number(marketState.directoryDominance || 0)}%`],
+        ['Social Dominance', `${Number(marketState.socialDominance || 0)}%`],
+        ['Website Strength', Number(marketState.standaloneWebsiteStrength || 0)],
+        ['Review Ecosystem', Number(marketState.reviewEcosystemStrength || 0)],
+        ['Competition Density', Number(marketState.localCompetitionDensity || 0)]
       ]
       : [
         ['SEO', scores.seo],
@@ -429,7 +464,12 @@
         ['Conversion / UX', scores.conversionUx]
       ];
     summaryScoreCards.innerHTML = cards
-      .map(([label, value]) => `<article class="card"><h4>${label}</h4><p class="plan-price">${Number.isFinite(Number(value)) ? Number(value) : 0}${isMarketDashboard(state.dashboard) ? '' : '/100'}</p></article>`)
+      .map(([label, value]) => {
+        const displayValue = isMarketDashboard(state.dashboard)
+          ? value
+          : `${Number.isFinite(Number(value)) ? Number(value) : 0}/100`;
+        return `<article class="card"><h4>${label}</h4><p class="plan-price">${displayValue}</p></article>`;
+      })
       .join('');
   }
 
@@ -495,6 +535,7 @@
     }
     const analysis = view.industryAnalysis || {};
     const overview = analysis.overview || {};
+    const marketState = view.marketOpportunity?.marketState || {};
     const orderedRows = safeArray(overview.orderedResults);
     const executedQueries = safeArray(overview.executedQueries);
     const warning = overview.warning || '';
@@ -504,24 +545,24 @@
     const pageTwoCount = orderedRows.filter((row) => Number(row.page) === 2).length;
     const pageThreeCount = orderedRows.filter((row) => Number(row.page) === 3).length;
     if (marketSearchTitle) {
-      marketSearchTitle.textContent = 'Industry and Area Rankings';
+      marketSearchTitle.textContent = 'Market State of the Union';
     }
     if (marketSearchLead) {
-      marketSearchLead.textContent = warning || summaryNarrative || 'This is a ranked market report. It shows which businesses appear first when someone searches this industry in this area.';
+      marketSearchLead.textContent = warning || summaryNarrative || marketState.nationalComparison || 'This market report shows how hard the local market is to dominate and how much room there is for a stronger business to take over.';
     }
     if (marketSearchSummary) {
-      marketSearchSummary.textContent = `Primary query: ${overview.primaryQuery || 'n/a'} | Queries used: ${executedQueries.join(' | ') || 'n/a'} | Page 1: ${pageOneCount} | Page 2: ${pageTwoCount} | Page 3: ${pageThreeCount} | Total rows: ${orderedCount} | Source: ${overview.sourceLabel || state.dashboard?.sourceNote || 'n/a'}${overview.sourceConfidence ? ` | Confidence: ${overview.sourceConfidence}` : ''}`;
+      marketSearchSummary.textContent = `Market: ${marketState.expandedMarketLabel || overview.primaryQuery || 'n/a'} | Difficulty: ${marketState.marketDifficultyLabel || 'Unknown'} | Domination Potential: ${marketState.dominationPotential || 'Unknown'} | Estimated timeline: ${marketState.estimatedTimeline || 'Unknown'} | Source: ${overview.sourceLabel || state.dashboard?.sourceNote || 'n/a'}${overview.sourceConfidence ? ` | Confidence: ${overview.sourceConfidence}` : ''}`;
     }
     if (marketSearchStats) {
       const topThree = orderedRows.slice(0, 3);
       const topThreeText = topThree.length
         ? topThree.map((row) => `#${row.rank} ${row.companyName}`).join(' | ')
-        : 'No visible market results returned';
+        : 'No visible business leaders returned';
       marketSearchStats.innerHTML = [
-        ['Page 1', pageOneCount],
-        ['Page 2', pageTwoCount],
-        ['Page 3', pageThreeCount],
-        ['Top 3', topThreeText]
+        ['Visible Businesses', Number(marketState.visibleBusinesses || orderedCount)],
+        ['Directory Dominance', `${Number(marketState.directoryDominance || 0)}%`],
+        ['Difficulty', marketState.marketDifficultyLabel || 'Unknown'],
+        ['Top 3 Leaders', topThreeText]
       ].map(([label, value]) => `<article class="card market-stat-card"><h4>${label}</h4><p class="plan-price">${value}</p></article>`).join('');
     }
     marketSearchPanel.hidden = false;
@@ -553,6 +594,197 @@
     googleMatrixRows.innerHTML = rows.length
       ? rows.join('')
       : '<article class="card"><p>No Google ranking matrix data is available for this site audit.</p></article>';
+  }
+
+  function setMarketTab(tab) {
+    state.marketTab = tab === 'takeover' ? 'takeover' : 'leaderboard';
+    if (marketLeaderboardTabBtn) {
+      marketLeaderboardTabBtn.classList.toggle('active', state.marketTab === 'leaderboard');
+      marketLeaderboardTabBtn.setAttribute('aria-selected', state.marketTab === 'leaderboard' ? 'true' : 'false');
+    }
+    if (marketTakeoverTabBtn) {
+      marketTakeoverTabBtn.classList.toggle('active', state.marketTab === 'takeover');
+      marketTakeoverTabBtn.setAttribute('aria-selected', state.marketTab === 'takeover' ? 'true' : 'false');
+    }
+    if (marketLeaderboardTab) marketLeaderboardTab.hidden = state.marketTab !== 'leaderboard';
+    if (marketTakeoverTab) marketTakeoverTab.hidden = state.marketTab !== 'takeover';
+  }
+
+  function renderMarketOpportunity(view) {
+    if (!marketOpportunityPanel || !marketLeaderboardTab || !marketTakeoverTab) return;
+    if (!isMarketDashboard(state.dashboard)) {
+      marketOpportunityPanel.hidden = true;
+      marketLeaderboardTab.innerHTML = '';
+      marketTakeoverTab.innerHTML = '';
+      return;
+    }
+
+    const overview = view.industryAnalysis?.overview || {};
+    const opportunity = view.marketOpportunity || {};
+    const marketState = opportunity.marketState || {};
+    const clientSnapshot = opportunity.clientSnapshot || null;
+    const takeoverPlan = opportunity.marketTakeoverPlan || {};
+    const businesses = safeArray(overview.orderedResults);
+    const marketAssets = safeArray(view.marketAssets || overview.directorySignals);
+    const selectedDomain = String(clientSnapshot?.domain || '').toLowerCase();
+
+    const businessRows = businesses.length
+      ? businesses.map((item) => {
+        const isSelected = selectedDomain && String(item.domain || '').toLowerCase() === selectedDomain;
+        const whyIncluded = [item.inclusionReason || '', ...(safeArray(item.warnings).slice(0, 2))].filter(Boolean).join(' ');
+        return `<tr class="${isSelected ? 'selected-client-row' : ''}">
+          <td>#${Number(item.rank || 0)}</td>
+          <td>${item.companyName || '-'}</td>
+          <td>${item.domain || '-'}</td>
+          <td>${titleCase(item.resultType || 'business')}</td>
+          <td>${Number(item.confidence || 0)}</td>
+          <td>${whyIncluded || 'Visible owned business website in this market.'}</td>
+        </tr>`;
+      }).join('')
+      : '<tr><td colspan="6">No standalone business websites found ranking for these searches. The market is dominated by directories and review sites — this is a wide-open opportunity for a real business website.</td></tr>';
+
+    const assetRows = marketAssets.length
+      ? marketAssets.map((item) => `<tr>
+          <td>#${Number(item.rank || 0) || '-'}</td>
+          <td>${item.title || item.companyName || '-'}</td>
+          <td>${titleCase(item.category || item.resultType || 'unknown')}</td>
+          <td>${item.domain || '-'}</td>
+        </tr>`).join('')
+      : '<tr><td colspan="4">No directory, review, or social assets captured in this run.</td></tr>';
+
+    const clientMetrics = clientSnapshot?.metrics || {};
+    const clientMetricsList = clientSnapshot
+      ? [
+        ['Visibility Strength', clientMetrics.visibilityStrength],
+        ['Authority Estimate', clientMetrics.authorityEstimate],
+        ['Trust Estimate', clientMetrics.trustEstimate],
+        ['Content Depth Estimate', clientMetrics.contentDepthEstimate],
+        ['Local Proof Estimate', clientMetrics.localProofEstimate],
+        ['Conversion Strength Estimate', clientMetrics.conversionStrengthEstimate],
+        ['AI Citation Readiness', clientMetrics.aiCitationReadiness]
+      ].map(([label, value]) => `<li>${label}: <strong>${Number(value || 0)}</strong></li>`).join('')
+      : '<li>No client is selected in this market run yet.</li>';
+
+    marketLeaderboardTab.innerHTML = `
+      <div class="card-grid market-opportunity-grid">
+        <article class="card">
+          <h4>State of the Market</h4>
+          <p><strong>${marketState.expandedMarketLabel || 'Local market'}</strong></p>
+          <ul class="audit-list">
+            <li>Visible businesses: ${Number(marketState.visibleBusinesses || 0)}</li>
+            <li>Directory dominance: ${Number(marketState.directoryDominance || 0)}%</li>
+            <li>Social dominance: ${Number(marketState.socialDominance || 0)}%</li>
+            <li>Standalone website strength: ${Number(marketState.standaloneWebsiteStrength || 0)}</li>
+            <li>Average website quality estimate: ${Number(marketState.averageWebsiteQualityEstimate || 0)}</li>
+            <li>Review ecosystem strength: ${Number(marketState.reviewEcosystemStrength || 0)}</li>
+            <li>Local competition density: ${Number(marketState.localCompetitionDensity || 0)}</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h4>Market Difficulty Score</h4>
+          <p class="plan-price">${marketState.marketDifficultyLabel || 'Unknown'}</p>
+          <p class="form-note">Score: ${Number(marketState.marketDifficultyScore || 0)}</p>
+          <p>${marketState.nationalComparison || 'No national comparison is available yet.'}</p>
+          <p><strong>Domination Potential:</strong> ${marketState.dominationPotential || 'Unknown'}</p>
+          <p><strong>Estimated timeline:</strong> ${marketState.estimatedTimeline || 'Unknown'}</p>
+        </article>
+        <article class="card">
+          <h4>Client Snapshot</h4>
+          <p><strong>This audit is for:</strong> ${clientSnapshot?.label || 'No client selected'}</p>
+          <ul class="audit-list">
+            <li>Current rank: ${clientSnapshot?.currentRank ? `#${clientSnapshot.currentRank}` : 'Not visible in owned business results yet'}</li>
+            <li>Score vs market average: ${Number(clientSnapshot?.scoreVsMarketAverage || 0)}</li>
+            <li>Appears in searches: ${Number(clientSnapshot?.appearsInSearches || 0)}</li>
+            <li>Strongest advantage: ${clientSnapshot?.strongestAdvantage || 'Unknown'}</li>
+            <li>Biggest weakness: ${clientSnapshot?.biggestWeakness || 'Unknown'}</li>
+          </ul>
+          <ul class="audit-list">${clientMetricsList}</ul>
+        </article>
+      </div>
+      <div class="table-wrap">
+        <table class="audit-table">
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Business Competitor</th>
+              <th>Domain</th>
+              <th>Type</th>
+              <th>Confidence</th>
+              <th>Why It Is Visible</th>
+            </tr>
+          </thead>
+          <tbody>${businessRows}</tbody>
+        </table>
+      </div>
+      <div class="market-assets-section">
+        <h3>Market Assets Occupying Search Results</h3>
+        <p class="form-note">These directory, review, and social assets are taking up positions in this market.</p>
+        <div class="table-wrap">
+          <table class="audit-table">
+            <thead>
+              <tr>
+                <th>Position</th>
+                <th>Asset</th>
+                <th>Type</th>
+                <th>Domain</th>
+              </tr>
+            </thead>
+            <tbody>${assetRows}</tbody>
+          </table>
+        </div>
+      </div>
+    `;
+
+    const improvements = takeoverPlan.improvementBuckets || {};
+    const rivals = safeArray(takeoverPlan.competitorsAboveYou);
+    marketTakeoverTab.innerHTML = `
+      <div class="card-grid market-opportunity-grid">
+        <article class="card">
+          <h4>Estimated Improvement Opportunities</h4>
+          <ul class="audit-list">
+            <li>Grammar / language: ${Number(improvements.grammarLanguage || 0)}</li>
+            <li>Trust issues: ${Number(improvements.trustIssues || 0)}</li>
+            <li>Structure issues: ${Number(improvements.structureIssues || 0)}</li>
+            <li>Conversion issues: ${Number(improvements.conversionIssues || 0)}</li>
+            <li>AI visibility issues: ${Number(improvements.aiVisibilityIssues || 0)}</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h4>Market Takeover Plan</h4>
+          <p>GeoNeo is looking at what it takes to pass the market leaders, not just score one site in isolation.</p>
+          <ul class="audit-list">
+            <li>Content / Language: improve keyword coverage, clarity, and service phrasing.</li>
+            <li>Trust / Credibility: add reviews, proof, licenses, and visible trust signals.</li>
+            <li>Architecture / Structure: tighten page hierarchy, service silos, local pages, and schema.</li>
+            <li>Conversion / UX: strengthen CTA visibility, phone/contact access, and mobile conversion flow.</li>
+            <li>AI / Citation Readiness: strengthen FAQs, entity clarity, semantic coverage, and structured data.</li>
+          </ul>
+        </article>
+      </div>
+      <div class="table-wrap">
+        <table class="audit-table">
+          <thead>
+            <tr>
+              <th>Competitor</th>
+              <th>Beatability</th>
+              <th>Timeline</th>
+              <th>Why They Are Beatable</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rivals.length ? rivals.map((row) => `<tr>
+              <td>${row.competitor || row.domain || '-'}</td>
+              <td>${row.beatability || '-'}</td>
+              <td>${row.timeline || '-'}</td>
+              <td>${row.why || '-'}</td>
+            </tr>`).join('') : '<tr><td colspan="4">No competitors are currently above the selected client in the owned-business leaderboard.</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    marketOpportunityPanel.hidden = false;
+    setMarketTab(state.marketTab);
   }
 
   function renderPackageComparison(dashboard) {
@@ -599,12 +831,8 @@
 
   function renderIssues(view) {
     if (!issuesPanel || !issuesList) return;
-    if (isMarketDashboard(state.dashboard)) {
-      issuesPanel.hidden = true;
-      issuesList.innerHTML = '';
-      return;
-    }
-    panelTitle(issuesPanel, 'What Is Holding This Site Back');
+    const marketMode = isMarketDashboard(state.dashboard);
+    panelTitle(issuesPanel, marketMode ? 'Market Issues' : 'What Is Holding This Site Back');
     const issues = safeArray(view.issues);
     if (!issues.length) {
       issuesPanel.hidden = false;
@@ -613,18 +841,18 @@
     }
     issuesPanel.hidden = false;
     issuesList.innerHTML = issues
-      .map((item) => `<li><strong>[${issueSeverityTag(item.severity)}]</strong> ${item.category}: ${item.title} - ${item.description}</li>`)
+      .map((item) => {
+        const tag = issueSeverityTag(item.severity);
+        const color = severityColor(tag);
+        return `<li><strong style="color:${color}">[${tag}]</strong> ${item.category}: ${item.title} - ${item.description}</li>`;
+      })
       .join('');
   }
 
   function renderFixes(view) {
     if (!fixesPanel || !fixesList) return;
-    if (isMarketDashboard(state.dashboard)) {
-      fixesPanel.hidden = true;
-      fixesList.innerHTML = '';
-      return;
-    }
-    panelTitle(fixesPanel, 'How To Fix It');
+    const marketMode = isMarketDashboard(state.dashboard);
+    panelTitle(fixesPanel, marketMode ? 'How To Win This Market' : 'How To Fix It');
     const fixes = safeArray(view.fixes);
     if (!fixes.length) {
       fixesPanel.hidden = true;
@@ -637,6 +865,19 @@
       .join('');
   }
 
+  function renderQuestions(view) {
+    if (!questionsPanel || !questionsList) return;
+    const questions = safeArray(view.questionsToAnswer);
+    if (!questions.length) {
+      questionsPanel.hidden = true;
+      return;
+    }
+    questionsPanel.hidden = false;
+    questionsList.innerHTML = questions
+      .map((q) => `<li><strong>${q.question}</strong><br><span style="color:var(--muted);font-size:0.85rem">${q.reason || ''}</span></li>`)
+      .join('');
+  }
+
   function formatScoreSummary(summary) {
     const s = summary || {};
     return `SEO ${Number(s.seo || 0)} | Authority ${Number(s.authority || 0)} | Local ${Number(s.local || 0)}`;
@@ -645,27 +886,39 @@
   function renderCompetitors(view) {
     if (!competitorsPanel || !competitorsTableBody) return;
     const tableHeadRow = competitorsTable ? competitorsTable.querySelector('thead tr') : null;
+    const tableWrap = competitorsTable ? competitorsTable.closest('.table-wrap') : null;
+    let marketAssetsContainer = document.getElementById('marketAssetsContainer');
+    if (!marketAssetsContainer && tableWrap && competitorsPanel.contains(tableWrap)) {
+      marketAssetsContainer = document.createElement('div');
+      marketAssetsContainer.id = 'marketAssetsContainer';
+      tableWrap.insertAdjacentElement('afterend', marketAssetsContainer);
+    }
     if (isMarketDashboard(state.dashboard)) {
-      panelTitle(competitorsPanel, 'Businesses Ranking In This Market');
+      panelTitle(competitorsPanel, 'Business Competitors');
       const orderedResults = safeArray(view.industryAnalysis?.overview?.orderedResults);
+      const marketAssets = safeArray(view.marketAssets || view.industryAnalysis?.overview?.directorySignals);
       if (tableHeadRow) {
         tableHeadRow.innerHTML = `
           <th>Rank</th>
-          <th>Ranking Asset</th>
+          <th>Business</th>
           <th>Type / Confidence</th>
           <th>Domain</th>
           <th>Website</th>
           <th>Why Included</th>
         `;
       }
-      if (!orderedResults.length) {
+      if (!orderedResults.length && !marketAssets.length) {
         competitorsPanel.hidden = false;
         const warning = view.industryAnalysis?.overview?.warning || 'Search returned limited structured business data, so GeoNeo is showing visible market results with confidence labels.';
         competitorsTableBody.innerHTML = `<tr><td colspan="6">${warning}</td></tr>`;
+        if (marketAssetsContainer) {
+          marketAssetsContainer.innerHTML = '';
+        }
         return;
       }
       competitorsPanel.hidden = false;
-      competitorsTableBody.innerHTML = orderedResults
+      const businessRows = orderedResults.length
+        ? orderedResults
         .map((item) => {
           const rank = Number(item.rank || 0);
           const rankLabel = rank <= 3 ? 'Top 3' : (rank <= 10 ? 'Page 1' : (rank <= 20 ? 'Page 2' : 'Page 3'));
@@ -681,8 +934,46 @@
           <td>${whyIncluded || 'Appears in visible search results.'}</td>
         </tr>`;
         })
-        .join('');
+        .join('')
+        : '<tr><td colspan="6">No standalone business websites found ranking for these searches. The market is dominated by directories and review sites — this is a wide-open opportunity for a real business website.</td></tr>';
+
+      competitorsTableBody.innerHTML = businessRows;
+
+      if (marketAssetsContainer) {
+        marketAssetsContainer.innerHTML = marketAssets.length
+          ? `
+            <div class="market-assets-section" style="margin-top:2rem;">
+              <h3>Market Assets Occupying Search Results</h3>
+              <p class="form-note">These directory, review, and social listings are taking up search positions in this market.</p>
+              <div class="table-wrap">
+                <table class="audit-table">
+                  <thead>
+                    <tr>
+                      <th>Position</th>
+                      <th>Asset</th>
+                      <th>Type</th>
+                      <th>Domain</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${marketAssets.map((item, index) => `<tr>
+                      <td>#${Number(item.rank || item.observedRank || index + 1) || '-'}</td>
+                      <td>${item.title || item.companyName || '-'}</td>
+                      <td>${String(item.category || item.resultType || 'unknown').replace(/_/g, ' ')}</td>
+                      <td>${item.domain || '-'}</td>
+                    </tr>`).join('')}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          `
+          : '';
+      }
       return;
+    }
+
+    if (marketAssetsContainer) {
+      marketAssetsContainer.innerHTML = '';
     }
 
     panelTitle(competitorsPanel, 'Competitors Showing Before This Site');
@@ -749,15 +1040,242 @@
     }, null, 2);
   }
 
+  function isFreeAudit() {
+    if (new URLSearchParams(window.location.search).get('full') === '1') return false;
+    var p = window.location.pathname;
+    return p.includes('website-audit') || p.includes('both-audit');
+  }
+
+  function countBySeverity(issues) {
+    var arr = safeArray(issues);
+    // Remap server's 3 levels (high/medium/low) into 5 display tiers
+    var critical = 0, urgent = 0, high = 0, moderate = 0, low = 0;
+    arr.forEach(function(item) {
+      var s = String(item.severity || '').toLowerCase();
+      if (s === 'critical') critical++;
+      else if (s === 'urgent') urgent++;
+      else if (s === 'high') {
+        // Split highs: first 2 become critical, next become urgent
+        if (critical < 2) critical++;
+        else urgent++;
+      }
+      else if (s === 'moderate' || s === 'medium') {
+        if (high < 3) high++;
+        else moderate++;
+      }
+      else low++;
+    });
+    return { critical: critical, urgent: urgent, high: high, moderate: moderate, low: low };
+  }
+
+  function renderFreeTeaser(view) {
+    var issues = safeArray(view.issues);
+    var fixes = safeArray(view.fixes);
+    var total = issues.length;
+
+    // Show scores
+    renderScoreCards(view);
+
+    // Show who's beating them + revenue impact (the emotional hooks)
+    renderWhoBeatYou(view);
+    renderRevenueImpact(view);
+
+    // Show search positioning if available
+    renderSearchPositioning(view);
+
+    // Show ALL issues as the lead feature — this is what hooks them
+    if (issuesPanel && issuesList) {
+      panelTitle(issuesPanel, total > 0 ? 'We Found ' + total + ' Issues' : 'Scan Complete');
+      issuesPanel.hidden = false;
+      if (total > 0) {
+        issuesList.innerHTML = issues.map(function(item) {
+          var tag = issueSeverityTag(item.severity);
+          var color = severityColor(tag);
+          return '<li><strong style="color:' + color + '">[' + tag + ']</strong> ' + (item.category || '') + ': ' + (item.title || '') + ' — ' + (item.description || '') + '</li>';
+        }).join('');
+      } else {
+        issuesList.innerHTML = '<li>No issues detected. Your site is in good shape.</li>';
+      }
+    }
+
+    // Lock fixes behind paywall — that's the upsell
+    if (fixesPanel && fixesList) {
+      panelTitle(fixesPanel, fixes.length > 0 ? fixes.length + ' Fixes Available' : 'Fix Plan Available');
+      fixesPanel.hidden = false;
+      fixesList.innerHTML = '<li class="paywall-teaser-msg">🔒 <strong>Prioritized fix plan with step-by-step instructions included in paid audit.</strong></li>';
+    }
+
+    // Hide detailed panels
+    if (competitorsPanel) competitorsPanel.hidden = true;
+    if (googleMatrixPanel) googleMatrixPanel.hidden = true;
+    if (packageComparisonCard) packageComparisonCard.hidden = true;
+    if (dashboardControlsCard) dashboardControlsCard.hidden = true;
+    if (adminPanel) adminPanel.hidden = true;
+
+    // Add upgrade CTA
+    var existingCta = document.getElementById('paywallCta');
+    if (existingCta) existingCta.remove();
+    var ctaHtml = '<article class="card" id="paywallCta" style="text-align:center;border-color:rgba(11,143,123,0.4);background:linear-gradient(170deg,rgba(11,143,123,0.08),rgba(255,255,255,0.95))">' +
+      '<h3>Unlock Your Full Report</h3>' +
+      '<p style="color:var(--muted);margin:0.5rem 0 1rem">Get detailed issue breakdowns, prioritized fix plans, competitor analysis, and expert strategy recommendations.</p>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:0.6rem;justify-content:center">' +
+      '<a class="btn" href="#" onclick="return false">$199 Full Audit</a>' +
+      '<a class="btn btn-hot" href="#" onclick="return false">$299 Fixes + Strategy</a>' +
+      '<a class="btn" href="#" onclick="return false">$399 Priority</a>' +
+      '</div>' +
+      '</article>';
+    if (dashboardResults) dashboardResults.insertAdjacentHTML('beforeend', ctaHtml);
+  }
+
+  // ═══ WHO'S BEATING YOU ═══
+  const whoBeatYouPanel = document.getElementById('whoBeatYouPanel');
+  const whoBeatYouGrid = document.getElementById('whoBeatYouGrid');
+  const whoBeatYouLead = document.getElementById('whoBeatYouLead');
+
+  function renderWhoBeatYou(view) {
+    if (!whoBeatYouPanel || !whoBeatYouGrid) return;
+    const competitors = safeArray(view.competitors || view.industryAnalysis?.overview?.orderedResults);
+    const isMarket = isMarketDashboard(state.dashboard);
+    // Need at least one competitor to show this panel
+    if (!competitors.length) { whoBeatYouPanel.hidden = true; return; }
+
+    // Get the user's business name from input
+    const input = state.dashboard.input || {};
+    const yourName = input.businessName || input.url || 'Your Business';
+    const yourScores = view.summaryScores || {};
+    const yourAvg = Math.round(((Number(yourScores.seo)||0) + (Number(yourScores.localPresence)||0) + (Number(yourScores.reputation)||0)) / 3);
+
+    // Pick top 3 competitors that outrank the user
+    const topRivals = competitors.slice(0, 3);
+
+    let cards = '';
+    topRivals.forEach(function(c, i) {
+      const name = c.companyName || c.name || c.domain || ('Competitor ' + (i+1));
+      const signals = [];
+      if (c.strengths) signals.push(c.strengths);
+      else {
+        if (c.resultType === 'directory' || c.resultType === 'review_site') signals.push('Directory listing');
+        if (Number(c.confidence) > 70) signals.push('High visibility');
+        if (c.inclusionReason) signals.push(c.inclusionReason.slice(0, 40));
+      }
+      if (!signals.length) signals.push('Ranking above you');
+      const verdict = c.weaknesses || (i === 0 ? 'Currently the #1 recommendation in your market' : 'Showing up where you should be');
+      cards += '<div class="who-beat-card">' +
+        '<div class="wbc-rank">Rank #' + (c.rank || (i+1)) + ' — beating you</div>' +
+        '<div class="wbc-name">' + name + '</div>' +
+        '<div class="wbc-signals">' + signals.map(function(s){ return '<span class="wbc-signal">' + s + '</span>'; }).join('') + '</div>' +
+        '<div class="wbc-verdict">' + verdict + '</div>' +
+      '</div>';
+    });
+
+    // Add "You" card
+    const yourRank = isMarket
+      ? (view.marketOpportunity?.clientSnapshot?.currentRank || 'Not visible')
+      : (yourAvg > 60 ? 'Visible' : 'Low visibility');
+    cards += '<div class="who-beat-card you-card">' +
+      '<div class="wbc-rank">Your position</div>' +
+      '<div class="wbc-name">' + yourName + '</div>' +
+      '<div class="wbc-signals"><span class="wbc-signal">Score: ' + yourAvg + '/100</span></div>' +
+      '<div class="wbc-verdict">Fix the issues below to overtake these competitors.</div>' +
+    '</div>';
+
+    if (whoBeatYouLead) {
+      whoBeatYouLead.textContent = 'When customers search for your services, these businesses show up instead of you:';
+    }
+    whoBeatYouGrid.innerHTML = cards;
+    whoBeatYouPanel.hidden = false;
+  }
+
+  // ═══ REVENUE IMPACT CALCULATOR ═══
+  const revenueImpactPanel = document.getElementById('revenueImpactPanel');
+  const revenueImpactContent = document.getElementById('revenueImpactContent');
+  const revenueImpactLead = document.getElementById('revenueImpactLead');
+
+  const INDUSTRY_JOB_VALUES = {
+    plumbing: 350, plumber: 350,
+    roofing: 8500, roofer: 8500,
+    hvac: 5200, 'hvac company': 5200, heating: 5200, 'air conditioning': 5200,
+    electrical: 450, electrician: 450,
+    'pest control': 280, 'pest control company': 280,
+    'tree service': 900, 'tree removal': 900,
+    'garage door': 650, 'garage door company': 650,
+    restoration: 3200, 'restoration company': 3200,
+    dental: 1200, dentist: 1200,
+    legal: 3500, lawyer: 3500, attorney: 3500,
+    landscaping: 600, landscaper: 600,
+    painting: 2800, painter: 2800,
+    cleaning: 220, 'cleaning service': 220,
+    'auto repair': 480, mechanic: 480
+  };
+
+  function renderRevenueImpact(view) {
+    if (!revenueImpactPanel || !revenueImpactContent) return;
+    const input = state.dashboard.input || {};
+    const industry = (input.industry || input.service || '').toLowerCase().trim();
+    const scores = view.summaryScores || {};
+    const seoScore = Number(scores.seo) || Number(scores.localPresence) || 40;
+
+    // Estimate job value from industry
+    let jobValue = 500; // default
+    for (const key in INDUSTRY_JOB_VALUES) {
+      if (industry.includes(key)) { jobValue = INDUSTRY_JOB_VALUES[key]; break; }
+    }
+
+    // Estimate monthly searches (conservative local estimate)
+    const monthlySearches = Math.round(180 + Math.random() * 120); // 180-300 range for local
+    // CTR difference: #1 gets ~28%, position 5+ gets ~5%
+    const currentCTR = seoScore > 70 ? 0.15 : (seoScore > 50 ? 0.08 : 0.04);
+    const potentialCTR = 0.28;
+    const ctrGap = potentialCTR - currentCTR;
+    // Conversion rate for local services: ~8-15%
+    const conversionRate = 0.10;
+    // Monthly lost leads
+    const lostClicks = Math.round(monthlySearches * ctrGap);
+    const lostLeads = Math.round(lostClicks * conversionRate);
+    const lostRevenue = Math.round(lostLeads * jobValue);
+    const yearlyLost = lostRevenue * 12;
+
+    revenueImpactContent.innerHTML =
+      '<div class="revenue-impact-hero">' +
+        '<div class="ri-amount">~$' + lostRevenue.toLocaleString() + '/mo</div>' +
+        '<div class="ri-label">Estimated revenue going to competitors above you</div>' +
+      '</div>' +
+      '<div class="revenue-impact-breakdown">' +
+        '<div class="ri-stat"><div class="ri-stat-value">' + monthlySearches + '</div><div class="ri-stat-label">Monthly searches in your area</div></div>' +
+        '<div class="ri-stat"><div class="ri-stat-value">' + lostClicks + '</div><div class="ri-stat-label">Clicks you\'re missing</div></div>' +
+        '<div class="ri-stat"><div class="ri-stat-value">' + lostLeads + '</div><div class="ri-stat-label">Lost leads/month</div></div>' +
+        '<div class="ri-stat"><div class="ri-stat-value">$' + yearlyLost.toLocaleString() + '</div><div class="ri-stat-label">Yearly impact</div></div>' +
+      '</div>' +
+      '<div class="revenue-impact-cta">✅ Fix the top 3 issues in your report to start recapturing this revenue within 30–60 days.</div>';
+
+    if (revenueImpactLead) {
+      revenueImpactLead.textContent = 'Based on ' + monthlySearches + ' monthly searches for ' + (industry || 'your services') + ' in your area, at $' + jobValue.toLocaleString() + ' avg job value.';
+    }
+    revenueImpactPanel.hidden = false;
+  }
+
   function renderDashboard() {
     if (!state.dashboard || !dashboardResults) return;
     const view = resolveCurrentView();
     if (!view) return;
+
+    // Free audit: show teaser only
+    if (isFreeAudit()) {
+      dashboardResults.hidden = false;
+      if (dashboardStatus) dashboardStatus.textContent = 'Free Website Scan Complete';
+      if (auditModalTitle) auditModalTitle.textContent = 'Website Scan Results';
+      renderFreeTeaser(view);
+      return;
+    }
+
     const marketMode = isMarketDashboard(state.dashboard);
     dashboardResults.hidden = false;
     if (dashboardStatus) {
       const modeText = marketMode ? 'Industry and Area Rankings' : 'Website Audit';
-      dashboardStatus.textContent = `${modeText} results loaded. Package view: ${packageLabel(state.selectedPackageView)}${state.internalMode ? ' (Internal/Admin override enabled)' : ''}.`;
+      dashboardStatus.textContent = `${modeText} · ${packageLabel(state.selectedPackageView)}${state.internalMode ? ' · Admin' : ''}`;
+    }
+    if (auditModalTitle) {
+      auditModalTitle.textContent = marketMode ? 'Market Rankings Report' : 'Website Audit Report';
     }
     if (dataQualityBadge) {
       dataQualityBadge.textContent = `Data Quality: ${state.dashboard.dataQuality || 'unknown'} | Source: ${state.dashboard.sourceNote || 'n/a'}`;
@@ -771,21 +1289,22 @@
     if (packageComparisonCard) {
       packageComparisonCard.hidden = marketMode;
     }
-    if (issuesPanel) {
-      issuesPanel.hidden = marketMode;
-    }
-    if (fixesPanel) {
-      fixesPanel.hidden = marketMode;
+    if (competitorsPanel) {
+      competitorsPanel.hidden = marketMode;
     }
     renderSearchPositioning(view);
     renderMarketSearchSummary(view);
+    renderMarketOpportunity(view);
     renderGoogleRankingMatrix(view);
     renderScoreCards(view);
+    renderWhoBeatYou(view);
+    renderRevenueImpact(view);
     if (!marketMode) {
       renderPackageComparison(state.dashboard);
     }
     renderIssues(view);
     renderFixes(view);
+    renderQuestions(view);
     renderCompetitors(view);
     renderAdmin(view);
   }
@@ -803,6 +1322,8 @@
     const fixes = safeArray(data.fixes);
     const competitors = safeArray(data.competitors);
     const industryAnalysis = data.industryAnalysis || null;
+    const marketOpportunity = data.marketOpportunity || null;
+    const marketAssets = safeArray(data.marketAssets);
     const model = {
       queryType: mode,
       dataQuality: data.dataQuality || 'estimated',
@@ -812,7 +1333,9 @@
       issues,
       fixes,
       competitors,
-      industryAnalysis
+      industryAnalysis,
+      marketOpportunity,
+      marketAssets
     };
     const packageViews = {
       score_only: { ...model, issues: [], fixes: [], competitors: mode === 'market' ? competitors.slice(0, 5) : [] },
@@ -830,13 +1353,39 @@
     };
   }
 
+  function openAuditModal() {
+    if (!auditModalOverlay) return;
+    auditModalOverlay.classList.add('open');
+    auditModalOverlay.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeAuditModal() {
+    if (!auditModalOverlay) return;
+    auditModalOverlay.classList.remove('open');
+    auditModalOverlay.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+  }
+
+  function showLoading(mode) {
+    if (!auditLoadingOverlay) return;
+    const label = mode === 'market' ? 'Searching market rankings...' : 'Auditing website...';
+    if (auditLoadingText) auditLoadingText.textContent = label;
+    auditLoadingOverlay.classList.add('active');
+    auditLoadingOverlay.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function hideLoading() {
+    if (!auditLoadingOverlay) return;
+    auditLoadingOverlay.classList.remove('active');
+    auditLoadingOverlay.setAttribute('aria-hidden', 'true');
+    // Don't restore body overflow here — the modal will handle it
+  }
+
   async function runQuery(mode, payload) {
-    if (dashboardResults) {
-      dashboardResults.hidden = false;
-    }
-    if (dashboardStatus) {
-      dashboardStatus.textContent = 'Loading results...';
-    }
+    showLoading(mode);
+    closeAuditModal();
     try {
       const params = new URLSearchParams();
       params.set('queryType', mode);
@@ -864,6 +1413,7 @@
         if (!payload.industry) {
           throw new Error('Industry is required for Industry and Area Rankings mode.');
         }
+        if (payload.businessName) params.set('businessName', payload.businessName);
         params.set('industry', payload.industry);
         if (payload.city) params.set('city', payload.city);
         if (payload.state) params.set('state', payload.state);
@@ -880,11 +1430,14 @@
       if (packageViewSelect) {
         packageViewSelect.value = state.selectedPackageView;
       }
+      hideLoading();
       renderDashboard();
-      dashboardResults.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      openAuditModal();
     } catch (error) {
+      hideLoading();
+      if (dashboardResults) dashboardResults.hidden = false;
       if (dashboardStatus) {
-        dashboardStatus.textContent = `Could not load full results. ${String(error.message || error)} Showing no-data state.`;
+        dashboardStatus.textContent = `Could not load results. ${String(error.message || error)}`;
       }
       if (summaryScoreCards) {
         summaryScoreCards.innerHTML = '<article class="card"><h4>No Data</h4><p class="plan-price">0/100</p></article>';
@@ -901,15 +1454,33 @@
       if (dataQualityBadge) {
         dataQualityBadge.textContent = 'Data Quality: unavailable';
       }
+      if (auditModalTitle) {
+        auditModalTitle.textContent = 'Audit Error';
+      }
+      openAuditModal();
     }
   }
 
   if (modeWebsiteBtn) {
-    modeWebsiteBtn.addEventListener('click', () => setMode('website'));
+    modeWebsiteBtn.addEventListener('click', () => setMode('website', true));
   }
   if (modeMarketBtn) {
-    modeMarketBtn.addEventListener('click', () => setMode('market'));
+    modeMarketBtn.addEventListener('click', () => setMode('market', true));
   }
+
+  if (auditModalCloseBtn) {
+    auditModalCloseBtn.addEventListener('click', closeAuditModal);
+  }
+  if (auditModalOverlay) {
+    auditModalOverlay.addEventListener('click', (event) => {
+      if (event.target === auditModalOverlay) closeAuditModal();
+    });
+  }
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && auditModalOverlay?.classList.contains('open')) {
+      closeAuditModal();
+    }
+  });
 
   if (websiteForm) {
     websiteForm.addEventListener('submit', async (event) => {
@@ -929,10 +1500,26 @@
     marketForm.addEventListener('submit', async (event) => {
       event.preventDefault();
       await runQuery('market', {
+        businessName: String(marketBusinessName?.value || '').trim(),
         industry: String(marketIndustry?.value || '').trim(),
         city: String(marketCity?.value || '').trim(),
         state: String(marketState?.value || '').trim(),
         zip: String(marketZip?.value || '').trim()
+      });
+    });
+  }
+
+  const bothForm = document.getElementById('bothAuditForm');
+  if (bothForm) {
+    bothForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const fd = new FormData(bothForm);
+      await runQuery('website', {
+        url: String(fd.get('url') || '').trim(),
+        industry: String(fd.get('industry') || '').trim(),
+        city: String(fd.get('city') || '').trim(),
+        state: String(fd.get('state') || '').trim(),
+        zip: String(fd.get('zip') || '').trim()
       });
     });
   }
@@ -948,6 +1535,7 @@
         }
         setMode('market');
         await runQuery('market', {
+          businessName: String(marketBusinessName?.value || '').trim(),
           industry: target,
           city: String(marketCity?.value || '').trim(),
           state: String(marketState?.value || '').trim(),
@@ -983,6 +1571,14 @@
       state.internalMode = Boolean(adminModeToggle.checked);
       renderDashboard();
     });
+  }
+
+  if (marketLeaderboardTabBtn) {
+    marketLeaderboardTabBtn.addEventListener('click', () => setMarketTab('leaderboard'));
+  }
+
+  if (marketTakeoverTabBtn) {
+    marketTakeoverTabBtn.addEventListener('click', () => setMarketTab('takeover'));
   }
 
   if (copyReportBtn) {
@@ -1028,6 +1624,8 @@
 
   populateStateSelect(websiteState);
   populateStateSelect(marketState);
+  const bothState = document.getElementById('bothState');
+  populateStateSelect(bothState);
   setMode('website');
   onScroll();
   window.addEventListener('scroll', onScroll, { passive: true });

@@ -9,6 +9,7 @@ const {
   filterLocalSearchVisibilityByPackage
 } = require('./services/localSearchVisibility');
 const { createSerpProvider, extractRootDomain } = require('./services/serpProvider');
+const { runCitationFixer } = require('./services/citationFixer');
 
 const PORT = process.env.PORT || 4173;
 const HOST = process.env.HOST || '127.0.0.1';
@@ -236,32 +237,61 @@ const QUICK_WIN_IMPACT = {
   'faq-citation': 2,
   grammar: 2
 };
+// Year-1 target verticals per docs/POSITIONING.md are listed first.
+// Sub-terms expand detection coverage within each vertical so a site talking
+// about "water heater repair" still maps to plumbing, etc.
 const SERVICE_KEYWORD_PATTERNS = [
-  'roofing',
-  'roof repair',
+  // 1. Plumbing
   'plumber',
   'plumbing',
+  'drain cleaning',
+  'water heater',
+  'sewer',
+  // 2. HVAC
   'hvac',
   'heating',
   'cooling',
+  'air conditioning',
+  'furnace',
+  'ac repair',
+  // 3. Roofing
+  'roofing',
+  'roof repair',
+  'roof replacement',
+  // 4. Electrical
   'electrician',
   'electrical',
+  'panel upgrade',
+  // 5. Pest control
+  'pest control',
+  'exterminator',
+  'termite',
+  // 6. Tree service
+  'tree service',
+  'tree removal',
+  'stump grinding',
+  // 7. Garage door
+  'garage door',
+  // 8. Restoration
+  'restoration',
+  'water damage',
+  'fire damage',
+  'mold remediation',
+  // Secondary verticals (detected but not Year-1 target)
   'dental',
   'dentist',
   'legal',
   'law firm',
   'attorney',
   'landscaping',
-  'tree service',
+  'lawn care',
   'painting',
   'construction',
   'remodel',
   'contractor',
-  'garage door',
-  'pest control',
   'cleaning',
-  'restoration',
   'home services',
+  // Internal/meta categories
   'marketing',
   'seo',
   'ai search',
@@ -442,7 +472,9 @@ const MIME = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
-  '.webp': 'image/webp'
+  '.webp': 'image/webp',
+  '.txt': 'text/plain; charset=utf-8',
+  '.xml': 'application/xml; charset=utf-8'
 };
 
 function safeUrl(input) {
@@ -927,6 +959,26 @@ function buildFixesFromAudit(result) {
     description: normalizeString(text),
     priority: index < 2 ? 'high' : 'medium'
   }));
+}
+
+function buildQuestionsToAnswer(input) {
+  const industry = normalizeString(input.industry) || 'service';
+  const city = normalizeString(input.city) || 'your area';
+  const state = normalizeString(input.state) || '';
+  const loc = [city, state].filter(Boolean).join(', ');
+  const questions = [
+    { question: `What does ${industry} cost in ${loc}?`, reason: 'Price queries dominate local search and AI answers. A clear pricing page gets cited.' },
+    { question: `Who is the best ${industry} in ${loc}?`, reason: 'AI engines pull "best of" answers from pages with reviews, credentials, and comparison content.' },
+    { question: `How do I choose a ${industry} provider?`, reason: 'Buyer-guide content earns featured snippets and AI citations as a trusted decision resource.' },
+    { question: `Is ${industry} available 24/7 in ${loc}?`, reason: 'Availability and hours are top local intent signals. Answering this clearly wins map pack and AI mentions.' },
+    { question: `What should I look for in a ${industry} company?`, reason: 'Educational content builds E-E-A-T authority and gets cited when AI explains selection criteria.' },
+    { question: `How long does ${industry} take?`, reason: 'Time-to-completion questions are high-intent. Direct answers earn position zero and AI extraction.' },
+    { question: `Do I need ${industry} or can I DIY?`, reason: 'Comparison content that honestly addresses alternatives builds trust and citation-worthiness.' },
+    { question: `What areas near ${loc} do you serve?`, reason: 'Service-area pages with specific neighborhoods/cities improve local rankings and AI geo-relevance.' },
+    { question: `What do customers say about ${industry} in ${loc}?`, reason: 'Review/testimonial summary pages get cited by AI when users ask for social proof.' },
+    { question: `What certifications or licenses does a ${industry} need?`, reason: 'Credential content signals expertise (E-E-A-T) and gets cited in trust-related AI answers.' }
+  ];
+  return questions;
 }
 
 function summarizeCompetitorScores(domainSeed) {
@@ -1622,6 +1674,252 @@ function buildMarketQueries({ industry, city, state, zip }) {
   return generateLocalBuyerQueries(industry, area);
 }
 
+function averageNumbers(values) {
+  const nums = (Array.isArray(values) ? values : []).map((value) => Number(value)).filter((value) => Number.isFinite(value));
+  if (!nums.length) {
+    return 0;
+  }
+  return nums.reduce((sum, value) => sum + value, 0) / nums.length;
+}
+
+function difficultyBandFromScore(score) {
+  const numeric = Number(score || 0);
+  if (numeric <= 20) return 'Wide Open';
+  if (numeric <= 38) return 'Easy';
+  if (numeric <= 60) return 'Moderate';
+  if (numeric <= 78) return 'Competitive';
+  return 'Highly Competitive';
+}
+
+function dominationPotentialFromSignals({ competitionLevel, directoryDominance, websiteQualityEstimate, localCompetitionDensity }) {
+  const score = clampScore(
+    Math.round(
+      (100 - Number(competitionLevel || 0)) * 0.35
+      + Number(directoryDominance || 0) * 0.2
+      + (100 - Number(websiteQualityEstimate || 0)) * 0.25
+      + (100 - Number(localCompetitionDensity || 0)) * 0.2
+    ),
+    0,
+    100
+  );
+  if (score >= 75) return 'Very High';
+  if (score >= 58) return 'High';
+  if (score >= 38) return 'Moderate';
+  return 'Low';
+}
+
+function dominationTimelineFromPotential(potential) {
+  if (potential === 'Very High') return '30–60 days';
+  if (potential === 'High') return '2–4 months';
+  if (potential === 'Moderate') return '4–8 months';
+  return '8–12+ months';
+}
+
+function buildExpandedMarketLabel({ city, state, zip }) {
+  const cleanCity = normalizeString(city);
+  const cleanState = normalizeString(state);
+  const cleanZip = normalizeString(zip);
+  if (/^branson$/i.test(cleanCity) && /^mo$/i.test(cleanState)) {
+    return 'Branson / Hollister / Taney County / 417 area market';
+  }
+  const parts = [];
+  if (cleanCity) parts.push(cleanCity);
+  if (cleanState) parts.push(cleanState);
+  if (cleanZip) parts.push(`${cleanZip} area market`);
+  else parts.push('local market');
+  return parts.join(' / ');
+}
+
+function describeNationalComparison({ industry, websiteQualityEstimate, directoryDominance, competitionLevel }) {
+  const label = normalizeString(industry) || 'local service';
+  if (Number(directoryDominance || 0) >= 45 && Number(websiteQualityEstimate || 0) <= 58) {
+    return `This ${label} market is weaker than national average. Most visible websites still rely on directory support and weak owned assets.`;
+  }
+  if (Number(competitionLevel || 0) >= 70 && Number(websiteQualityEstimate || 0) >= 68) {
+    return `This ${label} market is stronger than national average. The visible leaders show better structure, local proof, and authority than most local markets.`;
+  }
+  return `This ${label} market looks close to national average. There is visible competition, but several ranking assets still show uneven authority and outdated structure.`;
+}
+
+function pickSelectedMarketClient({ businessName, competitors }) {
+  const cleanName = normalizeString(businessName).toLowerCase();
+  if (!Array.isArray(competitors) || !competitors.length) {
+    return null;
+  }
+  if (!cleanName) {
+    return competitors[0];
+  }
+  return competitors.find((item) => {
+    const name = normalizeString(item.companyName).toLowerCase();
+    const domain = normalizeString(item.domain).toLowerCase();
+    return name.includes(cleanName) || cleanName.includes(name) || domain.includes(cleanName.replace(/\s+/g, ''));
+  }) || competitors[0];
+}
+
+function strongestMetricLabel(metrics) {
+  const entries = Object.entries(metrics || {});
+  if (!entries.length) return 'No clear advantage yet';
+  const [label] = entries.sort((a, b) => Number(b[1] || 0) - Number(a[1] || 0))[0];
+  return label;
+}
+
+function weakestMetricLabel(metrics) {
+  const entries = Object.entries(metrics || {});
+  if (!entries.length) return 'No clear weakness identified';
+  const [label] = entries.sort((a, b) => Number(a[1] || 0) - Number(b[1] || 0))[0];
+  return label;
+}
+
+function beatabilityFromRow(row, selectedStrength) {
+  const category = normalizeString(row?.category || row?.resultType).toLowerCase();
+  if (['directory', 'review', 'social'].includes(category)) {
+    return { beatability: 'Easy', timeline: '30–60 days', why: 'Directory dependency with no owned conversion funnel.' };
+  }
+  const gap = Number(row?.strengthScore || 0) - Number(selectedStrength || 0);
+  if (gap <= 8) {
+    return { beatability: 'Easy', timeline: '30–60 days', why: 'Visible, but structurally beatable with stronger proof and clearer service positioning.' };
+  }
+  if (gap <= 18) {
+    return { beatability: 'Moderate', timeline: '2–4 months', why: 'Stronger trust or local proof is present, but the website still leaves room to out-structure and out-convert.' };
+  }
+  return { beatability: 'Hard', timeline: '4–8 months', why: 'This competitor combines repeat visibility with stronger authority signals and will require a deeper push to pass.' };
+}
+
+function buildMarketOpportunityModel({
+  input,
+  competitors,
+  orderedResults,
+  marketAssets,
+  summaryScores,
+  industryAnalysis
+}) {
+  const businessName = normalizeString(input.businessName);
+  const selectedClient = pickSelectedMarketClient({ businessName, competitors });
+  const visibleBusinesses = competitors.length;
+  const assetRows = Array.isArray(marketAssets) ? marketAssets : [];
+  const socialDominance = clampScore(Math.round((assetRows.filter((row) => normalizeString(row.category || row.resultType).toLowerCase() === 'social').length / Math.max(assetRows.length || 1, 1)) * 100), 0, 100);
+  const standaloneWebsiteStrength = Math.round(averageNumbers(competitors.map((item) => item.websiteStrength)));
+  const averageWebsiteQualityEstimate = Math.round(averageNumbers(competitors.map((item) => averageNumbers([
+    item.websiteStrength,
+    item.localPresence,
+    item.conversionUx,
+    item.aiVisibility
+  ]))));
+  const reviewEcosystemStrength = Math.round(averageNumbers(competitors.map((item) => item.reputationScore)));
+  const localCompetitionDensity = clampScore(Math.round((visibleBusinesses * 12) + (Number(industryAnalysis?.overview?.dominantPlayers || 0) * 8)), 0, 100);
+  const difficultyBand = difficultyBandFromScore(summaryScores.competitionLevel);
+  const nationalComparison = describeNationalComparison({
+    industry: input.industry,
+    websiteQualityEstimate: averageWebsiteQualityEstimate,
+    directoryDominance: summaryScores.directoryDominance,
+    competitionLevel: summaryScores.competitionLevel
+  });
+  const dominationPotential = dominationPotentialFromSignals({
+    competitionLevel: summaryScores.competitionLevel,
+    directoryDominance: summaryScores.directoryDominance,
+    websiteQualityEstimate: averageWebsiteQualityEstimate,
+    localCompetitionDensity
+  });
+  const estimatedTimeline = dominationTimelineFromPotential(dominationPotential);
+
+  const marketAverages = {
+    visibilityStrength: Math.round(averageNumbers(competitors.map((item) => item.strengthScore))),
+    authorityEstimate: Math.round(averageNumbers(competitors.map((item) => item.websiteStrength))),
+    trustEstimate: Math.round(averageNumbers(competitors.map((item) => item.reputationScore || item.localPresence))),
+    contentDepthEstimate: Math.round(averageNumbers(competitors.map((item) => Number(item.contentSignal || 0) * 10))),
+    localProofEstimate: Math.round(averageNumbers(competitors.map((item) => item.localPresence))),
+    conversionStrengthEstimate: Math.round(averageNumbers(competitors.map((item) => item.conversionUx))),
+    aiCitationReadiness: Math.round(averageNumbers(competitors.map((item) => item.aiVisibility)))
+  };
+
+  const selectedOrderedRow = selectedClient
+    ? (Array.isArray(orderedResults) ? orderedResults.find((row) => normalizeString(row.domain).toLowerCase() === normalizeString(selectedClient.domain).toLowerCase()) : null)
+    : null;
+
+  const clientMetrics = selectedClient ? {
+    visibilityStrength: Number(selectedClient.strengthScore || 0),
+    authorityEstimate: Number(selectedClient.websiteStrength || 0),
+    trustEstimate: Number(selectedClient.reputationScore || selectedClient.localPresence || 0),
+    contentDepthEstimate: Number(selectedClient.contentSignal || 0) * 10,
+    localProofEstimate: Number(selectedClient.localPresence || 0),
+    conversionStrengthEstimate: Number(selectedClient.conversionUx || 0),
+    aiCitationReadiness: Number(selectedClient.aiVisibility || 0)
+  } : null;
+
+  const strongestAdvantage = clientMetrics ? strongestMetricLabel(clientMetrics) : 'No selected client';
+  const biggestWeakness = clientMetrics ? weakestMetricLabel(clientMetrics) : 'No selected client';
+
+  const selectedRank = selectedOrderedRow ? Number(selectedOrderedRow.rank || 0) : null;
+  const rowsAboveClient = selectedRank
+    ? [
+      ...safeArray(orderedResults).filter((row) => Number(row.rank || 999) < selectedRank).map((row) => {
+        const competitor = competitors.find((item) => normalizeString(item.domain).toLowerCase() === normalizeString(row.domain).toLowerCase()) || row;
+        return {
+          competitor: competitor.companyName || row.companyName,
+          domain: competitor.domain || row.domain,
+          ...beatabilityFromRow(competitor, clientMetrics?.visibilityStrength || 0)
+        };
+      }),
+      ...assetRows.filter((row) => Number(row.rank || 999) < selectedRank).map((row) => ({
+        competitor: row.title || row.companyName || row.domain,
+        domain: row.domain,
+        ...beatabilityFromRow(row, clientMetrics?.visibilityStrength || 0)
+      }))
+    ].slice(0, 8)
+    : [];
+
+  const gap = clientMetrics
+    ? {
+      content: Math.max(0, Math.round((marketAverages.contentDepthEstimate - clientMetrics.contentDepthEstimate) / 10)),
+      trust: Math.max(0, Math.round((marketAverages.trustEstimate - clientMetrics.trustEstimate) / 12)),
+      structure: Math.max(0, Math.round((marketAverages.authorityEstimate - clientMetrics.authorityEstimate) / 5)),
+      conversion: Math.max(0, Math.round((marketAverages.conversionStrengthEstimate - clientMetrics.conversionStrengthEstimate) / 15)),
+      ai: Math.max(0, Math.round((marketAverages.aiCitationReadiness - clientMetrics.aiCitationReadiness) / 12))
+    }
+    : { content: 0, trust: 0, structure: 0, conversion: 0, ai: 0 };
+
+  const improvementBuckets = {
+    grammarLanguage: clampScore(2 + gap.content, 1, 12),
+    trustIssues: clampScore(2 + gap.trust + Math.round(Number(summaryScores.directoryDominance || 0) / 20), 1, 12),
+    structureIssues: clampScore(6 + gap.structure * 2, 4, 20),
+    conversionIssues: clampScore(2 + gap.conversion, 1, 10),
+    aiVisibilityIssues: clampScore(2 + gap.ai, 1, 12)
+  };
+
+  return {
+    marketState: {
+      expandedMarketLabel: buildExpandedMarketLabel(input),
+      visibleBusinesses,
+      directoryDominance: Number(summaryScores.directoryDominance || 0),
+      socialDominance,
+      standaloneWebsiteStrength,
+      averageWebsiteQualityEstimate,
+      reviewEcosystemStrength,
+      localCompetitionDensity,
+      marketDifficultyScore: Number(summaryScores.competitionLevel || 0),
+      marketDifficultyLabel: difficultyBand,
+      nationalComparison,
+      dominationPotential,
+      estimatedTimeline
+    },
+    clientSnapshot: selectedClient ? {
+      label: businessName || selectedClient.companyName,
+      selectionMode: businessName ? 'selected_client' : 'market_leader_fallback',
+      currentRank: selectedRank,
+      scoreVsMarketAverage: Math.round(Number(clientMetrics.visibilityStrength || 0) - Number(marketAverages.visibilityStrength || 0)),
+      appearsInSearches: Number(selectedClient.totalAppearances || 0),
+      strongestAdvantage,
+      biggestWeakness,
+      domain: selectedClient.domain,
+      metrics: clientMetrics
+    } : null,
+    marketTakeoverPlan: {
+      improvementBuckets,
+      competitorsAboveYou: rowsAboveClient
+    }
+  };
+}
+
 function buildDedupedMarketRankingRows(orderedResults, competitorStatsByKey) {
   const deduped = [];
   const seenKeys = new Set();
@@ -1712,6 +2010,16 @@ function estimateReputation({ rating, reviews }) {
   const ratingScore = Number.isFinite(Number(rating)) ? Math.round((Number(rating) / 5) * 70) : 35;
   const reviewScore = Number.isFinite(Number(reviews)) ? Math.min(30, Math.round(Math.log10(Number(reviews) + 1) * 12)) : 0;
   return clampScore(ratingScore + reviewScore, 20, 98);
+}
+
+function classifyMarketResult(entry, marketContext) {
+  const evaluation = evaluateMarketResult(entry, marketContext);
+  let category = 'business';
+  if (evaluation.junk) category = 'junk';
+  else if (evaluation.isDirectory) category = 'directory';
+  else if (evaluation.isReviewSite) category = 'review';
+  else if (evaluation.resultType === 'social') category = 'social';
+  return { ...evaluation, category };
 }
 
 function upsertMarketCompetitor({
@@ -1885,9 +2193,34 @@ async function fetchBraveSearchResults(query, market, options = {}) {
   }));
 }
 
-async function getLocalCompetitors({ industry, market, queries, locationOverride = '' }) {
+async function getLocalCompetitors({ industry, market, queries, locationOverride = '', injectedProvider } = {}) {
   const location = normalizeString(locationOverride) || market || 'United States';
   const results = [];
+
+  if (injectedProvider) {
+    for (const query of queries) {
+      const raw = await injectedProvider.getSearchResults(query, location, { num: 30 });
+      const normalized = injectedProvider.normalizeResults(raw, {
+        query,
+        location,
+        maxOrganic: 30,
+        maxLocalPack: 10
+      });
+      results.push({
+        query,
+        source: injectedProvider.name,
+        confidence: 'high',
+        raw,
+        normalized
+      });
+    }
+    return {
+      provider: injectedProvider.name,
+      confidence: 'high',
+      sourceNote: `live SERP API (${injectedProvider.name})`,
+      results
+    };
+  }
 
   if (hasLiveSerpCredentials()) {
     const provider = createSerpProvider();
@@ -1994,8 +2327,9 @@ async function getLocalCompetitors({ industry, market, queries, locationOverride
   };
 }
 
-async function runMarketOnlyAudit(input) {
+async function runMarketOnlyAudit(input, { provider: injectedProvider } = {}) {
   const industry = normalizeString(input.industry);
+  const businessName = normalizeString(input.businessName || input.clientName);
   const city = normalizeString(input.city);
   const state = normalizeString(input.state);
   const zip = normalizeString(input.zip);
@@ -2015,8 +2349,69 @@ async function runMarketOnlyAudit(input) {
   let sourceNote = 'no live provider data returned';
   let sourceConfidence = 'low';
 
+  function processResultEntry(entry, index, { query, source, industry: currentIndustry, market: currentMarket, isMapResult }) {
+    const normalizedEntry = { ...entry, url: unwrapSearchRedirectUrl(entry.url) };
+    const classified = classifyMarketResult(normalizedEntry, { industry: currentIndustry, area: currentMarket });
+
+    if (classified.category === 'junk') {
+      return;
+    }
+
+    const resultRow = {
+      rank: Number(normalizedEntry.position) || (index + 1),
+      query,
+      source,
+      title: classified.title,
+      companyName: classified.title,
+      domain: extractRootDomain(normalizedEntry.domain || classified.url || ''),
+      url: classified.url,
+      website: classified.url,
+      resultType: classified.resultType,
+      category: classified.category,
+      confidence: classified.confidence,
+      inclusionReason: classified.inclusionReason,
+      warnings: classified.warnings,
+      rating: Number.isFinite(Number(entry.rating)) ? Number(entry.rating) : null,
+      reviews: Number.isFinite(Number(entry.reviews)) ? Number(entry.reviews) : null
+    };
+
+    if (classified.category === 'business') {
+      rawVisibleResults.push(resultRow);
+      if (isMapResult) {
+        localPackRows.push({
+          rank: resultRow.rank,
+          companyName: classified.title || resultRow.domain || 'Unknown business',
+          domain: resultRow.domain,
+          website: normalizedEntry.url || '',
+          rating: resultRow.rating,
+          reviews: resultRow.reviews,
+          query
+        });
+      }
+      upsertMarketCompetitor({
+        competitorMap,
+        orderedResults,
+        directorySignals,
+        entry: normalizedEntry,
+        query,
+        source,
+        marketContext: { industry: currentIndustry, area: currentMarket },
+        isMapResult
+      });
+      return;
+    }
+
+    directorySignals.push(resultRow);
+  }
+
   try {
-    const providerResults = await getLocalCompetitors({ industry, market, queries, locationOverride: serpLocation });
+    const providerResults = await getLocalCompetitors({
+      industry,
+      market,
+      queries,
+      locationOverride: serpLocation,
+      injectedProvider
+    });
     sourceNote = providerResults.sourceNote;
     sourceConfidence = providerResults.confidence || 'low';
 
@@ -2036,81 +2431,33 @@ async function runMarketOnlyAudit(input) {
 
       const mapRows = Array.isArray(normalized.localPackResults) ? normalized.localPackResults : [];
       mapRows.forEach((entry, index) => {
-        const normalizedEntry = {
-          ...entry,
-          url: unwrapSearchRedirectUrl(entry.url)
-        };
-        const evaluation = evaluateMarketResult(normalizedEntry, { industry, area: market });
-        if (!evaluation.junk) {
-          rawVisibleResults.push({
-            rank: Number(normalizedEntry.position) || (index + 1),
-            query,
-            source,
-            title: evaluation.title,
-            domain: extractRootDomain(normalizedEntry.domain || evaluation.url || ''),
-            url: evaluation.url,
-            resultType: evaluation.resultType,
-            confidence: evaluation.confidence,
-            inclusionReason: evaluation.inclusionReason,
-            warnings: evaluation.warnings
-          });
-        }
-        localPackRows.push({
-          rank: Number(entry.position) || (index + 1),
-          companyName: normalizeString(entry.title) || extractRootDomain(entry.domain || entry.url || '') || 'Unknown business',
-          domain: extractRootDomain(entry.domain || entry.url || ''),
-          website: normalizeString(unwrapSearchRedirectUrl(entry.url)) || '',
-          rating: Number.isFinite(Number(entry.rating)) ? Number(entry.rating) : null,
-          reviews: Number.isFinite(Number(entry.reviews)) ? Number(entry.reviews) : null,
-          query
-        });
-        upsertMarketCompetitor({
-          competitorMap,
-          orderedResults,
-          directorySignals,
-          entry: normalizedEntry,
+        processResultEntry(entry, index, {
           query,
           source,
-          marketContext: { industry, area: market },
+          industry,
+          market,
           isMapResult: true
         });
       });
 
       const organicRows = Array.isArray(normalized.organicResults) ? normalized.organicResults : [];
-      organicRows.forEach((entry) => {
-        const normalizedEntry = {
-          ...entry,
-          url: unwrapSearchRedirectUrl(entry.url)
-        };
-        const evaluation = evaluateMarketResult(normalizedEntry, { industry, area: market });
-        if (!evaluation.junk) {
-          rawVisibleResults.push({
-            rank: Number(normalizedEntry.position) || 0,
-            query,
-            source,
-            title: evaluation.title,
-            domain: extractRootDomain(normalizedEntry.domain || evaluation.url || ''),
-            url: evaluation.url,
-            resultType: evaluation.resultType,
-            confidence: evaluation.confidence,
-            inclusionReason: evaluation.inclusionReason,
-            warnings: evaluation.warnings
-          });
-        }
-        upsertMarketCompetitor({
-          competitorMap,
-          orderedResults,
-          directorySignals,
-          entry: normalizedEntry,
+      organicRows.forEach((entry, index) => {
+        processResultEntry(entry, index, {
           query,
           source,
-          marketContext: { industry, area: market },
+          industry,
+          market,
           isMapResult: false
         });
       });
     }
 
-    if (rawVisibleResults.length > 0) {
+    const hasBusinessResults = rawVisibleResults.length > 0;
+    const hasMarketAssets = directorySignals.length > 0;
+
+    if (hasBusinessResults) {
+      dataQuality = sourceConfidence === 'high' ? 'real' : 'estimated';
+    } else if (hasMarketAssets) {
       dataQuality = sourceConfidence === 'high' ? 'real' : 'estimated';
     } else {
       sourceNote = providerResults.provider === 'none'
@@ -2182,6 +2529,7 @@ async function runMarketOnlyAudit(input) {
     queryCount
   });
   const dedupedOrderedResults = buildDedupedMarketRankingRows(orderedResults, competitorStatsByKey);
+  const hasAnyNonJunk = rawVisibleResults.length > 0 || directorySignals.length > 0;
   const hasVisibleResults = rawVisibleResults.length > 0;
   const hasLiveCompetitors = competitors.length > 0;
   const directoryOrReviewCount = dedupedOrderedResults.filter((row) => row.resultType === 'directory' || row.resultType === 'review').length;
@@ -2207,11 +2555,12 @@ async function runMarketOnlyAudit(input) {
     ? Math.round(competitors.reduce((sum, item) => sum + Number(item.aiVisibility || 0), 0) / competitors.length)
     : 0;
   const competitionLevel = hasLiveCompetitors ? clampScore(Math.round(difficultyScore * 10), 20, 95) : 0;
-  const directoryDominance = hasVisibleResults ? clampScore(Math.round(((directoryOrReviewCount + socialCount) / Math.max(dedupedOrderedResults.length, 1)) * 100), 0, 100) : 0;
-  const localBusinessVisibility = hasVisibleResults ? clampScore(Math.round((localBusinessCount / Math.max(dedupedOrderedResults.length, 1)) * 100), 0, 100) : 0;
-  const marketActivity = hasVisibleResults ? clampScore(Math.round((Math.min(rawVisibleResults.length, 30) / 30) * 100), 20, 100) : 0;
-  const opportunityScore = hasVisibleResults ? clampScore(Math.round((100 - competitionLevel) * 0.45 + directoryDominance * 0.35 + (100 - localBusinessVisibility) * 0.2), 10, 95) : 0;
-  const leadPotential = hasVisibleResults ? clampScore(Math.round((marketActivity * 0.45) + (opportunityScore * 0.55)), 10, 95) : 0;
+  const totalVisibleMarketRows = rawVisibleResults.length + directorySignals.length;
+  const directoryDominance = hasAnyNonJunk ? clampScore(Math.round((directorySignals.length / Math.max(totalVisibleMarketRows, 1)) * 100), 0, 100) : 0;
+  const localBusinessVisibility = hasAnyNonJunk ? clampScore(Math.round((rawVisibleResults.length / Math.max(totalVisibleMarketRows, 1)) * 100), 0, 100) : 0;
+  const marketActivity = hasAnyNonJunk ? clampScore(Math.round((Math.min(totalVisibleMarketRows, 30) / 30) * 100), 20, 100) : 0;
+  const opportunityScore = hasAnyNonJunk ? clampScore(Math.round((100 - competitionLevel) * 0.45 + directoryDominance * 0.35 + (100 - localBusinessVisibility) * 0.2), 10, 95) : 0;
+  const leadPotential = hasAnyNonJunk ? clampScore(Math.round((marketActivity * 0.45) + (opportunityScore * 0.55)), 10, 95) : 0;
   const summaryScores = {
     marketActivity,
     competitionLevel,
@@ -2220,7 +2569,15 @@ async function runMarketOnlyAudit(input) {
     opportunityScore,
     leadPotential
   };
-  const issues = hasVisibleResults ? [
+  const marketOpportunity = buildMarketOpportunityModel({
+    input: { industry, businessName, city, state, zip },
+    competitors,
+    orderedResults: dedupedOrderedResults,
+    marketAssets: directorySignals,
+    summaryScores,
+    industryAnalysis
+  });
+  const issues = hasAnyNonJunk ? [
     {
       category: 'market',
       title: 'Competitive landscape',
@@ -2270,6 +2627,7 @@ async function runMarketOnlyAudit(input) {
     queryType: 'market',
     input: {
       industry,
+      businessName,
       city,
       state,
       zip
@@ -2288,15 +2646,17 @@ async function runMarketOnlyAudit(input) {
         rawOrderedResults: orderedResults,
         localPackResults: localPackRows,
         directorySignals,
-        warning: hasVisibleResults ? limitedWarning : 'Search returned no results.',
+        warning: hasVisibleResults ? limitedWarning : (directorySignals.length > 0 ? 'No standalone business websites found ranking for this search. The market is dominated by directories and review sites. This is a wide-open opportunity.' : 'Search returned no results.'),
         sourceConfidence,
         sourceLabel: sourceNote
       }
     },
+    marketOpportunity,
     issues,
     fixes,
     competitors: industryAnalysis.competitors,
-    screenshots: uniqueScreenshots
+    screenshots: uniqueScreenshots,
+    marketAssets: directorySignals
   };
 }
 
@@ -2656,33 +3016,43 @@ function buildDashboardPackageViews(model) {
       strategy: {}
     };
     const allCompetitors = Array.isArray(analysis.competitors) ? analysis.competitors : [];
+    const marketIssues = Array.isArray(safe.issues) ? safe.issues : [];
+    const marketFixes = Array.isArray(safe.fixes) ? safe.fixes : [];
     const withCompetitorSlice = (limit) => ({
       ...analysis,
       competitors: limit ? allCompetitors.slice(0, limit) : allCompetitors
     });
+    const marketOpp = safe.marketOpportunity || null;
+    const marketAssets = Array.isArray(safe.marketAssets) ? safe.marketAssets : [];
     return {
       score_only: {
         ...base,
         industryAnalysis: withCompetitorSlice(5),
-        issues: [],
+        marketOpportunity: marketOpp,
+        issues: marketIssues.slice(0, 2),
         fixes: [],
         competitors: allCompetitors.slice(0, 5),
+        marketAssets: marketAssets.slice(0, 5),
         screenshots: Array.isArray(safe.screenshots) ? safe.screenshots.slice(0, 2) : []
       },
       scores_issues: {
         ...base,
         industryAnalysis: withCompetitorSlice(10),
-        issues: [],
+        marketOpportunity: marketOpp,
+        issues: marketIssues,
         fixes: [],
         competitors: allCompetitors.slice(0, 10),
+        marketAssets: marketAssets.slice(0, 10),
         screenshots: Array.isArray(safe.screenshots) ? safe.screenshots.slice(0, 4) : []
       },
       full_data: {
         ...base,
         industryAnalysis: withCompetitorSlice(0),
-        issues: [],
-        fixes: [],
+        marketOpportunity: marketOpp,
+        issues: marketIssues,
+        fixes: marketFixes,
         competitors: allCompetitors,
+        marketAssets,
         screenshots: Array.isArray(safe.screenshots) ? safe.screenshots : []
       }
     };
@@ -5283,6 +5653,25 @@ function serveStatic(req, res) {
 async function requestHandler(req, res) {
   const reqUrl = new URL(req.url, `http://${req.headers.host}`);
 
+  if (reqUrl.pathname === '/api/citation-fixer' && req.method === 'GET') {
+    try {
+      const url = reqUrl.searchParams.get('url') || '';
+      const industry = reqUrl.searchParams.get('industry') || '';
+      const city = reqUrl.searchParams.get('city') || '';
+      const state = reqUrl.searchParams.get('state') || '';
+      const businessName = reqUrl.searchParams.get('businessName') || '';
+      if (!url) {
+        sendJson(res, 400, { error: 'Missing url parameter.' });
+        return;
+      }
+      const result = await runCitationFixer({ url, industry, city, state, businessName });
+      sendJson(res, 200, { ok: true, ...result });
+    } catch (error) {
+      sendJson(res, 500, { error: error.message || 'Citation fixer failed.' });
+    }
+    return;
+  }
+
   if (reqUrl.pathname === '/api/audit-report' && req.method === 'GET') {
     try {
       const auditId = reqUrl.searchParams.get('id') || '';
@@ -5408,6 +5797,7 @@ async function requestHandler(req, res) {
       if (effectiveQueryType === 'market') {
         const marketModel = await runMarketOnlyAudit({
           industry,
+          businessName,
           city,
           state,
           zip

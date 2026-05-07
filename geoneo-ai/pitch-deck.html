@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GeoNeo AI — Local SEO Services for Branson Businesses</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117; --surface: #161b22; --line: #30363d;
+      --fg: #e6edf3; --muted: #8b949e; --brand: #00e5a0; --hot: #ff6b6b;
+    }
+    body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--fg); line-height: 1.6; padding: 2rem; max-width: 900px; margin: 0 auto; }
+    h1, h2, h3, h4 { font-family: 'Space Grotesk', sans-serif; }
+    .brand-row { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.25rem; }
+    .brand-mark { width: 2.5rem; height: 2.5rem; background: linear-gradient(135deg, var(--brand), #00b880); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 1.3rem; color: var(--bg); }
+    .brand-name { font-family: 'Space Grotesk', sans-serif; font-size: 1.8rem; font-weight: 700; }
+    .tagline { color: var(--muted); font-size: 0.95rem; margin-bottom: 2rem; }
+    .section { margin-bottom: 2rem; }
+    .section-title { font-size: 1.2rem; font-weight: 700; color: var(--brand); margin-bottom: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.85rem; }
+    .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+    .stat-card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 1rem; text-align: center; }
+    .stat-num { font-family: 'Space Grotesk', sans-serif; font-size: 2rem; font-weight: 700; color: var(--hot); }
+    .stat-label { font-size: 0.75rem; color: var(--muted); margin-top: 0.25rem; }
+    .branson-callout { background: linear-gradient(135deg, #1a0a0a, #0d1117); border: 1px solid var(--hot); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem; }
+    .branson-callout h3 { color: var(--hot); font-size: 1rem; margin-bottom: 0.5rem; }
+    .branson-callout ul { list-style: none; padding: 0; }
+    .branson-callout li { padding: 0.2rem 0; font-size: 0.85rem; }
+    .branson-callout li::before { content: "✗ "; color: var(--hot); font-weight: 700; }
+    .fix-list { list-style: none; padding: 0; columns: 2; column-gap: 2rem; }
+    .fix-list li { padding: 0.3rem 0; font-size: 0.9rem; break-inside: avoid; }
+    .fix-list li::before { content: "✓ "; color: var(--brand); font-weight: 700; }
+    .packages { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+    .pkg { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 1.25rem; position: relative; }
+    .pkg-featured { border-color: var(--brand); }
+    .pkg-badge { position: absolute; top: -0.6rem; left: 50%; transform: translateX(-50%); background: var(--brand); color: var(--bg); font-size: 0.65rem; font-weight: 700; padding: 0.15rem 0.6rem; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .pkg h3 { font-size: 1rem; margin-bottom: 0.25rem; }
+    .pkg-price { font-family: 'Space Grotesk', sans-serif; font-size: 1.5rem; font-weight: 700; color: var(--brand); }
+    .pkg-price span { font-size: 0.8rem; color: var(--muted); font-weight: 400; }
+    .pkg ul { list-style: none; padding: 0; margin-top: 0.75rem; }
+    .pkg li { font-size: 0.78rem; padding: 0.2rem 0; color: var(--muted); }
+    .pkg li::before { content: "• "; color: var(--brand); }
+    .trust-row { display: flex; gap: 1.5rem; margin-bottom: 1.5rem; }
+    .trust-item { flex: 1; font-size: 0.82rem; color: var(--muted); padding-left: 1.5rem; position: relative; }
+    .trust-item::before { content: "★"; position: absolute; left: 0; color: var(--brand); }
+    .cta-bar { background: linear-gradient(135deg, #002b1a, #0d1117); border: 1px solid var(--brand); border-radius: 12px; padding: 1.5rem; display: flex; justify-content: space-between; align-items: center; gap: 1.5rem; }
+    .cta-main h3 { font-size: 1.1rem; margin-bottom: 0.25rem; }
+    .cta-main p { font-size: 0.85rem; color: var(--muted); }
+    .cta-actions { display: flex; flex-direction: column; gap: 0.3rem; text-align: right; font-size: 0.85rem; white-space: nowrap; }
+    .cta-actions a { color: var(--brand); text-decoration: none; font-weight: 600; }
+    .cta-actions .cta-big { background: var(--brand); color: var(--bg); padding: 0.5rem 1.25rem; border-radius: 8px; font-weight: 700; display: inline-block; }
+    .qr-placeholder { width: 80px; height: 80px; border: 2px dashed var(--line); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 0.6rem; color: var(--muted); text-align: center; flex-shrink: 0; }
+    .source { font-size: 0.65rem; color: var(--muted); margin-top: 0.5rem; font-style: italic; }
+
+    @media print {
+      body { background: #fff; color: #111; padding: 1rem; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .stat-card, .pkg, .branson-callout, .cta-bar { border-color: #ccc; }
+      .stat-num { color: #c00; }
+      .brand-mark { background: #00c88a; }
+    }
+    @media (max-width: 700px) {
+      .stat-grid { grid-template-columns: repeat(2, 1fr); }
+      .packages { grid-template-columns: 1fr; }
+      .fix-list { columns: 1; }
+      .trust-row { flex-direction: column; }
+      .cta-bar { flex-direction: column; text-align: center; }
+      .cta-actions { text-align: center; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="brand-row">
+    <div class="brand-mark">G</div>
+    <div class="brand-name">GeoNeo AI</div>
+  </div>
+  <p class="tagline">Search Visibility Built for the AI Era &mdash; Branson, MO</p>
+
+  <div class="section">
+    <p class="section-title">The Problem</p>
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-num">61%</div>
+        <div class="stat-label">of small businesses aren't investing in SEO</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num">65%</div>
+        <div class="stat-label">of SMBs don't have a Google Business Profile</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num">72%</div>
+        <div class="stat-label">of websites fail critical technical SEO checks</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num">0%</div>
+        <div class="stat-label">of Branson businesses are optimized for AI search</div>
+      </div>
+    </div>
+    <p class="source">Sources: WordStream 2026, BrightLocal 2025, Semrush 2025, GeoNeo AI Branson Market Audit May 2026</p>
+
+    <div class="branson-callout">
+      <h3>We Audited Branson. Here's What We Found.</h3>
+      <ul>
+        <li>63% of local businesses have no schema markup — Google can't understand what they are</li>
+        <li>100% have zero AI citation optimization — invisible to ChatGPT, Perplexity, Google AI</li>
+        <li>Average image alt text compliance is ~40% — hurting accessibility and rankings</li>
+        <li>One towing company is still on HTTP — Google actively penalizes this</li>
+        <li>Most sites haven't been updated in years — using 2015-era SEO practices</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="section">
+    <p class="section-title">What We Fix</p>
+    <ul class="fix-list">
+      <li>Google Business Profile optimization</li>
+      <li>Schema markup (LocalBusiness, FAQ, Product)</li>
+      <li>NAP consistency across all directories</li>
+      <li>Image alt text &amp; technical SEO basics</li>
+      <li>AI citation optimization (ChatGPT, Perplexity, Google AI Overviews)</li>
+      <li>Review generation strategy</li>
+      <li>City + service landing pages</li>
+      <li>Core Web Vitals &amp; mobile performance</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <p class="section-title">Packages</p>
+    <div class="packages">
+      <div class="pkg">
+        <h3>Quick Fix</h3>
+        <div class="pkg-price">$500 <span>one-time</span></div>
+        <ul>
+          <li>Google Business Profile optimization</li>
+          <li>NAP cleanup across directories</li>
+          <li>Schema markup installation</li>
+          <li>Basic technical SEO fixes</li>
+          <li>Prioritized fix list with instructions</li>
+        </ul>
+      </div>
+      <div class="pkg pkg-featured">
+        <div class="pkg-badge">Most Popular</div>
+        <h3>Growth</h3>
+        <div class="pkg-price">$800 <span>/month</span></div>
+        <ul>
+          <li>Everything in Quick Fix</li>
+          <li>Monthly GBP posts &amp; updates</li>
+          <li>Review management &amp; generation</li>
+          <li>Rank tracking &amp; competitor monitoring</li>
+          <li>Monthly content updates</li>
+        </ul>
+      </div>
+      <div class="pkg">
+        <h3>Dominate</h3>
+        <div class="pkg-price">$1,500 <span>/month</span></div>
+        <ul>
+          <li>Everything in Growth</li>
+          <li>AI citation strategy &amp; optimization</li>
+          <li>Content creation &amp; blog posts</li>
+          <li>Link building &amp; digital PR</li>
+          <li>Quarterly Zoom strategy sessions</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="trust-row">
+      <div class="trust-item">We practice what we preach — our own site scores 95+ on every SEO metric.</div>
+      <div class="trust-item">Free audit first — see exactly where you stand before you spend a dime.</div>
+      <div class="trust-item">Based right here in Branson, MO — we know this market inside and out.</div>
+    </div>
+  </div>
+
+  <div class="cta-bar">
+    <div class="cta-main">
+      <h3>Get Your Free SEO Audit</h3>
+      <p>See exactly where your business stands in Google, Maps, and AI search — takes 60 seconds.</p>
+    </div>
+    <div class="cta-actions">
+      <a class="cta-big" href="https://geoneo.ai">geoneo.ai</a>
+      <a href="mailto:hello@geoneo.ai">hello@geoneo.ai</a>
+      <span style="color: var(--muted);">Book a Free Zoom Call</span>
+    </div>
+    <div class="qr-placeholder">QR<br/>Code<br/>Here</div>
+  </div>
+
+</body>
+</html>

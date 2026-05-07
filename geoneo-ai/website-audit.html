@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Website Audit | GeoNeo AI</title>
+  <meta name="description" content="Run a real-time website SEO audit. See where your site ranks, what's holding it back, and get a prioritized fix list." />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://geoneo.ai/website-audit.html" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>G</text></svg>" />
+  <meta property="og:title" content="Website SEO Audit | GeoNeo AI" />
+  <meta property="og:description" content="Run a real-time website SEO audit. See where your site ranks, what's holding it back, and get a prioritized fix list." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://geoneo.ai/website-audit.html" />
+  <meta property="og:image" content="https://geoneo.ai/og-image.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Website SEO Audit | GeoNeo AI" />
+  <meta name="twitter:description" content="Run a real-time website SEO audit. See where your site ranks and get a prioritized fix list." />
+  <meta name="twitter:image" content="https://geoneo.ai/og-image.png" />
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      "name": "Website SEO Audit",
+      "description": "Run a real-time website SEO audit to see where your site ranks in Google Search, understand ranking factors, and get a prioritized fix list.",
+      "url": "https://geoneo.ai/website-audit.html",
+      "isPartOf": { "@type": "WebSite", "name": "GeoNeo AI", "url": "https://geoneo.ai" },
+      "provider": { "@type": "ProfessionalService", "name": "GeoNeo AI" }
+    }
+  </script>
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://geoneo.ai/" },
+        { "@type": "ListItem", "position": 2, "name": "Website Audit", "item": "https://geoneo.ai/website-audit.html" }
+      ]
+    }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-audit-mode="website">
+  <div class="orb orb-a"></div>
+  <div class="orb orb-b"></div>
+
+  <header class="site-header container">
+    <a class="brand" href="index.html" aria-label="GeoNeo AI home">
+      <span class="brand-mark" aria-hidden="true">G</span>
+      <span class="brand-text">GeoNeo AI</span>
+    </a>
+    <a class="btn btn-sm btn-ghost" href="index.html">← Back</a>
+  </header>
+
+  <main class="container section">
+    <div class="audit-page-header">
+      <span class="mode-card-icon" aria-hidden="true">📊</span>
+      <h1>Website Audit</h1>
+      <p class="lead">Enter your website below and we'll show you exactly where you rank, why, and what to fix.</p>
+    </div>
+
+    <div class="audit-page-form">
+      <form class="audit-form" id="websiteAuditForm" aria-label="Website audit form">
+        <label>
+          Website URL
+          <input name="url" type="text" inputmode="url" placeholder="https://example.com or www.example.com" required />
+        </label>
+        <label>
+          Industry (optional)
+          <input name="industry" type="text" placeholder="Roofing, legal, dental, etc." />
+        </label>
+        <div class="field-row">
+          <label>
+            City (optional)
+            <input name="city" type="text" placeholder="Dallas" />
+          </label>
+          <label>
+            State (optional)
+            <select id="websiteState" name="state">
+              <option value="">Select state</option>
+            </select>
+          </label>
+          <label>
+            ZIP Code (optional)
+            <input id="websiteZip" name="zip" type="text" inputmode="numeric" pattern="[0-9]{5}(?:-[0-9]{4})?" placeholder="75001" />
+          </label>
+        </div>
+        <button class="btn btn-hot" type="submit">Run Website Audit</button>
+        <p class="form-note"><strong>Takes 30–60 seconds • No signup required</strong></p>
+      </form>
+    </div>
+
+    <div class="audit-page-features">
+      <h3>What you'll get</h3>
+      <ul class="audit-list">
+        <li>See where the site ranks in live search</li>
+        <li>Understand the ranking factors affecting visibility</li>
+        <li>Get a prioritized fix list</li>
+        <li>Score trust, content, and technical health</li>
+      </ul>
+    </div>
+  </main>
+
+  <footer class="site-footer container">
+    <div class="footer-brand">
+      <span class="brand-mark" aria-hidden="true">G</span>
+      <span><strong>GeoNeo AI</strong> &mdash; Search visibility built for the AI era.</span>
+    </div>
+    <a href="index.html">Back to home</a>
+  </footer>
+
+  <!-- Audit Loading Overlay -->
+  <div id="auditLoadingOverlay" class="audit-loading-overlay" aria-hidden="true">
+    <div class="audit-spinner"></div>
+    <p class="audit-loading-text" id="auditLoadingText">Running audit...</p>
+  </div>
+
+  <!-- Audit Results Modal -->
+  <div id="auditModalOverlay" class="audit-modal-overlay" role="dialog" aria-modal="true" aria-label="Audit Results" aria-hidden="true">
+    <div class="audit-modal">
+      <div class="audit-modal-header">
+        <h2 id="auditModalTitle">Audit Results</h2>
+        <p id="dashboardStatus" class="form-note">Results loaded.</p>
+        <button class="audit-modal-close" type="button" id="auditModalCloseBtn" aria-label="Close results">&times;</button>
+      </div>
+      <div class="audit-modal-body">
+        <section id="dashboardResults" class="audit-results glossary-auto" aria-live="polite">
+          <article class="card" id="searchPositionPanel" hidden>
+            <h4 id="searchPositionTitle">Top Search Position Check</h4>
+            <p id="searchPositionLead" class="lead"></p>
+            <p id="searchPositionSummary" class="form-note"></p>
+            <div id="searchPositionQueries" class="audit-findings"></div>
+          </article>
+          <article class="card" id="marketSearchPanel" hidden>
+            <h4 id="marketSearchTitle">Market Search Results</h4>
+            <p id="marketSearchLead" class="lead"></p>
+            <p id="marketSearchSummary" class="form-note"></p>
+            <div id="marketSearchStats" class="audit-score-row"></div>
+          </article>
+          <article class="card" id="marketOpportunityPanel" hidden>
+            <div class="market-tabs" role="tablist" aria-label="Market opportunity views">
+              <button class="market-tab active" type="button" id="marketLeaderboardTabBtn" data-market-tab="leaderboard" aria-selected="true">Market Leaderboard</button>
+              <button class="market-tab" type="button" id="marketTakeoverTabBtn" data-market-tab="takeover" aria-selected="false">Market Takeover Plan</button>
+            </div>
+            <div id="marketLeaderboardTab"></div>
+            <div id="marketTakeoverTab" hidden></div>
+          </article>
+          <article class="card" id="googleMatrixPanel" hidden>
+            <h4 id="googleMatrixTitle">Google Ranking Matrix</h4>
+            <p id="googleMatrixIntro" class="lead"></p>
+            <div id="googleMatrixRows" class="audit-findings"></div>
+          </article>
+          <div class="audit-score-row" id="summaryScoreCards"></div>
+          <article class="card" id="dashboardControlsCard">
+            <div class="field-row">
+              <label>Package View <select id="packageViewSelect"><option value="score_only">Score Only</option><option value="scores_issues">Scores + Issues</option><option value="full_data" selected>Full Data + Fixes</option></select></label>
+              <label><input id="adminModeToggle" type="checkbox" /> Internal/Admin View</label>
+            </div>
+            <p id="dataQualityBadge" class="form-note"></p>
+          </article>
+          <article class="card" id="packageComparisonCard"><h4>Package Comparison</h4><div id="packageComparison" class="audit-findings"></div></article>
+          <article class="card" id="issuesPanel"><h4>Issues</h4><ul id="issuesList" class="audit-list"></ul></article>
+          <article class="card" id="fixesPanel"><h4>Fixes / Actions</h4><ul id="fixesList" class="audit-list"></ul></article>
+          <article class="card" id="questionsPanel" hidden><h4>Questions You Should Answer On Your Site</h4><p class="form-note" id="questionsLead">These are the high-intent questions searchers ask that your site should answer clearly to rank in Google and get cited by AI.</p><ul id="questionsList" class="audit-list"></ul></article>
+          <article class="card" id="competitorsPanel"><h4>Competitor / Market Context</h4><div class="table-wrap"><table id="competitorsTable"><thead><tr><th>Name</th><th>Website</th><th>City</th><th>Category</th><th>Notes</th><th>Strengths</th><th>Weaknesses</th><th>Scores</th><th>Source</th></tr></thead><tbody id="competitorsTableBody"></tbody></table></div></article>
+          <article class="card" id="adminPanel" hidden><h4>Internal Admin Panel</h4><p class="form-note">Includes all collected fields and package outputs.</p><div class="hero-cta"><button class="btn btn-sm" type="button" id="copyReportBtn">Copy Report</button><button class="btn btn-sm" type="button" id="exportJsonBtn">Export JSON</button><button class="btn btn-sm" type="button" id="exportTextBtn">Export Text Summary</button></div><pre id="adminRawData"></pre></article>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+  <script src="glossary.js" defer></script>
+</body>
+</html>
