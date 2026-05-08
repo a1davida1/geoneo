@@ -36,3 +36,4 @@ node --test test/server.test.js
 - Internal leads page: `http://localhost:4173/admin/leads`
 - Required env for Google snapshot:
   - `PAGESPEED_API_KEY`
+- Weekly visibility score scheduler runs every Monday at 03:00 in the server process timezone. For production consistency set `TZ=America/Chicago` (or equivalent) so the 03:00 slot aligns with Ozarks time. The scheduler starts automatically on `npm start`.
