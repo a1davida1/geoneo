@@ -239,5 +239,6 @@ function startScheduler() {
 module.exports = {
   startScheduler,
   runWeeklyScoring,
-  isEligibleForWeeklyScore
+  isEligibleForWeeklyScore,
+  getLastWeeklyRun: () => lastWeeklyRun
 };

@@ -28,7 +28,7 @@ const { runCitationFixer, generateTargetQueries, generateFixes, parsePageStructu
 const { calculateVisibilityScore } = require('./services/visibilityScoring');
 const { recordScore, getHistoryForDomain, getLatestScore } = require('./services/scoreHistory');
 const { getTrackedCompetitors, updateCompetitorScores } = require('./services/competitorTracking');
-const { startScheduler, runWeeklyScoring } = require('./services/weeklyScoreScheduler');
+const { startScheduler, runWeeklyScoring, getLastWeeklyRun } = require('./services/weeklyScoreScheduler');
 
 const PORT = process.env.PORT || 4173;
 const HOST = process.env.HOST || '127.0.0.1';
@@ -6124,6 +6124,36 @@ async function requestHandler(req, res) {
       sendJson(res, 200, { ok: true, domain, history });
     } catch (e) {
       sendJson(res, 500, { error: 'Failed to load history' });
+    }
+    return;
+  }
+
+  // Weekly score scheduler endpoints (local-only for manual trigger)
+  if (reqUrl.pathname === '/api/score/run-weekly' && req.method === 'GET') {
+    if (!isLocalRequest(req)) {
+      res.writeHead(403);
+      res.end('Forbidden');
+      return;
+    }
+    try {
+      const dryRun = reqUrl.searchParams.get('dryRun') === '1' || reqUrl.searchParams.get('dryRun') === 'true';
+      const result = await runWeeklyScoring({ dryRun });
+      sendJson(res, 200, { ok: true, dryRun, ...result });
+    } catch (e) {
+      sendJson(res, 500, { error: 'Weekly score run failed', message: e.message });
+    }
+    return;
+  }
+
+  if (reqUrl.pathname === '/api/score/health' && req.method === 'GET') {
+    try {
+      const last = getLastWeeklyRun ? getLastWeeklyRun() : null;
+      const health = last
+        ? { ok: true, lastRun: last.finishedAt, domainsInLastRun: last.domainsScored, failuresInLastRun: last.failures.length }
+        : { ok: true, lastRun: null, message: 'No run yet' };
+      sendJson(res, 200, health);
+    } catch (e) {
+      sendJson(res, 500, { error: 'Health check failed' });
     }
     return;
   }
