@@ -29,16 +29,32 @@ function generateTargetQueries(industry, city, state, businessName) {
 }
 
 // Fetch a page's content for analysis
-async function fetchPageContent(url, timeoutMs = 10000) {
+async function fetchPageContent(url, timeoutMs = 10000, redirectDepth = 0, maxBodyBytes = 1_000_000) {
+  const MAX_REDIRECTS = 5;
+  if (redirectDepth >= MAX_REDIRECTS) {
+    return Promise.reject(new Error('Too many redirects'));
+  }
   return new Promise((resolve, reject) => {
     const parsedUrl = new URL(url.startsWith('http') ? url : `https://${url}`);
     const client = parsedUrl.protocol === 'https:' ? https : http;
     const req = client.get(parsedUrl.href, { timeout: timeoutMs }, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        return fetchPageContent(res.headers.location, timeoutMs).then(resolve).catch(reject);
+        let nextUrl = res.headers.location;
+        if (!nextUrl.startsWith('http')) {
+          nextUrl = new URL(nextUrl, parsedUrl.href).href;
+        }
+        return fetchPageContent(nextUrl, timeoutMs, redirectDepth + 1, maxBodyBytes).then(resolve).catch(reject);
       }
       let body = '';
-      res.on('data', (chunk) => { body += chunk; });
+      let accumulatedBytes = 0;
+      res.on('data', (chunk) => {
+        accumulatedBytes += chunk.length;
+        if (accumulatedBytes > maxBodyBytes) {
+          req.destroy(new Error(`response too large (${accumulatedBytes} bytes)`));
+          return;
+        }
+        body += chunk;
+      });
       res.on('end', () => resolve(body));
     });
     req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
@@ -78,7 +94,9 @@ async function queryAIModel(query) {
       results.response = perplexityResult.response || '';
       results.model = 'perplexity';
       return results;
-    } catch (e) { /* fall through */ }
+    } catch (e) {
+      console.error('[citationFixer] callPerplexity failed', { query, message: e.message, stack: e.stack });
+    }
   }
 
   // Fallback to OpenAI with browsing
@@ -89,7 +107,9 @@ async function queryAIModel(query) {
       results.response = openaiResult.response || '';
       results.model = 'openai';
       return results;
-    } catch (e) { /* fall through */ }
+    } catch (e) {
+      console.error('[citationFixer] callOpenAI failed', { query, message: e.message, stack: e.stack });
+    }
   }
 
   return results;

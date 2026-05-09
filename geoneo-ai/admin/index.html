@@ -1,0 +1,1276 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GeoNeo Admin</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <style>
+    :root {
+      --admin-bg: #0f172a;
+      --admin-surface: #1e293b;
+      --admin-line: #334155;
+      --admin-text: #f1f5f9;
+      --admin-muted: #94a3b8;
+      --admin-accent: #38bdf8;
+      --admin-ok: #4ade80;
+      --admin-warn: #fbbf24;
+    }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: var(--admin-bg);
+      color: var(--admin-text);
+      min-height: 100vh;
+    }
+    .admin-shell {
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      min-height: 100vh;
+    }
+    @media (max-width: 900px) {
+      .admin-shell { grid-template-columns: 1fr; }
+      aside { position: sticky; top: 0; z-index: 10; }
+    }
+    aside {
+      background: var(--admin-surface);
+      border-right: 1px solid var(--admin-line);
+      padding: 1.25rem;
+    }
+    aside h1 {
+      font-size: 1.05rem;
+      margin: 0 0 0.25rem;
+      font-weight: 700;
+    }
+    aside .sub {
+      font-size: 0.78rem;
+      color: var(--admin-muted);
+      margin-bottom: 1.25rem;
+    }
+    aside nav a {
+      display: block;
+      padding: 0.5rem 0.65rem;
+      border-radius: 8px;
+      color: var(--admin-text);
+      text-decoration: none;
+      font-size: 0.9rem;
+      margin-bottom: 4px;
+    }
+    aside nav a:hover, aside nav a.active {
+      background: rgba(56, 189, 248, 0.12);
+      color: var(--admin-accent);
+    }
+    aside .token-box {
+      margin-top: 1.5rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--admin-line);
+      font-size: 0.75rem;
+      color: var(--admin-muted);
+    }
+    aside .token-box input {
+      width: 100%;
+      margin-top: 6px;
+      padding: 8px;
+      border-radius: 8px;
+      border: 1px solid var(--admin-line);
+      background: var(--admin-bg);
+      color: var(--admin-text);
+      font-size: 0.8rem;
+      box-sizing: border-box;
+    }
+    main {
+      padding: 1.5rem 1.75rem 3rem;
+      max-width: 1200px;
+    }
+    .panel {
+      display: none;
+    }
+    .panel.active { display: block; }
+    h2 { margin: 0 0 1rem; font-size: 1.35rem; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 12px;
+      margin-bottom: 1.5rem;
+    }
+    .stat {
+      background: var(--admin-surface);
+      border: 1px solid var(--admin-line);
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+    .stat .label { font-size: 0.75rem; color: var(--admin-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    .stat .value { font-size: 1.5rem; font-weight: 700; margin-top: 4px; }
+    .stat .hint { font-size: 0.72rem; color: var(--admin-muted); margin-top: 6px; }
+    .btn-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 1rem; align-items: center; }
+    button, .btn-link {
+      font: inherit;
+      cursor: pointer;
+      border-radius: 10px;
+      padding: 10px 16px;
+      border: 1px solid var(--admin-line);
+      background: var(--admin-surface);
+      color: var(--admin-text);
+    }
+    button.primary {
+      background: linear-gradient(135deg, #0284c7, #0369a1);
+      border-color: #0369a1;
+      color: white;
+    }
+    button.danger {
+      background: rgba(239, 68, 68, 0.15);
+      border-color: #b91c1c;
+      color: #fecaca;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    pre.out {
+      background: #020617;
+      border: 1px solid var(--admin-line);
+      border-radius: 12px;
+      padding: 1rem;
+      overflow: auto;
+      max-height: 420px;
+      font-size: 0.78rem;
+      line-height: 1.45;
+      color: #e2e8f0;
+    }
+    .msg { padding: 12px 14px; border-radius: 10px; margin-bottom: 1rem; font-size: 0.9rem; }
+    .msg.ok { background: rgba(74, 222, 128, 0.12); border: 1px solid #166534; color: #bbf7d0; }
+    .msg.err { background: rgba(248, 113, 113, 0.12); border: 1px solid #991b1b; color: #fecaca; }
+    .links a {
+      display: inline-block;
+      margin-right: 12px;
+      margin-bottom: 8px;
+      color: var(--admin-accent);
+    }
+    iframe.leads-frame {
+      width: 100%;
+      min-height: 72vh;
+      border: 1px solid var(--admin-line);
+      border-radius: 12px;
+      background: white;
+    }
+    table.mini { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    table.mini th, table.mini td {
+      text-align: left;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--admin-line);
+    }
+    table.mini th { color: var(--admin-muted); font-weight: 600; }
+    textarea.catalog {
+      width: 100%;
+      max-width: 52rem;
+      min-height: 100px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--admin-line);
+      background: var(--admin-bg);
+      color: var(--admin-text);
+      font-size: 0.82rem;
+      font-family: ui-monospace, monospace;
+      box-sizing: border-box;
+    }
+    input.inline-text {
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--admin-line);
+      background: var(--admin-surface);
+      color: var(--admin-text);
+      box-sizing: border-box;
+    }
+    details.advanced {
+      max-width: 52rem;
+      margin-bottom: 1rem;
+      border: 1px solid var(--admin-line);
+      border-radius: 12px;
+      padding: 0.75rem 1rem;
+      background: rgba(15, 23, 42, 0.5);
+    }
+    details.advanced summary {
+      cursor: pointer;
+      color: var(--admin-accent);
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+    h3.tools-section {
+      font-size: 1rem;
+      margin: 1.5rem 0 0.5rem;
+      color: var(--admin-muted);
+    }
+    .site-check-card {
+      display: none;
+      max-width: 48rem;
+      margin-bottom: 1.25rem;
+      padding: 1.25rem 1.35rem;
+      border-radius: 12px;
+      border: 1px solid var(--admin-line);
+      background: var(--admin-surface);
+    }
+    .site-check-card.visible { display: block; }
+    .site-check-card.state-ok { border-color: rgba(74, 222, 128, 0.35); }
+    .site-check-card.state-warn { border-color: rgba(251, 191, 36, 0.45); }
+    .site-check-card.state-err { border-color: rgba(248, 113, 113, 0.45); }
+    .site-check-card h3 {
+      margin: 0 0 0.85rem;
+      font-size: 1rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .site-check-card .badge {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 4px 8px;
+      border-radius: 6px;
+    }
+    .badge-saved { background: rgba(74, 222, 128, 0.2); color: #bbf7d0; }
+    .badge-not-saved { background: rgba(248, 113, 113, 0.18); color: #fecaca; }
+    .badge-fallback { background: rgba(251, 191, 36, 0.15); color: #fde68a; }
+    .site-check-meta {
+      display: grid;
+      gap: 10px 1.5rem;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      font-size: 0.88rem;
+      margin-bottom: 0.75rem;
+    }
+    .site-check-meta .k { color: var(--admin-muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    .site-check-meta .v { font-weight: 600; word-break: break-all; }
+    .site-check-note {
+      font-size: 0.82rem;
+      color: var(--admin-muted);
+      line-height: 1.45;
+      margin: 0;
+    }
+    .site-check-note strong { color: var(--admin-warn); }
+    details.raw-json {
+      margin-top: 1rem;
+      border-top: 1px solid var(--admin-line);
+      padding-top: 1rem;
+    }
+    details.raw-json summary {
+      cursor: pointer;
+      color: var(--admin-muted);
+      font-size: 0.82rem;
+      font-weight: 600;
+    }
+    details.raw-json pre {
+      margin-top: 0.75rem;
+      max-height: 360px;
+    }
+  </style>
+</head>
+<body>
+  <div class="admin-shell">
+    <aside>
+      <h1>GeoNeo Admin</h1>
+      <div class="sub">Operator shell · same auth as APIs</div>
+      <nav id="nav">
+        <a href="#overview" data-panel="overview">Overview</a>
+        <a href="#inspector" data-panel="inspector" class="active">Site check</a>
+        <a href="#tools" data-panel="tools">More tools</a>
+        <a href="#leads" data-panel="leads">Leads</a>
+        <a href="#operations" data-panel="operations">Weekly scoring</a>
+        <a href="#public" data-panel="public">Public pages</a>
+      </nav>
+      <div class="token-box">
+        <label for="bearer">Remote: Bearer token<br />(stores in localStorage)</label>
+        <input id="bearer" type="password" autocomplete="off" placeholder="GEONEO_INTERNAL_API_SECRET value" />
+        <button type="button" id="saveToken" style="margin-top:8px;width:100%;padding:8px;font-size:0.8rem;">Save token</button>
+        <button type="button" id="clearToken" style="margin-top:6px;width:100%;padding:8px;font-size:0.8rem;">Clear</button>
+      </div>
+    </aside>
+    <main>
+      <div id="flash"></div>
+
+      <section id="panel-overview" class="panel">
+        <h2>Overview</h2>
+        <p style="color:var(--admin-muted);font-size:0.9rem;max-width:52rem;">
+          Open <strong>Site check</strong> for the normal workflow (one URL, one button). Use <strong>More tools</strong> for market audits, HTML reports, Neo Club, POSTs, and other endpoints.
+        </p>
+        <div class="btn-row">
+          <button type="button" id="btnRefreshSummary">Refresh snapshot</button>
+          <button type="button" id="btnHealth">Load /api/score/health</button>
+        </div>
+        <div id="overviewStats" class="grid"></div>
+        <h3 style="font-size:1rem;margin:1.25rem 0 0.5rem;color:var(--admin-muted);">Scheduler health (JSON)</h3>
+        <pre id="healthOut" class="out" style="max-height:180px;">—</pre>
+        <h3 style="font-size:1rem;margin:1.25rem 0 0.5rem;color:var(--admin-muted);">Email outbox tail</h3>
+        <div id="outboxTail"></div>
+        <h3 style="font-size:1rem;margin:1.25rem 0 0.5rem;color:var(--admin-muted);">Raw summary JSON</h3>
+        <pre id="summaryOut" class="out">—</pre>
+      </section>
+
+      <section id="panel-inspector" class="panel active">
+        <h2>Site check</h2>
+        <p style="color:var(--admin-muted);font-size:0.9rem;max-width:40rem;line-height:1.45;margin:0 0 1rem;">
+          Paste a URL → one run saves the audit (if the server can write) and loads your score. Remote host: sidebar token.
+        </p>
+        <div class="btn-row" style="align-items:flex-end;max-width:48rem;flex-wrap:wrap;">
+          <label style="flex:1;min-width:260px;">
+            <span style="font-size:0.75rem;color:var(--admin-muted);">Website URL</span>
+            <input id="simpleSiteUrl" class="inline-text" style="width:100%;margin-top:4px;" type="text" placeholder="https://example.com" autocomplete="url" />
+          </label>
+          <button type="button" class="primary" id="btnSimpleCheck" style="padding:12px 22px;font-weight:600;"><span id="btnSimpleCheckLabel">Run</span></button>
+        </div>
+
+        <div id="siteCheckCard" class="site-check-card" aria-live="polite">
+          <h3>
+            <span id="siteCheckTitle">Result</span>
+            <span id="siteCheckBadgeSaved" class="badge badge-saved" style="display:none;">Saved</span>
+            <span id="siteCheckBadgeNotSaved" class="badge badge-not-saved" style="display:none;">Not saved</span>
+            <span id="siteCheckBadgeFallback" class="badge badge-fallback" style="display:none;">Partial scan</span>
+          </h3>
+          <div id="siteCheckSummary">
+            <div class="site-check-meta">
+              <div><div class="k">Domain</div><div class="v" id="siteCheckDomain">—</div></div>
+              <div><div class="k">Audit id</div><div class="v" id="siteCheckAuditId">—</div></div>
+              <div><div class="k">Audit overall</div><div class="v" id="siteCheckAuditOverall">—</div></div>
+              <div><div class="k">Score (operator)</div><div class="v" id="siteCheckScoreOverall">—</div></div>
+            </div>
+            <p id="siteCheckNote" class="site-check-note" style="display:none;"></p>
+          </div>
+          <details class="raw-json">
+            <summary>Technical details (JSON)</summary>
+            <pre id="probeOut" class="out" style="max-height:360px;">—</pre>
+          </details>
+        </div>
+
+        <details class="advanced">
+          <summary>More endpoints (by domain)</summary>
+          <p style="font-size:0.8rem;color:var(--admin-muted);margin:0.75rem 0;">Debug 404s or call a single API. Domain should match the site you audited (no <code>www</code> usually).</p>
+          <div class="btn-row" style="align-items:flex-end;">
+            <label style="flex:1;min-width:220px;">
+              <span style="display:block;font-size:0.75rem;color:var(--admin-muted);margin-bottom:4px;">Domain</span>
+              <input id="probeDomain" type="text" placeholder="example.com" style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--admin-line);background:var(--admin-surface);color:var(--admin-text);box-sizing:border-box;" />
+            </label>
+            <button type="button" id="btnAuditDebug">Debug lookup</button>
+          </div>
+          <h3 class="tools-section">Operator (no package gate)</h3>
+          <div class="btn-row">
+            <button type="button" id="btnProbeScore">Score</button>
+            <button type="button" id="btnProbeHistory">History</button>
+            <button type="button" id="btnProbeBrief">Brief</button>
+            <button type="button" id="btnProbeTech">Technical</button>
+            <button type="button" id="btnProbeComp">Competitors</button>
+            <button type="button" id="btnProbeFix">Fix-tracker</button>
+          </div>
+          <h3 class="tools-section">Member routes (production gate)</h3>
+          <div class="btn-row" style="align-items:center;">
+            <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;color:var(--admin-text);">
+              <input type="checkbox" id="memberPersistScore" />
+              <span>Persist <code>/api/score</code></span>
+            </label>
+          </div>
+          <div class="btn-row">
+            <button type="button" id="btnMemberScore">/api/score</button>
+            <button type="button" id="btnMemberHistory">/api/score/history</button>
+            <button type="button" id="btnMemberBrief">/api/member/brief</button>
+            <button type="button" id="btnMemberTech">/api/member/technical</button>
+            <button type="button" id="btnMemberComp">/api/competitors/dashboard</button>
+            <button type="button" id="btnMemberFix">/api/fix-tracker</button>
+          </div>
+        </details>
+      </section>
+
+      <section id="panel-tools" class="panel">
+        <h2>More tools</h2>
+        <p style="color:var(--admin-muted);font-size:0.9rem;max-width:52rem;">
+          Everyday URL checks: use <strong>Site check</strong>. This page is for HTML reports, citation fixer, Neo Club JSON, fix-tracker POST, pipeline, leads, and <strong>advanced audit</strong> (market / free-tier fields).
+        </p>
+
+        <h3 class="tools-section">Advanced audit — <code>GET /api/audit</code></h3>
+        <p style="font-size:0.8rem;color:var(--admin-muted);">Use for <strong>market</strong> mode, <strong>free</strong> package (needs contact fields), or extra parameters. Normal HTTPS sites: <strong>Site check</strong>.</p>
+        <div class="btn-row" style="flex-direction:column;align-items:stretch;max-width:52rem;">
+          <label><span style="font-size:0.75rem;color:var(--admin-muted);">Website URL</span><br />
+            <input id="auditUrl" class="inline-text" style="width:100%;" type="text" placeholder="https://example.com" />
+          </label>
+          <div class="btn-row" style="margin-bottom:0;">
+            <label><span style="font-size:0.75rem;color:var(--admin-muted);">queryType</span><br />
+              <select id="auditQueryType" class="inline-text" style="padding:10px;">
+                <option value="website">website</option>
+                <option value="market">market</option>
+              </select>
+            </label>
+            <label><span style="font-size:0.75rem;color:var(--admin-muted);">package</span><br />
+              <select id="auditPackage" class="inline-text" style="padding:10px;">
+                <option value="admin">admin</option>
+                <option value="gold">gold</option>
+                <option value="silver">silver</option>
+                <option value="free">free</option>
+              </select>
+            </label>
+            <label style="display:flex;align-items:flex-end;padding-bottom:4px;"><input type="checkbox" id="auditInternalMode" /> <span style="margin-left:8px;font-size:0.85rem;">internalMode</span></label>
+          </div>
+          <div class="btn-row" style="margin-bottom:0;">
+            <label style="flex:1;"><span style="font-size:0.75rem;color:var(--admin-muted);">industry</span><br /><input id="auditIndustry" class="inline-text" style="width:100%;" type="text" /></label>
+            <label style="flex:1;"><span style="font-size:0.75rem;color:var(--admin-muted);">businessName</span><br /><input id="auditBusinessName" class="inline-text" style="width:100%;" type="text" /></label>
+          </div>
+          <div class="btn-row" style="margin-bottom:0;">
+            <label style="flex:1;"><span style="font-size:0.75rem;color:var(--admin-muted);">city</span><br /><input id="auditCity" class="inline-text" style="width:100%;" type="text" /></label>
+            <label style="flex:1;"><span style="font-size:0.75rem;color:var(--admin-muted);">state</span><br /><input id="auditState" class="inline-text" style="width:100%;" type="text" /></label>
+            <label style="flex:1;"><span style="font-size:0.75rem;color:var(--admin-muted);">zip</span><br /><input id="auditZip" class="inline-text" style="width:100%;" type="text" /></label>
+          </div>
+          <p style="font-size:0.75rem;color:var(--admin-muted);margin:0;">For <code>package=free</code>, the API also requires contact name, business name, business email, plus URL or industry/location.</p>
+          <div class="btn-row" style="margin-bottom:0;">
+            <label style="flex:1;"><span style="font-size:0.75rem;color:var(--admin-muted);">contactName (free scans)</span><br /><input id="auditContactName" class="inline-text" style="width:100%;" type="text" placeholder="Optional unless package is free" /></label>
+            <label style="flex:1;"><span style="font-size:0.75rem;color:var(--admin-muted);">businessEmail (free scans)</span><br /><input id="auditBusinessEmail" class="inline-text" style="width:100%;" type="text" placeholder="Optional unless package is free" /></label>
+          </div>
+          <button type="button" class="primary" id="btnRunAudit">Run advanced audit</button>
+        </div>
+
+        <h3 class="tools-section">Audit HTML report</h3>
+        <p style="font-size:0.8rem;color:var(--admin-muted);"><code>GET /api/audit-report</code> and download — use a saved <code>auditId</code> from <code>audits.json</code> or the last audit response.</p>
+        <div class="btn-row" style="align-items:flex-end;">
+          <label style="flex:1;min-width:200px;">
+            <span style="font-size:0.75rem;color:var(--admin-muted);">audit id</span>
+            <input id="auditReportId" class="inline-text" style="width:100%;" type="text" placeholder="audit_..." />
+          </label>
+          <button type="button" id="btnOpenAuditReport">Open HTML (new tab)</button>
+          <button type="button" id="btnDownloadAuditReport">Download HTML</button>
+        </div>
+
+        <h3 class="tools-section">Citation fixer — <code>GET /api/citation-fixer</code></h3>
+        <div class="btn-row" style="flex-direction:column;align-items:stretch;max-width:52rem;">
+          <label><span style="font-size:0.75rem;color:var(--admin-muted);">url (required)</span><br /><input id="cfUrl" class="inline-text" style="width:100%;" type="text" placeholder="https://example.com" /></label>
+          <div class="btn-row" style="margin-bottom:0;">
+            <label style="flex:1;"><span style="font-size:0.75rem;color:var(--admin-muted);">industry</span><br /><input id="cfIndustry" class="inline-text" style="width:100%;" /></label>
+            <label style="flex:1;"><span style="font-size:0.75rem;color:var(--admin-muted);">city</span><br /><input id="cfCity" class="inline-text" style="width:100%;" /></label>
+            <label style="flex:1;"><span style="font-size:0.75rem;color:var(--admin-muted);">state</span><br /><input id="cfState" class="inline-text" style="width:100%;" /></label>
+            <label style="flex:1;"><span style="font-size:0.75rem;color:var(--admin-muted);">businessName</span><br /><input id="cfBusinessName" class="inline-text" style="width:100%;" /></label>
+          </div>
+          <button type="button" id="btnCitationFixer">Fetch citation-fixer JSON</button>
+        </div>
+
+        <h3 class="tools-section">Neo Club — <code>GET /api/neo-club</code></h3>
+        <div class="btn-row" style="align-items:flex-end;flex-wrap:wrap;">
+          <label style="flex:1;min-width:180px;">
+            <span style="font-size:0.75rem;color:var(--admin-muted);">auditId (optional)</span>
+            <input id="neoAuditId" class="inline-text" style="width:100%;" type="text" />
+          </label>
+          <label><span style="font-size:0.75rem;color:var(--admin-muted);">package if no id</span><br />
+            <select id="neoPackage" class="inline-text" style="padding:10px;">
+              <option value="free">free</option>
+              <option value="silver">silver</option>
+              <option value="gold">gold</option>
+              <option value="admin">admin</option>
+            </select>
+          </label>
+          <button type="button" id="btnNeoClub">Fetch Neo Club JSON</button>
+        </div>
+
+        <h3 class="tools-section">Fix-tracker — <code>POST /api/admin/fix-tracker</code></h3>
+        <p style="font-size:0.8rem;color:var(--admin-muted);">Operator POST (no membership check). Body must include <code>domain</code>. Optional <code>action":"delete","id":"..."</code>.</p>
+        <textarea id="fixTrackerPostBody" class="catalog" spellcheck="false">{
+  "domain": "example.com",
+  "title": "Operator test item",
+  "status": "open"
+}</textarea>
+        <div class="btn-row">
+          <button type="button" id="btnFixTrackerPost">POST fix-tracker</button>
+        </div>
+
+        <h3 class="tools-section">Pipeline — <code>POST /api/pipeline/:domain</code></h3>
+        <p style="font-size:0.8rem;color:var(--admin-muted);">Requires internal Bearer. Body JSON: <code>stage</code>, <code>notes</code>, <code>followUpDate</code>.</p>
+        <div class="btn-row" style="align-items:flex-end;">
+          <label style="flex:1;min-width:200px;">
+            <span style="font-size:0.75rem;color:var(--admin-muted);">domain key</span>
+            <input id="pipelineDomain" class="inline-text" style="width:100%;" type="text" placeholder="example.com" />
+          </label>
+        </div>
+        <textarea id="pipelineBody" class="catalog" spellcheck="false">{
+  "stage": "new",
+  "notes": "admin test",
+  "followUpDate": ""
+}</textarea>
+        <div class="btn-row">
+          <button type="button" id="btnPipelinePost">POST pipeline</button>
+        </div>
+
+        <h3 class="tools-section">Leads — <code>POST /api/leads</code></h3>
+        <p style="font-size:0.8rem;color:var(--admin-muted);">Appends to <code>data/leads.json</code>. No auth required.</p>
+        <textarea id="leadsBody" class="catalog" spellcheck="false">{
+  "email": "smoke-test@example.com",
+  "name": "Admin smoke test",
+  "message": "from admin shell"
+}</textarea>
+        <div class="btn-row">
+          <button type="button" id="btnLeadsPost">POST lead</button>
+        </div>
+
+        <h3 class="tools-section">Output</h3>
+        <pre id="catalogOut" class="out" style="max-height:560px;">Run a tool above. For HTML report, use the buttons to open or download.</pre>
+      </section>
+
+      <section id="panel-leads" class="panel">
+        <h2>Leads</h2>
+        <p style="color:var(--admin-muted);font-size:0.9rem;">Loads <code>/admin/leads</code> with your saved Bearer token so pipeline saves work when not on localhost.</p>
+        <p id="leadsLoadHint" style="font-size:0.8rem;color:var(--admin-accent);min-height:1.2em;"></p>
+        <iframe class="leads-frame" title="Leads" id="leadsFrame"></iframe>
+      </section>
+
+      <section id="panel-operations" class="panel">
+        <h2>Weekly visibility scoring</h2>
+        <p style="color:var(--admin-muted);font-size:0.9rem;">
+          Dry run computes eligible domains and simulates scoring without writing scores or sending email.
+          Live run persists scores and may enqueue/send weekly emails per domain (production behavior).
+        </p>
+        <div class="btn-row">
+          <button type="button" class="primary" id="btnDryRun">Dry run weekly job</button>
+          <button type="button" class="danger" id="btnLiveRun">Live run (confirm)</button>
+        </div>
+        <pre id="weeklyOut" class="out">Run a job to see JSON output here.</pre>
+      </section>
+
+      <section id="panel-public" class="panel">
+        <h2>Public marketing &amp; customer pages</h2>
+        <p style="color:var(--admin-muted);font-size:0.9rem;max-width:52rem;">
+          These are <strong>not</strong> operator tools. They use normal lead capture, package tiers, and member gating (same as production visitors).
+          Use <strong>Site check</strong> for operator score JSON without setup. Public links below are the real customer HTML flows (gating applies).
+        </p>
+        <p class="links">
+          <a href="/website-audit.html" target="_blank" rel="noopener">Website audit</a>
+          <a href="/industry-audit.html" target="_blank" rel="noopener">Industry audit</a>
+          <a href="/both-audit.html" target="_blank" rel="noopener">Both</a>
+          <a href="/member-dashboard.html" target="_blank" rel="noopener">Member dashboard (gated)</a>
+          <a href="/competitor-intelligence.html" target="_blank" rel="noopener">Competitor intelligence (gated)</a>
+          <a href="/index.html" target="_blank" rel="noopener">Marketing home</a>
+        </p>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    (function () {
+      const LS_KEY = 'geoneo_admin_bearer';
+
+      function getHeaders() {
+        const t = localStorage.getItem(LS_KEY);
+        const h = { Accept: 'application/json' };
+        if (t) h.Authorization = 'Bearer ' + t;
+        return h;
+      }
+
+      function showFlash(text, ok) {
+        const el = document.getElementById('flash');
+        el.textContent = '';
+        const msg = document.createElement('div');
+        msg.className = 'msg ' + (ok ? 'ok' : 'err');
+        msg.textContent = text;
+        el.appendChild(msg);
+        setTimeout(() => { el.textContent = ''; }, 6000);
+      }
+
+      function escapeHtml(value) {
+        return String(value || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      async function fetchJson(url, opts) {
+        const res = await fetch(url, Object.assign({ headers: getHeaders() }, opts || {}));
+        const text = await res.text();
+        let data;
+        try { data = JSON.parse(text); } catch { data = { _raw: text }; }
+        return { res, data };
+      }
+
+      async function postJson(url, bodyObj) {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: Object.assign({ 'Content-Type': 'application/json; charset=utf-8' }, getHeaders()),
+          body: JSON.stringify(bodyObj)
+        });
+        const text = await res.text();
+        let data;
+        try { data = JSON.parse(text); } catch { data = { _raw: text }; }
+        return { res, data };
+      }
+
+      async function postJsonRaw(url, rawBody) {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: Object.assign({ 'Content-Type': 'application/json; charset=utf-8' }, getHeaders()),
+          body: rawBody
+        });
+        const text = await res.text();
+        let data;
+        try { data = JSON.parse(text); } catch { data = { _raw: text }; }
+        return { res, data };
+      }
+
+      function writeCatalogResult(res, data) {
+        const el = document.getElementById('catalogOut');
+        const snippet = data && data._raw && String(data._raw).length > 12000
+          ? Object.assign({}, data, { _raw: String(data._raw).slice(0, 12000) + '\n… [truncated]' })
+          : data;
+        let text = JSON.stringify({ status: res.status, data: snippet }, null, 2);
+        const maxChars = 160000;
+        if (text.length > maxChars) {
+          text = text.slice(0, maxChars) + '\n… [truncated, ~' + text.length + ' characters total]';
+        }
+        el.textContent = text;
+        if (!res.ok) {
+          showFlash('Tools request returned HTTP ' + res.status + '. See output.', false);
+        }
+      }
+
+      function flashAuditSaveResult(res, data) {
+        if (!res.ok || !data || typeof data !== 'object') return;
+        if (data.saved === true) {
+          const fid = data.auditId ? ' · id ' + data.auditId : '';
+          showFlash('Saved' + fid + '.', true);
+          return;
+        }
+        if (data.saved === false) {
+          const err = data.saveError ? String(data.saveError) : '';
+          showFlash(
+            'Not saved' + (err ? ': ' + err : '') + '. Check server write access / GEONEO_AUDITS_PATH.',
+            false
+          );
+        }
+      }
+
+      function resetSiteCheckBadges() {
+        ['siteCheckBadgeSaved', 'siteCheckBadgeNotSaved', 'siteCheckBadgeFallback'].forEach((id) => {
+          const el = document.getElementById(id);
+          el.style.display = 'none';
+        });
+      }
+
+      function showApiProbeCard(title, ok) {
+        const card = document.getElementById('siteCheckCard');
+        card.classList.add('visible');
+        card.classList.remove('state-ok', 'state-warn', 'state-err');
+        card.classList.add(ok ? 'state-ok' : 'state-err');
+        document.getElementById('siteCheckTitle').textContent = title;
+        resetSiteCheckBadges();
+        document.getElementById('siteCheckSummary').style.display = 'none';
+      }
+
+      function renderSimpleSiteCheckResult(opts) {
+        const card = document.getElementById('siteCheckCard');
+        const summary = document.getElementById('siteCheckSummary');
+        card.classList.add('visible');
+        summary.style.display = 'block';
+        card.classList.remove('state-ok', 'state-warn', 'state-err');
+        card.classList.add(opts.stateClass || 'state-ok');
+        document.getElementById('siteCheckTitle').textContent = opts.title || 'Result';
+        resetSiteCheckBadges();
+        if (opts.showSaved) document.getElementById('siteCheckBadgeSaved').style.display = 'inline';
+        if (opts.showNotSaved) document.getElementById('siteCheckBadgeNotSaved').style.display = 'inline';
+        if (opts.showFallback) document.getElementById('siteCheckBadgeFallback').style.display = 'inline';
+        document.getElementById('siteCheckDomain').textContent = opts.domain || '—';
+        document.getElementById('siteCheckAuditId').textContent = opts.auditId || '—';
+        document.getElementById('siteCheckAuditOverall').textContent =
+          opts.auditOverall != null && opts.auditOverall !== '' ? String(opts.auditOverall) : '—';
+        document.getElementById('siteCheckScoreOverall').textContent =
+          opts.scoreOverall != null && opts.scoreOverall !== '' ? String(opts.scoreOverall) : '—';
+        const note = document.getElementById('siteCheckNote');
+        if (opts.note) {
+          note.textContent = opts.note;
+          note.style.display = 'block';
+        } else {
+          note.textContent = '';
+          note.style.display = 'none';
+        }
+      }
+
+      document.getElementById('saveToken').onclick = function () {
+        const v = document.getElementById('bearer').value.trim();
+        if (v) localStorage.setItem(LS_KEY, v);
+        else localStorage.removeItem(LS_KEY);
+        showFlash('Token saved (or cleared if empty).', true);
+      };
+      document.getElementById('clearToken').onclick = function () {
+        document.getElementById('bearer').value = '';
+        localStorage.removeItem(LS_KEY);
+        showFlash('Token cleared.', true);
+      };
+      const existing = localStorage.getItem(LS_KEY);
+      if (existing) document.getElementById('bearer').value = existing;
+
+      async function ensureLeadsLoaded() {
+        const iframe = document.getElementById('leadsFrame');
+        if (iframe.dataset.loaded === '1') return;
+        const hint = document.getElementById('leadsLoadHint');
+        hint.textContent = 'Loading leads…';
+        try {
+          const r = await fetch('/admin/leads', { headers: getHeaders() });
+          const html = await r.text();
+          if (!r.ok) {
+            hint.textContent = 'Could not load leads (' + r.status + '). Open /admin/leads in a new tab.';
+            return;
+          }
+          iframe.srcdoc = html;
+          iframe.dataset.loaded = '1';
+          hint.textContent = '';
+        } catch (err) {
+          hint.textContent = 'Failed: ' + (err.message || err);
+        }
+      }
+
+      document.querySelectorAll('#nav a').forEach((a) => {
+        a.addEventListener('click', (e) => {
+          e.preventDefault();
+          const id = a.getAttribute('data-panel');
+          document.querySelectorAll('#nav a').forEach((x) => x.classList.remove('active'));
+          a.classList.add('active');
+          document.querySelectorAll('.panel').forEach((p) => p.classList.remove('active'));
+          document.getElementById('panel-' + id).classList.add('active');
+          if (id === 'leads') ensureLeadsLoaded();
+        });
+      });
+
+      function renderStats(summary) {
+        const el = document.getElementById('overviewStats');
+        el.innerHTML = '';
+        if (!summary) return;
+        const w = summary.weeklyScoring || {};
+        const rows = [
+          ['Audit rows', summary.audits.totalRecords, summary.audits.newestCreatedAt ? 'Newest: ' + summary.audits.newestCreatedAt.slice(0, 10) : ''],
+          ['Pipeline domains', summary.pipeline.domainsTracked, ''],
+          ['Session leads', summary.sessionLeads.count, 'leads.json'],
+          ['Weekly eligible', w.eligibleDomains, 'Cron: ' + (w.cron || '')],
+          ['Tracked competitor owners', summary.competitors.ownerDomainsTracked, ''],
+          ['Fix-tracker domains', summary.fixTracker.domainsWithItems, ''],
+          ['Score history rows', summary.scoreHistory.entries, ''],
+          ['Outbox rows', summary.emailOutbox.totalRows, JSON.stringify(summary.emailOutbox.byState || {})]
+        ];
+        rows.forEach(([label, val, hint]) => {
+          const stat = document.createElement('div');
+          stat.className = 'stat';
+
+          const labelDiv = document.createElement('div');
+          labelDiv.className = 'label';
+          labelDiv.textContent = label;
+          stat.appendChild(labelDiv);
+
+          const valueDiv = document.createElement('div');
+          valueDiv.className = 'value';
+          valueDiv.textContent = (val != null ? String(val) : '');
+          stat.appendChild(valueDiv);
+
+          if (hint) {
+            const hintDiv = document.createElement('div');
+            hintDiv.className = 'hint';
+            hintDiv.textContent = hint;
+            stat.appendChild(hintDiv);
+          }
+          el.appendChild(stat);
+        });
+      }
+
+      function renderOutboxTail(summary) {
+        const host = document.getElementById('outboxTail');
+        host.innerHTML = '';
+        const tail = (summary && summary.emailOutbox && summary.emailOutbox.tail) || [];
+        if (!tail.length) {
+          const p = document.createElement('p');
+          p.style.color = 'var(--admin-muted)';
+          p.textContent = 'No outbox rows.';
+          host.appendChild(p);
+          return;
+        }
+        const table = document.createElement('table');
+        table.className = 'mini';
+
+        const thead = document.createElement('thead');
+        const trHead = document.createElement('tr');
+        ['State', 'Type', 'To', 'Subject', 'Queued'].forEach(h => {
+          const th = document.createElement('th');
+          th.textContent = h;
+          trHead.appendChild(th);
+        });
+        thead.appendChild(trHead);
+        table.appendChild(thead);
+
+        const tbody = document.createElement('tbody');
+        tail.forEach((r) => {
+          const tr = document.createElement('tr');
+          const vals = [
+            r.state || '',
+            r.type || '',
+            (r.to || '').slice(0, 28),
+            r.subject || '',
+            (r.queuedAt || '').slice(0, 19)
+          ];
+          vals.forEach(v => {
+            const td = document.createElement('td');
+            td.textContent = v;
+            tr.appendChild(td);
+          });
+          tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        host.appendChild(table);
+      }
+
+      async function refreshSummary() {
+        const { res, data } = await fetchJson('/api/admin/summary');
+        if (!res.ok) {
+          document.getElementById('summaryOut').textContent = JSON.stringify(data, null, 2);
+          if (res.status === 403 && data && data.error === 'forbidden') {
+            showFlash('Summary failed: save the Bearer token for this host.', false);
+          } else {
+            showFlash('Summary failed: ' + res.status, false);
+          }
+          return;
+        }
+        const s = data.summary;
+        renderStats(s);
+        renderOutboxTail(s);
+        const mem = data.lastWeeklyRunInMemory;
+        const merged = Object.assign({}, s, { lastWeeklyRunInMemory: mem });
+        document.getElementById('summaryOut').textContent = JSON.stringify(merged, null, 2);
+      }
+
+      document.getElementById('btnRefreshSummary').onclick = refreshSummary;
+      document.getElementById('btnHealth').onclick = async function () {
+        const { res, data } = await fetchJson('/api/score/health');
+        document.getElementById('healthOut').textContent = JSON.stringify(data, null, 2);
+        if (!res.ok) showFlash('Health request failed: ' + res.status, false);
+      };
+
+      document.getElementById('btnDryRun').onclick = async function () {
+        const btn = document.getElementById('btnDryRun');
+        btn.disabled = true;
+        try {
+          const { res, data } = await fetchJson('/api/score/run-weekly?dryRun=1');
+          document.getElementById('weeklyOut').textContent = JSON.stringify(data, null, 2);
+          if (!res.ok) showFlash('Dry run failed: ' + res.status, false);
+          else showFlash('Dry run complete.', true);
+        } finally {
+          btn.disabled = false;
+        }
+      };
+
+      document.getElementById('btnLiveRun').onclick = async function () {
+        if (!confirm('Run LIVE weekly scoring? This will write score history and may send/trigger weekly emails for eligible domains.')) return;
+        const btn = document.getElementById('btnLiveRun');
+        btn.disabled = true;
+        try {
+          const { res, data } = await fetchJson('/api/score/run-weekly?dryRun=0');
+          document.getElementById('weeklyOut').textContent = JSON.stringify(data, null, 2);
+          if (!res.ok) showFlash('Live run failed: ' + res.status, false);
+          else showFlash('Live run finished. Check weeklyOut JSON and logs.', true);
+          await refreshSummary();
+        } finally {
+          btn.disabled = false;
+        }
+      };
+
+      function probeDomain() {
+        const d = document.getElementById('probeDomain').value.trim().replace(/^https?:\/\//, '').split('/')[0];
+        if (!d) {
+          showFlash('Enter a domain.', false);
+          return null;
+        }
+        return d;
+      }
+
+      function writeProbeResult(res, data) {
+        showApiProbeCard(res.ok ? 'Inspector response' : 'Inspector error (' + res.status + ')', res.ok);
+        document.getElementById('probeOut').textContent = JSON.stringify({ status: res.status, data }, null, 2);
+        try {
+          document.querySelector('#siteCheckCard details.raw-json').open = true;
+        } catch (e) { /* ignore */ }
+        if (res.status === 404) {
+          if (data && data.hint) {
+            showFlash('404 — ' + String(data.hint), false);
+          } else {
+            const detail = (data && (data.error || data.message)) ? String(data.error || data.message) + ' ' : '';
+            showFlash('404 — ' + detail + 'Run Site check first or use Debug lookup.', false);
+          }
+        }
+        if (res.status === 403 && data && data.error === 'membership_required') {
+          showFlash('403 — member-only route. Use operator buttons above.', false);
+        } else if (res.status === 403 && data && data.error === 'forbidden') {
+          showFlash('403 — missing or invalid Bearer token for this host.', false);
+        }
+      }
+
+      document.getElementById('btnAuditDebug').onclick = async function () {
+        const d = probeDomain();
+        if (!d) return;
+        const { res, data } = await fetchJson('/api/admin/audits/debug?domain=' + encodeURIComponent(d));
+        showApiProbeCard(res.ok ? 'Audit file debug' : 'Debug error (' + res.status + ')', res.ok);
+        document.getElementById('probeOut').textContent = JSON.stringify({ status: res.status, data }, null, 2);
+        try {
+          document.querySelector('#siteCheckCard details.raw-json').open = true;
+        } catch (e) { /* ignore */ }
+        if (res.ok && data && data.matchCount === 0 && data.totalRecords > 0) {
+          showFlash('No match for queryRoot "' + (data.queryRoot || '') + '" but file has ' + data.totalRecords + ' rows. Compare with recentRoots in JSON.', false);
+        } else if (res.ok && data && data.matchCount > 0) {
+          showFlash('Found ' + data.matchCount + ' audit(s) for this root. GET buttons should work.', true);
+        } else if (res.ok && data && data.totalRecords === 0) {
+          showFlash('Audit file empty — run Site check or set GEONEO_AUDITS_PATH.', false);
+        }
+      };
+
+      document.getElementById('btnProbeScore').onclick = async function () {
+        const d = probeDomain();
+        if (!d) return;
+        const { res, data } = await fetchJson('/api/admin/score?domain=' + encodeURIComponent(d) + '&persist=0');
+        writeProbeResult(res, data);
+      };
+      document.getElementById('btnProbeHistory').onclick = async function () {
+        const d = probeDomain();
+        if (!d) return;
+        const { res, data } = await fetchJson('/api/admin/score/history?domain=' + encodeURIComponent(d));
+        writeProbeResult(res, data);
+      };
+      document.getElementById('btnProbeBrief').onclick = async function () {
+        const d = probeDomain();
+        if (!d) return;
+        const { res, data } = await fetchJson('/api/admin/member/brief?domain=' + encodeURIComponent(d));
+        writeProbeResult(res, data);
+      };
+      document.getElementById('btnProbeTech').onclick = async function () {
+        const d = probeDomain();
+        if (!d) return;
+        const { res, data } = await fetchJson('/api/admin/member/technical?domain=' + encodeURIComponent(d));
+        writeProbeResult(res, data);
+      };
+      document.getElementById('btnProbeComp').onclick = async function () {
+        const d = probeDomain();
+        if (!d) return;
+        const { res, data } = await fetchJson('/api/admin/competitors/dashboard?domain=' + encodeURIComponent(d));
+        writeProbeResult(res, data);
+      };
+      document.getElementById('btnProbeFix').onclick = async function () {
+        const d = probeDomain();
+        if (!d) return;
+        const { res, data } = await fetchJson('/api/admin/fix-tracker?domain=' + encodeURIComponent(d));
+        writeProbeResult(res, data);
+      };
+
+      document.getElementById('btnMemberScore').onclick = async function () {
+        const d = probeDomain();
+        if (!d) return;
+        const persist = document.getElementById('memberPersistScore').checked ? '1' : '0';
+        const { res, data } = await fetchJson('/api/score?domain=' + encodeURIComponent(d) + '&persist=' + persist);
+        writeProbeResult(res, data);
+      };
+      document.getElementById('btnMemberHistory').onclick = async function () {
+        const d = probeDomain();
+        if (!d) return;
+        const { res, data } = await fetchJson('/api/score/history?domain=' + encodeURIComponent(d));
+        writeProbeResult(res, data);
+      };
+      document.getElementById('btnMemberBrief').onclick = async function () {
+        const d = probeDomain();
+        if (!d) return;
+        const { res, data } = await fetchJson('/api/member/brief?domain=' + encodeURIComponent(d));
+        writeProbeResult(res, data);
+      };
+      document.getElementById('btnMemberTech').onclick = async function () {
+        const d = probeDomain();
+        if (!d) return;
+        const { res, data } = await fetchJson('/api/member/technical?domain=' + encodeURIComponent(d));
+        writeProbeResult(res, data);
+      };
+      document.getElementById('btnMemberComp').onclick = async function () {
+        const d = probeDomain();
+        if (!d) return;
+        const { res, data } = await fetchJson('/api/competitors/dashboard?domain=' + encodeURIComponent(d));
+        writeProbeResult(res, data);
+      };
+      document.getElementById('btnMemberFix').onclick = async function () {
+        const d = probeDomain();
+        if (!d) return;
+        const { res, data } = await fetchJson('/api/fix-tracker?domain=' + encodeURIComponent(d));
+        writeProbeResult(res, data);
+      };
+
+      function buildFullAuditSearchParams() {
+        const p = new URLSearchParams();
+        p.set('queryType', document.getElementById('auditQueryType').value);
+        p.set('package', document.getElementById('auditPackage').value);
+        if (document.getElementById('auditInternalMode').checked) p.set('internalMode', '1');
+        const url = document.getElementById('auditUrl').value.trim();
+        if (url) p.set('url', url);
+        function setIf(id, key) {
+          const v = document.getElementById(id).value.trim();
+          if (v) p.set(key, v);
+        }
+        setIf('auditIndustry', 'industry');
+        setIf('auditBusinessName', 'businessName');
+        setIf('auditCity', 'city');
+        setIf('auditState', 'state');
+        setIf('auditZip', 'zip');
+        if (document.getElementById('auditPackage').value === 'free') {
+          setIf('auditContactName', 'contactName');
+          setIf('auditBusinessEmail', 'businessEmail');
+        }
+        return p;
+      }
+
+      document.getElementById('btnSimpleCheck').onclick = async function () {
+        const btn = document.getElementById('btnSimpleCheck');
+        const label = document.getElementById('btnSimpleCheckLabel');
+        const raw = document.getElementById('simpleSiteUrl').value.trim();
+        if (!raw) {
+          showFlash('Paste a website URL.', false);
+          return;
+        }
+        let fullUrl;
+        try {
+          fullUrl = /^https?:\/\//i.test(raw) ? raw : 'https://' + raw;
+          new URL(fullUrl);
+        } catch (e) {
+          showFlash('That does not look like a valid URL.', false);
+          return;
+        }
+        btn.disabled = true;
+        label.textContent = 'Running…';
+        try {
+          const p = new URLSearchParams();
+          p.set('queryType', 'website');
+          p.set('package', 'admin');
+          p.set('internalMode', '1');
+          p.set('url', fullUrl);
+          const auditRes = await fetchJson('/api/audit?' + p.toString());
+          if (!auditRes.res.ok) {
+            renderSimpleSiteCheckResult({
+              title: 'Audit failed',
+              stateClass: 'state-err',
+              domain: '—',
+              auditId: '—',
+              auditOverall: '—',
+              scoreOverall: '—',
+              note: 'HTTP ' + auditRes.res.status + ' — see JSON.'
+            });
+            document.getElementById('probeOut').textContent = JSON.stringify(
+              { step: 'audit', status: auditRes.res.status, data: auditRes.data },
+              null,
+              2
+            );
+            try {
+              document.querySelector('#siteCheckCard details.raw-json').open = true;
+            } catch (e) { /* ignore */ }
+            showFlash('Audit request failed.', false);
+            return;
+          }
+          const ad = auditRes.data;
+          let host = '';
+          try {
+            host = new URL(fullUrl).hostname.toLowerCase().replace(/^www\./, '');
+          } catch (e) { /* ignore */ }
+          if (host) document.getElementById('probeDomain').value = host;
+
+          const dash = ad.dashboard || {};
+          const estimated = dash.dataQuality === 'estimated';
+          const partial = estimated || Boolean(ad.fetchDebug);
+
+          if (!ad.saved) {
+            flashAuditSaveResult(auditRes.res, ad);
+            renderSimpleSiteCheckResult({
+              title: partial ? 'Audit finished (partial)' : 'Audit finished',
+              stateClass: 'state-warn',
+              showNotSaved: true,
+              showFallback: partial,
+              domain: host || '—',
+              auditId: ad.auditId || '—',
+              auditOverall: ad.scores && ad.scores.overall != null ? ad.scores.overall : '—',
+              scoreOverall: '—',
+              note: (ad.saveError ? String(ad.saveError) + ' ' : '') +
+                (ad.fetchDebug ? 'Details: ' + String(ad.fetchDebug) : '')
+            });
+            document.getElementById('probeOut').textContent = JSON.stringify(ad, null, 2);
+            try {
+              document.querySelector('#siteCheckCard details.raw-json').open = true;
+            } catch (e) { /* ignore */ }
+            return;
+          }
+
+          const scoreRes = await fetchJson(
+            '/api/admin/score?domain=' + encodeURIComponent(host) + '&persist=0'
+          );
+          const scoreNum =
+            scoreRes.res.ok && scoreRes.data && scoreRes.data.score && scoreRes.data.score.overall != null
+              ? scoreRes.data.score.overall
+              : null;
+          const merged = {
+            ok: scoreRes.res.ok,
+            domain: host,
+            auditId: ad.auditId,
+            saved: true,
+            score: scoreNum,
+            scoreStatus: scoreRes.res.status,
+            scoreRaw: scoreRes.res.ok ? undefined : scoreRes.data,
+            auditOverall: ad.scores && ad.scores.overall,
+            fetchDebug: ad.fetchDebug || null,
+            dashboard: { dataQuality: dash.dataQuality, sourceNote: dash.sourceNote }
+          };
+          if (merged.scoreRaw === undefined) delete merged.scoreRaw;
+          document.getElementById('probeOut').textContent = JSON.stringify(merged, null, 2);
+
+          const scoreOk = scoreRes.res.ok;
+          try {
+            const det = document.querySelector('#siteCheckCard details.raw-json');
+            if (det) det.open = !scoreOk || partial;
+          } catch (e) { /* ignore */ }
+
+          renderSimpleSiteCheckResult({
+            title: scoreOk ? 'Done' : 'Saved — score request failed',
+            stateClass: scoreOk ? (partial ? 'state-warn' : 'state-ok') : 'state-warn',
+            showSaved: true,
+            showFallback: partial,
+            domain: host,
+            auditId: ad.auditId || '—',
+            auditOverall: ad.scores && ad.scores.overall != null ? ad.scores.overall : '—',
+            scoreOverall: scoreNum != null ? scoreNum : '—',
+            note: !scoreOk
+              ? 'Score HTTP ' + scoreRes.res.status + ' — audit is on disk; try Debug lookup.'
+              : (partial
+                ? ('Live crawl had issues; values may be estimated' +
+                  (ad.fetchDebug || dash.sourceNote ? ': ' + String(ad.fetchDebug || dash.sourceNote) : '') +
+                  '.')
+                : '')
+          });
+          if (scoreOk) {
+            flashAuditSaveResult(auditRes.res, ad);
+            if (!partial) {
+              showFlash('Done.', true);
+            } else {
+              showFlash('Saved (partial scan).', true);
+            }
+          } else {
+            showFlash('Saved; score error ' + scoreRes.res.status + '.', false);
+          }
+        } catch (err) {
+          renderSimpleSiteCheckResult({
+            title: 'Request failed',
+            stateClass: 'state-err',
+            domain: '—',
+            auditId: '—',
+            auditOverall: '—',
+            scoreOverall: '—',
+            note: String(err.message || err)
+          });
+          document.getElementById('probeOut').textContent = String(err.message || err);
+          try {
+            document.querySelector('#siteCheckCard details.raw-json').open = true;
+          } catch (e) { /* ignore */ }
+          showFlash('Request failed.', false);
+        } finally {
+          btn.disabled = false;
+          label.textContent = 'Run';
+        }
+      };
+
+      document.getElementById('btnRunAudit').onclick = async function () {
+        const btn = document.getElementById('btnRunAudit');
+        btn.disabled = true;
+        try {
+          const p = buildFullAuditSearchParams();
+          const { res, data } = await fetchJson('/api/audit?' + p.toString());
+          writeCatalogResult(res, data);
+          if (res.ok) {
+            flashAuditSaveResult(res, data);
+            const url = document.getElementById('auditUrl').value.trim();
+            if (url) {
+              try {
+                const withProto = /^https?:\/\//i.test(url) ? url : 'https://' + url;
+                const host = new URL(withProto).hostname.toLowerCase().replace(/^www\./, '');
+                if (host) document.getElementById('probeDomain').value = host;
+              } catch (e) { /* ignore */ }
+            }
+          }
+        } catch (err) {
+          document.getElementById('catalogOut').textContent = String(err.message || err);
+          showFlash('Audit request failed.', false);
+        } finally {
+          btn.disabled = false;
+        }
+      };
+
+      document.getElementById('btnOpenAuditReport').onclick = function () {
+        const id = document.getElementById('auditReportId').value.trim();
+        if (!id) return showFlash('Enter audit id.', false);
+        window.open('/api/audit-report?id=' + encodeURIComponent(id), '_blank', 'noopener');
+      };
+      document.getElementById('btnDownloadAuditReport').onclick = function () {
+        const id = document.getElementById('auditReportId').value.trim();
+        if (!id) return showFlash('Enter audit id.', false);
+        window.open('/api/audit-report/download?id=' + encodeURIComponent(id), '_blank', 'noopener');
+      };
+
+      document.getElementById('btnCitationFixer').onclick = async function () {
+        const url = document.getElementById('cfUrl').value.trim();
+        if (!url) return showFlash('Citation fixer needs url.', false);
+        const p = new URLSearchParams();
+        p.set('url', url);
+        function opt(id, key) {
+          const v = document.getElementById(id).value.trim();
+          if (v) p.set(key, v);
+        }
+        opt('cfIndustry', 'industry');
+        opt('cfCity', 'city');
+        opt('cfState', 'state');
+        opt('cfBusinessName', 'businessName');
+        const { res, data } = await fetchJson('/api/citation-fixer?' + p.toString());
+        writeCatalogResult(res, data);
+        if (res.ok) showFlash('Citation fixer OK.', true);
+      };
+
+      document.getElementById('btnNeoClub').onclick = async function () {
+        const p = new URLSearchParams();
+        const aid = document.getElementById('neoAuditId').value.trim();
+        if (aid) p.set('auditId', aid);
+        else p.set('package', document.getElementById('neoPackage').value);
+        const { res, data } = await fetchJson('/api/neo-club?' + p.toString());
+        writeCatalogResult(res, data);
+        if (res.ok) showFlash('Neo Club JSON loaded.', true);
+      };
+
+      document.getElementById('btnFixTrackerPost').onclick = async function () {
+        const raw = document.getElementById('fixTrackerPostBody').value;
+        try {
+          JSON.parse(raw);
+        } catch (e) {
+          return showFlash('Fix-tracker body is not valid JSON.', false);
+        }
+        const { res, data } = await postJsonRaw('/api/admin/fix-tracker', raw);
+        writeCatalogResult(res, data);
+        if (res.ok) showFlash('Fix-tracker POST OK.', true);
+      };
+
+      document.getElementById('btnPipelinePost').onclick = async function () {
+        const domain = document.getElementById('pipelineDomain').value.trim().replace(/^https?:\/\//, '').split('/')[0];
+        if (!domain) return showFlash('Enter pipeline domain.', false);
+        let body;
+        try {
+          body = JSON.parse(document.getElementById('pipelineBody').value);
+        } catch (e) {
+          return showFlash('Pipeline body must be JSON.', false);
+        }
+        const { res, data } = await postJson('/api/pipeline/' + encodeURIComponent(domain), body);
+        writeCatalogResult(res, data);
+        if (res.ok) showFlash('Pipeline updated.', true);
+      };
+
+      document.getElementById('btnLeadsPost').onclick = async function () {
+        let body;
+        try {
+          body = JSON.parse(document.getElementById('leadsBody').value);
+        } catch (e) {
+          return showFlash('Leads body must be JSON.', false);
+        }
+        const { res, data } = await postJson('/api/leads', body);
+        writeCatalogResult(res, data);
+        if (res.ok) showFlash('Lead saved.', true);
+      };
+
+      refreshSummary();
+    })();
+  </script>
+</body>
+</html>

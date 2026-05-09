@@ -10,9 +10,10 @@ const path = require('path');
 
 const { calculateVisibilityScore } = require('./visibilityScoring');
 const { recordScore, getLatestScore } = require('./scoreHistory');
+const { trySendWeeklyScoreReport } = require('./weeklyEmailReport');
+const { loadAuditRecords } = require('./auditLookup');
 
 const ROOT = path.join(__dirname, '..');
-const AUDITS_FILE = path.join(ROOT, 'data', 'audits.json');
 const RUNS_FILE = path.join(ROOT, 'data', 'weekly-score-runs.json');
 
 const DEFAULT_CRON = '0 3 * * 1';
@@ -21,6 +22,7 @@ const GRACE_DAYS = 30;
 const DEDUPE_DAYS = 6;
 
 let lastWeeklyRun = null;
+let weeklyScoringRunning = false;
 
 /**
  * Check if a record makes the domain eligible for weekly automated scoring.
@@ -32,12 +34,15 @@ function isEligibleForWeeklyScore(record) {
   // Rule 1: explicit membership
   if (record.productType === 'membership') return true;
 
-  // Rule 2: gold/admin with sufficient payment
+  // Rule 2: operator/admin package unlocks internal dashboard routes without a paid receipt.
   const pkg = record.purchasedPackage;
-  const paid = Number(record.amountPaid || 0);
-  if ((pkg === 'gold' || pkg === 'admin') && paid >= 99) return true;
+  if (pkg === 'admin') return true;
 
-  // Rule 3: one-time full audit grace period (within 30 days, paid >=197)
+  // Rule 3: gold with sufficient payment
+  const paid = Number(record.amountPaid || 0);
+  if (pkg === 'gold' && paid >= 99) return true;
+
+  // Rule 4: one-time full audit grace period (within 30 days, paid >=197)
   const created = record.createdAt ? new Date(record.createdAt) : null;
   if (created) {
     const daysAgo = (Date.now() - created.getTime()) / (1000 * 60 * 60 * 24);
@@ -64,13 +69,8 @@ function normalizeDomain(websiteOrUrl) {
  * Load recent audits (up to 500) and return latest per domain that is eligible.
  */
 async function getEligibleDomains() {
-  let records = [];
-  try {
-    const raw = await fs.readFile(AUDITS_FILE, 'utf8');
-    records = raw.trim() ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
+  let records = await loadAuditRecords();
+  if (!Array.isArray(records)) records = [];
 
   // Take latest 500 or all
   if (records.length > 500) {
@@ -80,7 +80,7 @@ async function getEligibleDomains() {
   // Group by domain, keep most recent
   const latestByDomain = new Map();
   for (const r of records) {
-    const domain = normalizeDomain(r.website || r.finalUrl || r.company || '');
+    const domain = normalizeDomain(r.website || r.finalUrl || '');
     if (!domain) continue;
     const existing = latestByDomain.get(domain);
     if (!existing || new Date(r.createdAt || 0) > new Date(existing.createdAt || 0)) {
@@ -102,13 +102,18 @@ async function getEligibleDomains() {
 /**
  * Score a single domain with timeout and error isolation.
  */
-async function scoreOneDomain(domain, auditRecord) {
+async function scoreOneDomain(domain, auditRecord, opts = {}) {
+  const { dryRun = false, signal } = opts;
+  if (signal && signal.aborted) {
+    return { domain, success: false, error: 'aborted before start' };
+  }
   const start = Date.now();
   try {
     // Idempotency: skip if recent score
     const latest = await getLatestScore(domain);
     if (latest) {
-      const ageDays = (Date.now() - new Date(latest.calculatedAt).getTime()) / (1000 * 60 * 60 * 24);
+      const ts = latest.calculatedAt || latest.recordedAt;
+      const ageDays = ts ? (Date.now() - new Date(ts).getTime()) / (1000 * 60 * 60 * 24) : 999;
       if (ageDays < DEDUPE_DAYS) {
         return { domain, skipped: true, reason: 'recent score exists' };
       }
@@ -134,10 +139,23 @@ async function scoreOneDomain(domain, auditRecord) {
 
     const scoreResult = calculateVisibilityScore(scoreInput);
 
-    await recordScore(domain, scoreResult);
+    if (!dryRun) {
+      if (signal && signal.aborted) {
+        return { domain, success: false, error: 'aborted before persistence' };
+      }
+      await recordScore(domain, scoreResult);
+      if (signal && signal.aborted) {
+        return { domain, success: false, error: 'aborted before email' };
+      }
+      try {
+        await trySendWeeklyScoreReport(auditRecord, scoreResult);
+      } catch (emailErr) {
+        console.warn(`[WeeklyScore] Email/outbox for ${domain}:`, emailErr.message);
+      }
+    }
 
     const duration = Date.now() - start;
-    return { domain, success: true, overall: scoreResult.overall, durationMs: duration };
+    return { domain, success: true, overall: scoreResult.overall, durationMs: duration, dryRun };
   } catch (err) {
     return { domain, success: false, error: err.message || String(err) };
   }
@@ -147,35 +165,39 @@ async function scoreOneDomain(domain, auditRecord) {
  * Main weekly scoring job.
  */
 async function runWeeklyScoring({ dryRun = false } = {}) {
-  const startedAt = new Date().toISOString();
-  console.log(`[WeeklyScore] Starting weekly scoring run at ${startedAt} (dryRun=${dryRun})`);
-
-  const eligible = await getEligibleDomains();
-  const domainsConsidered = eligible.length;
-
-  const results = [];
-  const failures = [];
-
-  for (const { domain, record } of eligible) {
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('scoring timeout after ' + SCORE_TIMEOUT_MS + 'ms')), SCORE_TIMEOUT_MS)
-    );
-
-    try {
-      const outcome = await Promise.race([
-        scoreOneDomain(domain, record),
-        timeoutPromise
-      ]);
-      results.push(outcome);
-      if (!outcome.success && !outcome.skipped) {
-        failures.push({ domain, error: outcome.error });
-      }
-    } catch (e) {
-      const fail = { domain, error: e.message };
-      results.push({ domain, success: false, error: e.message });
-      failures.push(fail);
-    }
+  if (weeklyScoringRunning) {
+    console.warn('[WeeklyScore] Overlapping run detected — skipping');
+    return { skipped: true, reason: 'already running' };
   }
+  weeklyScoringRunning = true;
+  try {
+    const startedAt = new Date().toISOString();
+    console.log(`[WeeklyScore] Starting weekly scoring run at ${startedAt} (dryRun=${dryRun})`);
+
+    const eligible = await getEligibleDomains();
+    const domainsConsidered = eligible.length;
+
+    const results = [];
+    const failures = [];
+
+    for (const { domain, record } of eligible) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), SCORE_TIMEOUT_MS);
+
+      try {
+        const outcome = await scoreOneDomain(domain, record, { dryRun, signal: controller.signal });
+        clearTimeout(timeoutId);
+        results.push(outcome);
+        if (!outcome.success && !outcome.skipped) {
+          failures.push({ domain, error: outcome.error });
+        }
+      } catch (e) {
+        clearTimeout(timeoutId);
+        const fail = { domain, error: e.name === 'AbortError' ? 'scoring timeout' : e.message };
+        results.push({ domain, success: false, error: fail.error });
+        failures.push(fail);
+      }
+    }
 
   const domainsScored = results.filter(r => r.success).length;
   const domainsSkipped = results.filter(r => r.skipped).length;
@@ -209,7 +231,13 @@ async function runWeeklyScoring({ dryRun = false } = {}) {
     try {
       const raw = await fs.readFile(RUNS_FILE, 'utf8');
       runs = raw.trim() ? JSON.parse(raw) : [];
-    } catch {}
+    } catch (e) {
+      if (e && e.code !== 'ENOENT') {
+        console.error('[WeeklyScore] Failed to read/parse runs file', RUNS_FILE, e && e.message ? e.message : e, 'raw:', (typeof raw !== 'undefined' ? raw.slice(0, 200) : ''));
+        throw e; // abort to avoid data loss
+      }
+      runs = [];
+    }
     runs.push(runLog);
     const tmp = `${RUNS_FILE}.tmp`;
     await fs.writeFile(tmp, JSON.stringify(runs, null, 2), 'utf8');
@@ -220,7 +248,10 @@ async function runWeeklyScoring({ dryRun = false } = {}) {
 
   console.log(`[WeeklyScore] Run complete: ${domainsScored} scored, ${domainsSkipped} skipped, ${failures.length} failures in ${durationMs}ms`);
 
-  return runLog;
+    return runLog;
+  } finally {
+    weeklyScoringRunning = false;
+  }
 }
 
 /**
@@ -240,5 +271,6 @@ module.exports = {
   startScheduler,
   runWeeklyScoring,
   isEligibleForWeeklyScore,
+  getEligibleDomains,
   getLastWeeklyRun: () => lastWeeklyRun
 };

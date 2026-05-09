@@ -17,6 +17,11 @@ test('isEligibleForWeeklyScore returns true for admin with amountPaid >= 99', ()
   assert.equal(isEligibleForWeeklyScore(record), true);
 });
 
+test('isEligibleForWeeklyScore returns true for operator admin audits without payment', () => {
+  const record = { purchasedPackage: 'admin', amountPaid: 0 };
+  assert.equal(isEligibleForWeeklyScore(record), true);
+});
+
 test('isEligibleForWeeklyScore returns true for one-time within 30 days and paid >=197', () => {
   const recent = new Date(Date.now() - 1000 * 60 * 60 * 24 * 10).toISOString();
   const record = { amountPaid: 197, createdAt: recent };

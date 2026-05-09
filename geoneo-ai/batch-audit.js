@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Batch audit 50 Branson businesses across 6 industries
 const http = require('http');
-const PORT = 4199;
+const PORT = 4173;
 const DELAY_MS = 3000; // 3s between audits to respect API limits
 
 const businesses = [

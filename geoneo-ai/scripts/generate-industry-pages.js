@@ -399,10 +399,11 @@ const TEMPLATE = ({ slug, name, titleCase, heroHook, painExample, sampleQueries,
     <section class="cta-section container">
       <h2>Find out where you rank — in 60 seconds, free.</h2>
       <p>Enter your business name or website. We'll show you exactly what Google, Google Maps, and ChatGPT say about you — plus the 3 changes to make this week to get more of the calls AI is currently sending to your competitors.</p>
-      <form class="scan-input-wrap" action="../both-audit.html" method="get" style="max-width:560px;margin:0 auto;">
-        <input type="text" name="url" placeholder="Your website or business name..." autocomplete="off" required />
-        <button type="submit">Run Free Scan</button>
-      </form>
+        <form class="scan-input-wrap" action="../both-audit.html" method="get" style="max-width:560px;margin:0 auto;">
+          <input type="text" name="url" placeholder="Your website or business name..." autocomplete="off" required />
+          <input type="hidden" name="industry" value="${name}" />
+          <button type="submit">Run Free Scan</button>
+        </form>
     </section>
   </main>
 

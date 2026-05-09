@@ -30,6 +30,8 @@ const {
   loadAuditRecords,
   getAuditRecordById,
   buildAuditReportHtml,
+  buildPrioritizedActionPlan,
+  buildCompetitorsFromAudit,
   isNeoClubMember,
   buildNeoClubPayload,
   runAudit,
@@ -571,9 +573,85 @@ test('searchCompetitors falls back to direct href result links', async () => {
   }
 });
 
+test('website audit persists lead to audits.json when runAudit fails (auto-save fallback)', async () => {
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'geoneo-audit-fallback-'));
+  const auditsPath = path.join(tmpRoot, 'audits.json');
+  const prevAuditsPath = process.env.GEONEO_AUDITS_PATH;
+  const prevAllowInsecure = process.env.ALLOW_INSECURE_FETCH;
+  process.env.GEONEO_AUDITS_PATH = auditsPath;
+  delete process.env.ALLOW_INSECURE_FETCH;
+
+  const deadUrl = encodeURIComponent('http://127.0.0.1:1/');
+  const qs = [
+    'queryType=website',
+    `url=${deadUrl}`,
+    'contactName=Jane',
+    'businessName=Acme+Fallback',
+    'businessEmail=jane%40acme.com',
+    'industry=Towing',
+    'city=Branson',
+    'state=MO',
+    'package=free'
+  ].join('&');
+
+  try {
+    const req = new Readable({ read() {} });
+    req.url = `/api/audit?${qs}`;
+    req.method = 'GET';
+    req.headers = { host: '127.0.0.1' };
+
+    let body = '';
+    const res = new Writable({
+      write(chunk, enc, cb) {
+        body += chunk.toString();
+        cb();
+      }
+    });
+    res.writeHead = function (statusCode, headers) {
+      this.statusCode = statusCode;
+      this.headers = headers;
+    };
+    const completed = new Promise((resolve) => {
+      res.end = function (chunk) {
+        if (chunk) body += chunk.toString();
+        resolve({
+          statusCode: this.statusCode,
+          body
+        });
+      };
+    });
+
+    await requestHandler(req, res);
+    const response = await completed;
+    const parsed = JSON.parse(response.body);
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.mode, 'website');
+    assert.equal(parsed.saved, true, 'fallback audit should auto-save so admin score/lookup succeeds');
+    assert.ok(parsed.fetchDebug, 'fetchDebug should explain fallback');
+    assert.equal(parsed.dashboard && parsed.dashboard.dataQuality, 'estimated');
+
+    const stored = JSON.parse(await fs.readFile(auditsPath, 'utf8'));
+    assert.equal(stored.length, 1);
+    assert.equal(stored[0].businessName, 'Acme Fallback');
+    assert.equal(stored[0].fullAuditResult && stored[0].fullAuditResult.auditFallback, true);
+    assert.equal(stored[0].fullAuditResult && stored[0].fullAuditResult.fallbackReason, parsed.fetchDebug);
+  } finally {
+    if (prevAuditsPath === undefined) delete process.env.GEONEO_AUDITS_PATH;
+    else process.env.GEONEO_AUDITS_PATH = prevAuditsPath;
+    if (prevAllowInsecure === undefined) delete process.env.ALLOW_INSECURE_FETCH;
+    else process.env.ALLOW_INSECURE_FETCH = prevAllowInsecure;
+    await fs.rm(tmpRoot, { recursive: true, force: true });
+  }
+});
+
 test('market audit falls back when google crawl returns no usable rows', async () => {
   await withSerpApiDisabled(async () => {
     const originalFetch = global.fetch;
+    const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'geoneo-market-audit-'));
+    const prevAuditsPath = process.env.GEONEO_AUDITS_PATH;
+    process.env.GEONEO_AUDITS_PATH = path.join(tmpRoot, 'audits.json');
     global.fetch = async (url) => {
       const value = String(url || '');
       if (value.includes('google.com/search')) {
@@ -595,7 +673,7 @@ test('market audit falls back when google crawl returns no usable rows', async (
 
     try {
       const req = new Readable({ read() {} });
-      req.url = '/api/audit?queryType=market&industry=Towing&city=Branson&state=MO&packageView=full_data';
+      req.url = '/api/audit?queryType=market&industry=Towing&city=Branson&state=MO&packageView=full_data&package=gold';
       req.method = 'GET';
       req.headers = { host: '127.0.0.1' };
 
@@ -629,13 +707,22 @@ test('market audit falls back when google crawl returns no usable rows', async (
       assert.equal(response.statusCode, 200);
       assert.equal(parsed.dashboard.dataQuality, 'estimated');
       assert.equal(parsed.dashboard.sourceNote, 'DuckDuckGo fallback (lower confidence)');
+      assert.equal(parsed.saved, true);
+      assert.ok(parsed.auditId);
       assert.equal(overview.orderedResults.length, 3);
       assert.deepEqual(
         overview.orderedResults.map((item) => item.companyName).sort(),
         ['Branson Wrecker', 'Fallback Towing', 'Ozark Roadside'].sort()
       );
+      const stored = JSON.parse(await fs.readFile(process.env.GEONEO_AUDITS_PATH, 'utf8'));
+      assert.equal(stored.length, 1);
+      assert.equal(stored[0].fullAuditResult.queryType, 'market');
+      assert.equal(stored[0].market, 'Branson, MO');
     } finally {
       global.fetch = originalFetch;
+      if (prevAuditsPath === undefined) delete process.env.GEONEO_AUDITS_PATH;
+      else process.env.GEONEO_AUDITS_PATH = prevAuditsPath;
+      await fs.rm(tmpRoot, { recursive: true, force: true });
     }
   });
 });
@@ -667,7 +754,7 @@ test('market audit falls back to bing when google and duckduckgo fail', async ()
 
     try {
       const req = new Readable({ read() {} });
-      req.url = '/api/audit?queryType=market&industry=Towing&city=Branson&state=MO&packageView=full_data';
+      req.url = '/api/audit?queryType=market&industry=Towing&city=Branson&state=MO&packageView=full_data&package=gold';
       req.method = 'GET';
       req.headers = { host: '127.0.0.1' };
 
@@ -732,7 +819,7 @@ test('market audit request returns ranking rows when Google results are parsed',
 
     try {
       const req = new Readable({ read() {} });
-      req.url = '/api/audit?queryType=market&industry=Towing&city=Branson&state=MO&zip=65616&packageView=full_data';
+      req.url = '/api/audit?queryType=market&industry=Towing&city=Branson&state=MO&zip=65616&packageView=full_data&package=gold';
       req.method = 'GET';
       req.headers = { host: '127.0.0.1' };
 
@@ -1191,7 +1278,8 @@ test('runAudit supports quick URL-only flow and returns auto-detected site profi
 
 test('runAudit uses manual search query override for competitor discovery', async () => {
   const originalFetch = global.fetch;
-  let capturedSearchUrl = '';
+  /** All Google SERP fetches (competitor discovery runs before local visibility, which uses its own queries). */
+  const googleSearchUrls = [];
   global.fetch = async (url) => {
     const target = String(url);
     if (target.startsWith('https://example.com')) {
@@ -1203,7 +1291,7 @@ test('runAudit uses manual search query override for competitor discovery', asyn
       };
     }
     if (target.includes('google.com/search')) {
-      capturedSearchUrl = target;
+      googleSearchUrls.push(target);
       return {
         ok: true,
         status: 200,
@@ -1236,7 +1324,10 @@ test('runAudit uses manual search query override for competitor discovery', asyn
     const result = await runAudit('example.com', { searchQuery: 'best roofing contractor dallas tx' });
     assert.equal(result.searchSnapshot.query, 'best roofing contractor dallas tx');
     assert.equal(result.searchSnapshot.querySource, 'manual');
-    assert.match(capturedSearchUrl, /best%20roofing%20contractor%20dallas%20tx/);
+    assert.ok(
+      googleSearchUrls.some((u) => /best%20roofing%20contractor%20dallas%20tx/.test(u)),
+      `expected manual query in a Google SERP URL; got: ${googleSearchUrls.join(' | ')}`
+    );
   } finally {
     global.fetch = originalFetch;
   }
@@ -1607,4 +1698,44 @@ test('buildNeoClubPayload returns full content for gold package', () => {
   assert.ok(payload.neoClub.weeklyStrategies.length >= 2);
   assert.ok(Array.isArray(payload.neoClub.expertTopics));
   assert.ok(payload.neoClub.expertTopics.length >= 6);
+});
+
+// Step 12: Substantive tests for new features (A-grade effort)
+test('buildAuditRecord sets productType correctly', () => {
+  const record = buildAuditRecord({
+    businessName: 'Test Co',
+    businessEmail: 'test@example.com',
+    website: 'https://example.com',
+    productType: 'one-time',
+    amountPaid: 79
+  });
+  assert.equal(record.productType, 'one-time');
+  assert.equal(record.amountPaid, 79);
+});
+
+test('buildPrioritizedActionPlan returns exactly 3 actions with timeEstimate and lift', () => {
+  const actions = buildPrioritizedActionPlan([
+    { key: 'h1', solutionTitle: 'Fix H1' },
+    { key: 'trust', solutionTitle: 'Add trust signals' },
+    { key: 'content', solutionTitle: 'Expand service page' }
+  ]);
+  assert.equal(actions.length, 3);
+  actions.forEach(a => {
+    assert.ok(a.timeEstimate);
+    assert.ok(a.lift);
+  });
+});
+
+test('buildCompetitorsFromAudit adds tier classification', () => {
+  const fakeResult = {
+    searchSnapshot: {
+      competitors: [
+        { name: 'Springfield Plumbing Pros', url: 'https://springfieldplumbing.com' },
+        { name: 'Missouri Elite Services', url: 'https://moelite.com' }
+      ]
+    }
+  };
+  const comps = buildCompetitorsFromAudit(fakeResult, { city: 'Springfield', state: 'MO', industry: 'plumbing' });
+  assert.ok(comps.length > 0);
+  assert.ok(comps.some(c => c.tier === 'local' || c.tier === 'regional' || c.tier === 'national'));
 });

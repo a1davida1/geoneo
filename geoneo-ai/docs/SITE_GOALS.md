@@ -18,7 +18,7 @@ See `POSITIONING.md` for the full target-vertical list and geography.
 1. Convert free-scan visitors into Starter-tier paying customers ($99/mo).
 2. Deliver a scannable, owner-readable audit that produces a "do this week"
    action list rather than a dashboard.
-3. Guide Starter customers to Growth ($249) or Multi-market ($499) tiers
+3. Guide Starter customers to Growth ($199) or Multi-market ($399) tiers
    as their service area grows.
 4. Capture enough intake data on every lead that manual sales follow-up
    takes less than 2 minutes per lead.

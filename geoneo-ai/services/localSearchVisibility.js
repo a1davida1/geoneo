@@ -52,23 +52,21 @@ function inferIndustry({
     return keywords[0];
   }
   const source = toLabel(`${title || ''} ${h1 || ''}`);
-  // Target verticals per docs/POSITIONING.md (Year 1):
-  // plumbing, HVAC, roofing, electrical, pest control, tree service,
-  // garage door, restoration. Secondary patterns kept for broader coverage.
+  // Improved inference - more conservative to avoid wrong defaults like "plumber"
   const patterns = [
-    { pattern: /roof|roofing/, value: 'roofing' },
-    { pattern: /plumb|drain|water heater|sewer/, value: 'plumber' },
-    { pattern: /hvac|heating|cooling|air conditioning|furnace|\bac\b/, value: 'hvac' },
-    { pattern: /electri/, value: 'electrician' },
-    { pattern: /pest|exterminat|termite|rodent/, value: 'pest control' },
-    { pattern: /tree service|tree removal|stump|arborist/, value: 'tree service' },
-    { pattern: /garage door/, value: 'garage door' },
-    { pattern: /restoration|water damage|fire damage|mold remediation|mitigation/, value: 'restoration' },
-    // Secondary (not Year-1 target but we still detect them to avoid falling back to 'local service'):
-    { pattern: /dental|dentist/, value: 'dentist' },
+    { pattern: /roofing|roof repair|shingle/, value: 'roofing' },
+    { pattern: /plumbing|plumber|drain cleaning|water heater|sewer/, value: 'plumbing' },
+    { pattern: /hvac|heating.*cooling|air conditioning|furnace|ac repair/, value: 'hvac' },
+    { pattern: /electrician|electrical|wiring|panel upgrade/, value: 'electrical' },
+    { pattern: /pest control|exterminator|termite|rodent control/, value: 'pest control' },
+    { pattern: /tree service|tree removal|stump grinding|arborist/, value: 'tree service' },
+    { pattern: /garage door|garage door repair/, value: 'garage door' },
+    { pattern: /restoration|water damage|fire damage|mold remediation/, value: 'restoration' },
+    // Secondary verticals
+    { pattern: /dentist|dental/, value: 'dentist' },
     { pattern: /attorney|law firm|legal/, value: 'attorney' },
-    { pattern: /landscap|lawn/, value: 'landscaping' },
-    { pattern: /cleaning|maid/, value: 'cleaning service' }
+    { pattern: /landscaping|lawn care/, value: 'landscaping' },
+    { pattern: /cleaning service|maid service/, value: 'cleaning service' }
   ];
   const found = patterns.find((entry) => entry.pattern.test(source));
   return found ? found.value : 'local service';

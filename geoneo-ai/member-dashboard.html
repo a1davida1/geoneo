@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your Visibility Dashboard | GeoNeo</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .dashboard-container { max-width: 1140px; margin: 0 auto; padding: 2rem 1rem; }
+    .score-hero { text-align: center; margin-bottom: 3rem; padding: 2.5rem; background: var(--surface); border-radius: 20px; }
+    .score-value { font-size: 5.8rem; font-weight: 700; line-height: 1; color: var(--brand); }
+    .pillar-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.25rem; }
+    .pillar-card { background: var(--surface); padding: 1.35rem; border-radius: 14px; border: 1px solid var(--line); }
+    .pillar-score { font-size: 2.4rem; font-weight: 700; margin-top: 0.4rem; }
+    .recommendations { background: var(--surface); padding: 1.75rem; border-radius: 16px; margin-top: 2.5rem; border: 1px solid var(--line); }
+    .history-table { width: 100%; border-collapse: collapse; margin-top: 1.5rem; }
+    .history-table th, .history-table td { padding: 14px 12px; border-bottom: 1px solid var(--line); text-align: left; }
+    .trend { font-size: 1rem; margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+  <header class="site-header container">
+    <a class="brand" href="index.html"><span class="brand-mark">G</span> <span class="brand-text">GeoNeo</span></a>
+    <nav>
+      <a href="index.html">Home</a>
+      <a href="pricing.html">Pricing</a>
+      <a href="neo-club.html">Visibility Club</a>
+      <a href="competitor-intelligence.html" id="navCompetitors">Competitors</a>
+    </nav>
+  </header>
+
+  <main class="dashboard-container">
+    <div class="dashboard-header">
+      <h1>Your Visibility Dashboard</h1>
+      <p class="lead">Track visibility, weekly actions, technical signals, and fix progress. <a href="#" id="changeDomainLink" style="color:var(--brand);">Use a different domain</a></p>
+    </div>
+
+    <div id="domainInputSection" style="max-width:520px; margin:0 auto 3rem; text-align:center;">
+      <input id="domainInput" type="text" placeholder="yourbusiness.com" style="padding:14px 18px; width:100%; border:1px solid var(--line); border-radius:12px; font-size:1.1rem; background:var(--surface); color:var(--ink);">
+      <button onclick="loadDashboard()" class="btn btn-hot" style="margin-top:14px; width:100%;">Load My Visibility Dashboard</button>
+      <p id="lastDomainHint" style="font-size:0.85rem; color:var(--muted); margin-top:0.75rem;"></p>
+    </div>
+
+    <div id="dashboardToolbar" style="display:none; text-align:center; margin-bottom:1.5rem; gap:0.75rem; flex-wrap:wrap;" class="container">
+      <button type="button" onclick="persistSnapshot()" class="btn" id="btnSnapshot">Save score snapshot</button>
+      <a class="btn" id="btnCompetitors" href="competitor-intelligence.html">Open competitor intelligence</a>
+    </div>
+
+    <div id="dashboardContent" style="display:none;">
+      <!-- Score Hero -->
+      <div class="score-hero">
+        <div id="overallScore" class="score-value">--</div>
+        <div class="score-label">Current GeoNeo Visibility Score</div>
+        <div id="scoreDate" style="margin-top:0.75rem; color:var(--muted);"></div>
+        <div id="scoreTrend" class="trend"></div>
+      </div>
+
+      <!-- Pillar Breakdown -->
+      <h3 style="margin-bottom:1rem;">Score Breakdown</h3>
+      <div id="pillarGrid" class="pillar-grid"></div>
+
+      <!-- Weekly actions -->
+      <div class="recommendations" id="weeklyBriefSection" style="display:none;">
+        <h3 style="margin-top:0;">This week’s prioritized actions</h3>
+        <p class="form-note" style="margin-top:0;">Pulled from your latest GeoNeo audit action plan. Do these in order when possible.</p>
+        <ol id="weeklyActionsList" style="margin:1rem 0 0; padding-left:1.25rem; line-height:1.75;"></ol>
+      </div>
+
+      <!-- AI citation -->
+      <div class="recommendations" id="aiCitationSection" style="display:none; margin-top:2rem;">
+        <h3 style="margin-top:0;">AI citation readiness</h3>
+        <p id="aiCitationSummary" class="form-note"></p>
+        <ul id="aiCitationList" style="margin:1rem 0 0; padding-left:1.25rem; line-height:1.65;"></ul>
+      </div>
+
+      <!-- Technical deep -->
+      <div class="recommendations" id="technicalSection" style="display:none; margin-top:2rem;">
+        <h3 style="margin-top:0;">Technical SEO signals (deep pass)</h3>
+        <p id="technicalSummary" class="form-note"></p>
+        <ul id="technicalFindings" style="margin:1rem 0 0; padding-left:1.25rem; line-height:1.65;"></ul>
+      </div>
+
+      <!-- Fix tracker -->
+      <div class="recommendations" id="fixTrackerSection" style="display:none; margin-top:2rem;">
+        <h3 style="margin-top:0;">Fix implementation tracker</h3>
+        <p class="form-note">Mark fixes done and optionally log score before/after to measure impact.</p>
+        <div id="fixTrackerForm" style="margin:1rem 0; display:grid; gap:10px; max-width:520px;">
+          <input id="fixTitle" type="text" placeholder="Fix title (e.g. Add LocalBusiness schema)" style="padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:var(--surface); color:var(--ink);" />
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <input id="fixScoreBefore" type="number" placeholder="Score before (optional)" style="padding:10px 12px; width:160px; border:1px solid var(--line); border-radius:10px; background:var(--surface); color:var(--ink);" />
+            <input id="fixScoreAfter" type="number" placeholder="Score after (optional)" style="padding:10px 12px; width:160px; border:1px solid var(--line); border-radius:10px; background:var(--surface); color:var(--ink);" />
+          </div>
+          <button type="button" class="btn btn-hot" onclick="addFixItem()" style="max-width:200px;">Add / update fix</button>
+        </div>
+        <table class="history-table" id="fixTrackerTable" style="margin-top:1rem;">
+          <thead><tr><th>Fix</th><th>Status</th><th>Before</th><th>After</th><th></th></tr></thead>
+          <tbody id="fixTrackerBody"></tbody>
+        </table>
+      </div>
+
+      <!-- Recommendations (legacy pillar copy removed — weekly brief replaces primary list) -->
+      <div class="recommendations" id="pillarRecsWrap" style="display:none;">
+        <h3 style="margin-top:0;">Pillar quick tips</h3>
+        <div id="recommendationsList" style="margin-top:1rem; line-height:1.75;"></div>
+      </div>
+
+      <!-- History -->
+      <h3 style="margin-top:3rem;">Score History</h3>
+      <table class="history-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Overall Score</th>
+            <th>Strongest Pillar</th>
+            <th>Weakest Pillar</th>
+            <th>Change</th>
+          </tr>
+        </thead>
+        <tbody id="historyBody"></tbody>
+      </table>
+    </div>
+  </main>
+
+  <script>
+    let currentDomain = '';
+
+    function saveLastDomain(domain) {
+      localStorage.setItem('geoneo_last_domain', domain);
+    }
+    function getLastDomain() {
+      return localStorage.getItem('geoneo_last_domain');
+    }
+
+    document.getElementById('changeDomainLink').addEventListener('click', (e) => {
+      e.preventDefault();
+      document.getElementById('domainInputSection').style.display = 'block';
+      document.getElementById('dashboardContent').style.display = 'none';
+      document.getElementById('dashboardToolbar').style.display = 'none';
+    });
+
+    async function persistSnapshot() {
+      if (!currentDomain) return;
+      const res = await fetch(`/api/score?domain=${encodeURIComponent(currentDomain)}&persist=1`);
+      const data = await res.json();
+      if (data.ok) alert('Snapshot saved. Check history below.');
+      else alert(data.error || 'Could not save snapshot');
+      loadDashboard();
+    }
+
+    async function addFixItem() {
+      const title = document.getElementById('fixTitle').value.trim();
+      if (!title) { alert('Enter a fix title'); return; }
+      const scoreBefore = document.getElementById('fixScoreBefore').value;
+      const scoreAfter = document.getElementById('fixScoreAfter').value;
+      const res = await fetch('/api/fix-tracker', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          domain: currentDomain,
+          title,
+          status: 'done',
+          scoreBefore: scoreBefore === '' ? null : Number(scoreBefore),
+          scoreAfter: scoreAfter === '' ? null : Number(scoreAfter)
+        })
+      });
+      const data = await res.json();
+      if (!data.ok) { alert(data.error || 'Save failed'); return; }
+      document.getElementById('fixTitle').value = '';
+      document.getElementById('fixScoreBefore').value = '';
+      document.getElementById('fixScoreAfter').value = '';
+      await loadFixTracker();
+    }
+
+    async function loadFixTracker() {
+      const res = await fetch(`/api/fix-tracker?domain=${encodeURIComponent(currentDomain)}`);
+      const data = await res.json();
+      const tb = document.getElementById('fixTrackerBody');
+      tb.innerHTML = '';
+      if (!data.items || !data.items.length) return;
+      data.items.forEach((item) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${escapeHtml(item.title)}</td>
+          <td>${escapeHtml(item.status)}</td>
+          <td>${item.scoreBefore != null ? item.scoreBefore : '—'}</td>
+          <td>${item.scoreAfter != null ? item.scoreAfter : '—'}</td>
+          <td><button type="button" class="btn" style="padding:6px 10px;font-size:0.85rem;" data-id="${item.id}">Delete</button></td>
+        `;
+        tr.querySelector('button').onclick = async () => {
+          await fetch('/api/fix-tracker', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ domain: currentDomain, action: 'delete', id: item.id })
+          });
+          loadFixTracker();
+        };
+        tb.appendChild(tr);
+      });
+    }
+
+    function escapeHtml(s) {
+      const d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    async function loadDashboard() {
+      let domain = document.getElementById('domainInput').value.trim();
+      if (!domain) domain = getLastDomain();
+      if (!domain) {
+        alert('Please enter your domain');
+        return;
+      }
+      domain = domain.replace(/^https?:\/\//, '').split('/')[0].toLowerCase();
+      saveLastDomain(domain);
+      currentDomain = domain;
+
+      document.getElementById('domainInputSection').style.display = 'none';
+      document.getElementById('dashboardContent').style.display = 'block';
+      document.getElementById('dashboardToolbar').style.display = 'flex';
+      document.getElementById('navCompetitors').href = 'competitor-intelligence.html?domain=' + encodeURIComponent(domain);
+      document.getElementById('btnCompetitors').href = 'competitor-intelligence.html?domain=' + encodeURIComponent(domain);
+
+      let res, data;
+      try {
+        res = await fetch(`/api/score?domain=${encodeURIComponent(domain)}&persist=0`);
+        data = await res.json().catch(() => ({}));
+      } catch (e) {
+        alert('Network error fetching score for ' + domain);
+        document.getElementById('domainInputSection').style.display = 'block';
+        document.getElementById('dashboardContent').style.display = 'none';
+        document.getElementById('dashboardToolbar').style.display = 'none';
+        return;
+      }
+
+      if (res.status === 403 && data.error === 'membership_required') {
+        alert('Member dashboard requires an eligible paid audit (membership, qualifying gold/admin, or high-tier one-time within the grace window).');
+        document.getElementById('domainInputSection').style.display = 'block';
+        document.getElementById('dashboardContent').style.display = 'none';
+        document.getElementById('dashboardToolbar').style.display = 'none';
+        return;
+      }
+      if (res.status === 403 && data.error === 'forbidden') {
+        alert(data.message || 'API access denied. From a remote machine, configure GEONEO_INTERNAL_API_SECRET and send Authorization: Bearer <secret>, or open this page from the server host.');
+        document.getElementById('domainInputSection').style.display = 'block';
+        document.getElementById('dashboardContent').style.display = 'none';
+        document.getElementById('dashboardToolbar').style.display = 'none';
+        return;
+      }
+
+      if (!data.ok) {
+        alert('No audit found for ' + domain + '. Run a scan from the homepage first.');
+        document.getElementById('domainInputSection').style.display = 'block';
+        document.getElementById('dashboardContent').style.display = 'none';
+        document.getElementById('dashboardToolbar').style.display = 'none';
+        return;
+      }
+
+      const score = data.score;
+
+      document.getElementById('overallScore').textContent = score.overall;
+      document.getElementById('scoreDate').textContent = 'Last updated: ' + new Date(score.calculatedAt).toLocaleDateString();
+
+      const trendEl = document.getElementById('scoreTrend');
+      if (score.trend === 'up') {
+        trendEl.innerHTML = `<span style="color:#22c55e;">↑ Improving since last measurement</span>`;
+      } else if (score.trend === 'down') {
+        trendEl.innerHTML = `<span style="color:#ef4444;">↓ Declining since last measurement</span>`;
+      } else {
+        trendEl.innerHTML = `<span style="color:var(--muted);">Stable over recent weeks</span>`;
+      }
+
+      const grid = document.getElementById('pillarGrid');
+      grid.innerHTML = '';
+      Object.entries(score.breakdown).forEach(([key, value]) => {
+        const div = document.createElement('div');
+        div.className = 'pillar-card';
+        div.innerHTML = `
+          <div style="font-size:0.85rem; color:var(--muted); text-transform:capitalize;">${key.replace(/([A-Z])/g, ' $1')}</div>
+          <div class="pillar-score">${value}</div>
+        `;
+        grid.appendChild(div);
+      });
+
+      // Weekly brief + AI citation
+      try {
+        const br = await fetch(`/api/member/brief?domain=${encodeURIComponent(domain)}`);
+        const brief = await br.json();
+        if (brief.ok && brief.weeklyActions && brief.weeklyActions.length) {
+          const sec = document.getElementById('weeklyBriefSection');
+          sec.style.display = 'block';
+          const ol = document.getElementById('weeklyActionsList');
+          ol.innerHTML = '';
+          brief.weeklyActions.forEach((a) => {
+            const li = document.createElement('li');
+            li.innerHTML = `<strong>${escapeHtml(a.action)}</strong> — ${escapeHtml(a.outcome || '')}<br><span style="color:var(--muted);font-size:0.9rem;">Time: ${escapeHtml(a.timeEstimate || '')} · Lift: ${escapeHtml(a.lift || '')}</span>`;
+            ol.appendChild(li);
+          });
+        }
+        if (brief.ok && brief.aiCitation) {
+          const ac = brief.aiCitation;
+          document.getElementById('aiCitationSection').style.display = 'block';
+          document.getElementById('aiCitationSummary').textContent =
+            `Audit AI pillar: ${ac.pillarScore != null ? ac.pillarScore + '/100' : 'n'} · ${ac.recommendationCount} citation-focused suggestions · Schema signals: ${ac.hasSchema ? 'present' : 'needs work'}`;
+          const ul = document.getElementById('aiCitationList');
+          ul.innerHTML = '';
+          (ac.topRecommendations || []).forEach((r) => {
+            const li = document.createElement('li');
+            li.innerHTML = `<strong>${escapeHtml(r.question || 'Recommendation')}</strong> — ${escapeHtml(r.reason || '')}`;
+            ul.appendChild(li);
+          });
+        }
+      } catch (e) { /* optional */ }
+
+      // Technical deep
+      try {
+        const tr = await fetch(`/api/member/technical?domain=${encodeURIComponent(domain)}`);
+        const tech = await tr.json();
+        if (tech.ok && tech.technical) {
+          document.getElementById('technicalSection').style.display = 'block';
+          document.getElementById('technicalSummary').textContent =
+            `Summary score (derived from PageSpeed-style grades + open issues): ${tech.technical.summaryScore}/100 · Checks evaluated: ${tech.technical.checksEvaluated || 0}`;
+          const ul = document.getElementById('technicalFindings');
+          ul.innerHTML = '';
+          (tech.technical.findings || []).forEach((f) => {
+            const li = document.createElement('li');
+            li.textContent = `${f.key}: ${f.detail} (${f.impact} impact)`;
+            ul.appendChild(li);
+          });
+          if (!tech.technical.findings.length) {
+            ul.innerHTML = '<li>No failing technical checks flagged on your last audit. Re-run audit after changes.</li>';
+          }
+        }
+      } catch (e) { /* optional */ }
+
+      // Fix tracker
+      document.getElementById('fixTrackerSection').style.display = 'block';
+      await loadFixTracker();
+
+      // History
+      const histRes = await fetch(`/api/score/history?domain=${encodeURIComponent(domain)}`);
+      const histData = await histRes.json();
+      const tbody = document.getElementById('historyBody');
+      if (histData && Array.isArray(histData.history) && histData.history.length > 0) {
+        tbody.innerHTML = '';
+        histData.history.forEach((entry, index) => {
+          const pillars = entry && entry.breakdown && typeof entry.breakdown === 'object' ? entry.breakdown : {};
+          let strongest = '-';
+          let weakest = '-';
+          const keys = Object.keys(pillars);
+          if (keys.length > 0) {
+            strongest = keys.reduce((a, b) => Number(pillars[a]) > Number(pillars[b]) ? a : b);
+            weakest = keys.reduce((a, b) => Number(pillars[a]) < Number(pillars[b]) ? a : b);
+          }
+
+          let change = '';
+          if (index < histData.history.length - 1) {
+            const next = histData.history[index + 1];
+            if (next && typeof entry.overall === 'number' && typeof next.overall === 'number') {
+              const diff = entry.overall - next.overall;
+              change = diff > 0
+                ? `<span style="color:#22c55e;">+${diff}</span>`
+                : `<span style="color:#ef4444;">${diff}</span>`;
+            }
+          }
+
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${new Date(entry.calculatedAt || entry.recordedAt).toLocaleDateString()}</td>
+            <td><strong>${entry.overall}</strong></td>
+            <td>${strongest}</td>
+            <td>${weakest}</td>
+            <td>${change}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } else {
+        tbody.innerHTML = '<tr><td colspan="5" style="color:var(--muted);">No history yet.</td></tr>';
+      }
+    }
+
+    window.onload = () => {
+      const last = localStorage.getItem('geoneo_last_domain');
+      if (last) {
+        document.getElementById('domainInput').value = last;
+        document.getElementById('lastDomainHint').textContent = `Last used: ${last}`;
+      }
+    };
+  </script>
+
+  <footer class="site-footer container">
+    <div class="footer-brand">
+      <span class="brand-mark">G</span>
+      <strong>GeoNeo</strong>
+    </div>
+    <div class="footer-links">
+      <a href="index.html">Home</a>
+      <a href="pricing.html">Pricing</a>
+      <a href="competitor-intelligence.html">Competitors</a>
+      <a href="neo-club.html">Visibility Club</a>
+    </div>
+  </footer>
+</body>
+</html>

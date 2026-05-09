@@ -69,9 +69,35 @@
           <input name="url" type="text" inputmode="url" placeholder="https://example.com or www.example.com" required />
         </label>
         <label>
-          Industry (optional)
-          <input name="industry" type="text" placeholder="Roofing, legal, dental, etc." />
+          Industry
+          <input name="industry" type="text" placeholder="Plumbing, HVAC, Roofing, Electrical, etc." />
         </label>
+
+        <!-- Lead Capture (required for free scan persistence) -->
+        <div class="lead-capture-section">
+          <div class="field-row">
+            <label>
+              Your Name <span class="required">*</span>
+              <input name="contactName" type="text" placeholder="John Smith" required />
+            </label>
+            <label>
+              Business Name <span class="required">*</span>
+              <input name="businessName" type="text" placeholder="Smith Plumbing LLC" required />
+            </label>
+          </div>
+          <div class="field-row">
+            <label>
+              Business Email <span class="required">*</span>
+              <input name="businessEmail" type="email" placeholder="you@yourbusiness.com" required />
+            </label>
+            <label>
+              Phone (optional)
+              <input name="phone" type="tel" placeholder="(417) 555-0123" />
+            </label>
+          </div>
+          <p class="form-note" style="margin-top:0.25rem;">We save your results so we can follow up if you want the full GeoNeo Audit + Specialist Strategy Session. No spam.</p>
+        </div>
+
         <div class="field-row">
           <label>
             City (optional)
@@ -96,10 +122,10 @@
     <div class="audit-page-features">
       <h3>What you'll get</h3>
       <ul class="audit-list">
-        <li>See where the site ranks in live search</li>
-        <li>Understand the ranking factors affecting visibility</li>
-        <li>Get a prioritized fix list</li>
-        <li>Score trust, content, and technical health</li>
+        <li>Full GeoNeo Audit with Google, Maps, and AI visibility</li>
+        <li>Prioritized fix list with time estimates and impact</li>
+        <li>30-minute GeoNeo Specialist Strategy Session</li>
+        <li>Custom implementation roadmap and follow-up support</li>
       </ul>
     </div>
   </main>
@@ -107,7 +133,7 @@
   <footer class="site-footer container">
     <div class="footer-brand">
       <span class="brand-mark" aria-hidden="true">G</span>
-      <span><strong>GeoNeo AI</strong> &mdash; Search visibility built for the AI era.</span>
+      <span><strong>GeoNeo</strong> &mdash; Visibility audits and specialist strategy for local businesses.</span>
     </div>
     <a href="index.html">Back to home</a>
   </footer>

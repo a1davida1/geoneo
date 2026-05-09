@@ -20,7 +20,7 @@ The platform is designed to:
 1. Capture qualified contractor leads via a free instant scan.
 2. Deliver immediate, owner-readable audit output (not a marketer's dashboard).
 3. Convert free-scan users into Starter ($99/mo) and upgrade them to
-   Growth ($249) / Multi-market ($499) as they expand.
+   Growth ($199) / Multi-market ($399) as they expand.
 4. Support internal follow-up with saved records and a local leads dashboard.
 
 ## 2) Current Product Behavior (Live Model)
@@ -144,8 +144,8 @@ No full sending engine is hard-wired yet (by design).
 2. Define follow-up SLA by tier (response time + owner).
 3. Set conversion KPIs:
    - Free → Starter ($99)
-   - Starter → Growth ($249)
-   - Growth → Multi-market ($499)
+   - Starter → Growth ($199)
+   - Growth → Multi-market ($399)
    - Lead → closed revenue
 4. Choose first integration target (CRM or webhook receiver).
 5. Ship industry-specific landing pages under `/ozarks/<industry>.html`

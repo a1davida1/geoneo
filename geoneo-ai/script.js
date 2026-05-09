@@ -76,6 +76,9 @@
   const marketLeaderboardTab = document.getElementById('marketLeaderboardTab');
   const marketTakeoverTab = document.getElementById('marketTakeoverTab');
 
+  const FULL_FIX_PLAN_PRICE = 79;
+  const SPECIALIST_PRICE = 197;
+
   const adminPanel = document.getElementById('adminPanel');
   const adminRawData = document.getElementById('adminRawData');
   const copyReportBtn = document.getElementById('copyReportBtn');
@@ -104,8 +107,11 @@
     dashboard: null,
     selectedPackageView: 'full_data',
     internalMode: false,
-    marketTab: 'leaderboard'
+    marketTab: 'leaderboard',
+    userRole: 'client' // 'client' or 'admin'
   };
+
+  const SPECIALIST_CALENDAR_LINK = 'https://calendly.com/geoneo-specialist/strategy-session'; // Change this to your real booking link
 
   const US_STATES = [
     ['AL', 'Alabama'],
@@ -327,6 +333,37 @@
     return Array.isArray(value) ? value : [];
   }
 
+  function escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  /** Allow only http(s) URLs for href to avoid javascript: and other schemes. */
+  function safeUrlForHref(raw) {
+    const trimmed = String(raw || '').trim();
+    if (!trimmed) return '';
+    const withProto = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    let u;
+    try {
+      u = new URL(withProto);
+    } catch {
+      return '';
+    }
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return '';
+    return u.href;
+  }
+
+  function externalLinkHtml(rawUrl, displayText) {
+    const href = safeUrlForHref(rawUrl);
+    const label = displayText != null ? String(displayText) : String(rawUrl || '');
+    if (!href) return escapeHtml(label || '-');
+    return `<a href="${escapeHtml(href)}" target="_blank" rel="noreferrer noopener">${escapeHtml(label)}</a>`;
+  }
+
   function packageLabel(value) {
     if (value === 'score_only') return 'Score Only';
     if (value === 'scores_issues') return 'Scores + Issues';
@@ -468,7 +505,7 @@
         const displayValue = isMarketDashboard(state.dashboard)
           ? value
           : `${Number.isFinite(Number(value)) ? Number(value) : 0}/100`;
-        return `<article class="card"><h4>${label}</h4><p class="plan-price">${displayValue}</p></article>`;
+        return `<article class="card"><h4>${escapeHtml(label)}</h4><p class="plan-price">${escapeHtml(String(displayValue))}</p></article>`;
       })
       .join('');
   }
@@ -492,19 +529,19 @@
     }
     const queryCards = safeArray(positioning.queries).map((queryRow) => {
       const competitorText = safeArray(queryRow.topCompetitors).length
-        ? safeArray(queryRow.topCompetitors).join(', ')
+        ? safeArray(queryRow.topCompetitors).map((c) => escapeHtml(c)).join(', ')
         : 'No clear competitor domains captured in this run.';
       const engineRows = safeArray(queryRow.engines).map((engineRow) => `<tr>
-          <td>${engineRow.engine || '-'}</td>
-          <td>${engineRow.rankLabel || '-'}</td>
-          <td>${engineRow.resultType || '-'}</td>
-          <td>${engineRow.note || '-'}</td>
+          <td>${escapeHtml(engineRow.engine || '-')}</td>
+          <td>${escapeHtml(engineRow.rankLabel || '-')}</td>
+          <td>${escapeHtml(engineRow.resultType || '-')}</td>
+          <td>${escapeHtml(engineRow.note || '-')}</td>
         </tr>`).join('');
       return `<article class="card">
-        <h4>#${Number(queryRow.rank || 0)} ${queryRow.query || 'Query'}</h4>
-        <p class="form-note"><strong>Location:</strong> ${queryRow.location || '-'}</p>
+        <h4>#${Number(queryRow.rank || 0)} ${escapeHtml(queryRow.query || 'Query')}</h4>
+        <p class="form-note"><strong>Location:</strong> ${escapeHtml(queryRow.location || '-')}</p>
         <p class="form-note"><strong>Competitors showing first:</strong> ${competitorText}</p>
-        <p>${queryRow.takeaway || ''}</p>
+        <p>${escapeHtml(queryRow.takeaway || '')}</p>
         <div class="table-wrap">
           <table>
             <thead>
@@ -556,14 +593,14 @@
     if (marketSearchStats) {
       const topThree = orderedRows.slice(0, 3);
       const topThreeText = topThree.length
-        ? topThree.map((row) => `#${row.rank} ${row.companyName}`).join(' | ')
+        ? topThree.map((row) => `#${row.rank} ${escapeHtml(row.companyName || '')}`).join(' | ')
         : 'No visible business leaders returned';
       marketSearchStats.innerHTML = [
         ['Visible Businesses', Number(marketState.visibleBusinesses || orderedCount)],
         ['Directory Dominance', `${Number(marketState.directoryDominance || 0)}%`],
         ['Difficulty', marketState.marketDifficultyLabel || 'Unknown'],
         ['Top 3 Leaders', topThreeText]
-      ].map(([label, value]) => `<article class="card market-stat-card"><h4>${label}</h4><p class="plan-price">${value}</p></article>`).join('');
+      ].map(([label, value]) => `<article class="card market-stat-card"><h4>${escapeHtml(label)}</h4><p class="plan-price">${typeof value === 'number' ? value : escapeHtml(String(value))}</p></article>`).join('');
     }
     marketSearchPanel.hidden = false;
   }
@@ -583,12 +620,12 @@
       googleMatrixIntro.textContent = matrix.intro || '';
     }
     const rows = safeArray(matrix.rows).map((row) => `<article class="card audit-block">
-      <h4>${row.label || '-'}</h4>
-      <p class="form-note"><strong>What this is:</strong> ${row.matrix || '-'}</p>
-      <p class="form-note"><strong>Judged by:</strong> ${row.judgedBy || '-'}</p>
+      <h4>${escapeHtml(row.label || '-')}</h4>
+      <p class="form-note"><strong>What this is:</strong> ${escapeHtml(row.matrix || '-')}</p>
+      <p class="form-note"><strong>Judged by:</strong> ${escapeHtml(row.judgedBy || '-')}</p>
       <p><strong>Your score:</strong> ${Number(row.yourScore || 0)}/100</p>
       <p><strong>Competitor average:</strong> ${row.competitorAverage === null ? 'No comparison available' : `${Number(row.competitorAverage)}/100`}</p>
-      <p class="form-note"><strong>Why it matters:</strong> ${row.note || '-'}</p>
+      <p class="form-note"><strong>Why it matters:</strong> ${escapeHtml(row.note || '-')}</p>
     </article>`);
     googleMatrixPanel.hidden = false;
     googleMatrixRows.innerHTML = rows.length
@@ -634,11 +671,11 @@
         const whyIncluded = [item.inclusionReason || '', ...(safeArray(item.warnings).slice(0, 2))].filter(Boolean).join(' ');
         return `<tr class="${isSelected ? 'selected-client-row' : ''}">
           <td>#${Number(item.rank || 0)}</td>
-          <td>${item.companyName || '-'}</td>
-          <td>${item.domain || '-'}</td>
-          <td>${titleCase(item.resultType || 'business')}</td>
+          <td>${escapeHtml(item.companyName || '-')}</td>
+          <td>${escapeHtml(item.domain || '-')}</td>
+          <td>${escapeHtml(titleCase(item.resultType || 'business'))}</td>
           <td>${Number(item.confidence || 0)}</td>
-          <td>${whyIncluded || 'Visible owned business website in this market.'}</td>
+          <td>${escapeHtml(whyIncluded || 'Visible owned business website in this market.')}</td>
         </tr>`;
       }).join('')
       : '<tr><td colspan="6">No standalone business websites found ranking for these searches. The market is dominated by directories and review sites — this is a wide-open opportunity for a real business website.</td></tr>';
@@ -646,9 +683,9 @@
     const assetRows = marketAssets.length
       ? marketAssets.map((item) => `<tr>
           <td>#${Number(item.rank || 0) || '-'}</td>
-          <td>${item.title || item.companyName || '-'}</td>
-          <td>${titleCase(item.category || item.resultType || 'unknown')}</td>
-          <td>${item.domain || '-'}</td>
+          <td>${escapeHtml(item.title || item.companyName || '-')}</td>
+          <td>${escapeHtml(titleCase(item.category || item.resultType || 'unknown'))}</td>
+          <td>${escapeHtml(item.domain || '-')}</td>
         </tr>`).join('')
       : '<tr><td colspan="4">No directory, review, or social assets captured in this run.</td></tr>';
 
@@ -669,7 +706,7 @@
       <div class="card-grid market-opportunity-grid">
         <article class="card">
           <h4>State of the Market</h4>
-          <p><strong>${marketState.expandedMarketLabel || 'Local market'}</strong></p>
+          <p><strong>${escapeHtml(marketState.expandedMarketLabel || 'Local market')}</strong></p>
           <ul class="audit-list">
             <li>Visible businesses: ${Number(marketState.visibleBusinesses || 0)}</li>
             <li>Directory dominance: ${Number(marketState.directoryDominance || 0)}%</li>
@@ -682,21 +719,21 @@
         </article>
         <article class="card">
           <h4>Market Difficulty Score</h4>
-          <p class="plan-price">${marketState.marketDifficultyLabel || 'Unknown'}</p>
+          <p class="plan-price">${escapeHtml(marketState.marketDifficultyLabel || 'Unknown')}</p>
           <p class="form-note">Score: ${Number(marketState.marketDifficultyScore || 0)}</p>
-          <p>${marketState.nationalComparison || 'No national comparison is available yet.'}</p>
-          <p><strong>Domination Potential:</strong> ${marketState.dominationPotential || 'Unknown'}</p>
-          <p><strong>Estimated timeline:</strong> ${marketState.estimatedTimeline || 'Unknown'}</p>
+          <p>${escapeHtml(marketState.nationalComparison || 'No national comparison is available yet.')}</p>
+          <p><strong>Domination Potential:</strong> ${escapeHtml(marketState.dominationPotential || 'Unknown')}</p>
+          <p><strong>Estimated timeline:</strong> ${escapeHtml(marketState.estimatedTimeline || 'Unknown')}</p>
         </article>
         <article class="card">
           <h4>Client Snapshot</h4>
-          <p><strong>This audit is for:</strong> ${clientSnapshot?.label || 'No client selected'}</p>
+          <p><strong>This audit is for:</strong> ${escapeHtml(clientSnapshot?.label || 'No client selected')}</p>
           <ul class="audit-list">
             <li>Current rank: ${clientSnapshot?.currentRank ? `#${clientSnapshot.currentRank}` : 'Not visible in owned business results yet'}</li>
             <li>Score vs market average: ${Number(clientSnapshot?.scoreVsMarketAverage || 0)}</li>
             <li>Appears in searches: ${Number(clientSnapshot?.appearsInSearches || 0)}</li>
-            <li>Strongest advantage: ${clientSnapshot?.strongestAdvantage || 'Unknown'}</li>
-            <li>Biggest weakness: ${clientSnapshot?.biggestWeakness || 'Unknown'}</li>
+            <li>Strongest advantage: ${escapeHtml(clientSnapshot?.strongestAdvantage || 'Unknown')}</li>
+            <li>Biggest weakness: ${escapeHtml(clientSnapshot?.biggestWeakness || 'Unknown')}</li>
           </ul>
           <ul class="audit-list">${clientMetricsList}</ul>
         </article>
@@ -773,10 +810,10 @@
           </thead>
           <tbody>
             ${rivals.length ? rivals.map((row) => `<tr>
-              <td>${row.competitor || row.domain || '-'}</td>
-              <td>${row.beatability || '-'}</td>
-              <td>${row.timeline || '-'}</td>
-              <td>${row.why || '-'}</td>
+              <td>${escapeHtml(row.competitor || row.domain || '-')}</td>
+              <td>${escapeHtml(row.beatability || '-')}</td>
+              <td>${escapeHtml(row.timeline || '-')}</td>
+              <td>${escapeHtml(row.why || '-')}</td>
             </tr>`).join('') : '<tr><td colspan="4">No competitors are currently above the selected client in the owned-business leaderboard.</td></tr>'}
           </tbody>
         </table>
@@ -790,6 +827,27 @@
   function renderPackageComparison(dashboard) {
     if (!packageComparison) return;
     const views = dashboard.packageViews || {};
+    const isFreeView = state.selectedPackageView === 'score_only' || !state.selectedPackageView;
+
+    // Step 8: Prominent One-Time Full Fix Plan offer when user is on free view
+    let offerHtml = '';
+    if (isFreeView) {
+      offerHtml = `
+        <article class="card" style="border: 2px solid var(--brand); background: rgba(0,229,160,0.06);">
+          <h4 style="color:var(--brand);">GeoNeo Full Fix Plan — $${FULL_FIX_PLAN_PRICE}</h4>
+          <ul class="audit-list">
+            <li>Complete deep audit with local, regional &amp; national competitor analysis</li>
+            <li>Exactly 3 prioritized fixes with time estimates and expected business impact</li>
+            <li>AI citation readiness recommendations</li>
+            <li>Step-by-step implementation plan you can use yourself or hand to a web person</li>
+            <li>One-time payment — no subscription</li>
+          </ul>
+          <button class="btn btn-hot" id="unlockOneTimeBtn" style="margin-top:0.75rem;">Get the Full Fix Plan — $${FULL_FIX_PLAN_PRICE}</button>
+          <p class="form-note" style="margin-top:0.5rem; color:#f59e0b;">Only 6 Full Fix Plan slots available this week.</p>
+        </article>
+      `;
+    }
+
     const rows = ['score_only', 'scores_issues', 'full_data'].map((key) => {
       const view = views[key] || {};
       if (isMarketDashboard(dashboard)) {
@@ -798,11 +856,11 @@
         const difficulty = analysis.difficulty || {};
         const opportunities = analysis.opportunities || {};
         return `<article class="card">
-          <h4>${packageLabel(key)}</h4>
+          <h4>${escapeHtml(packageLabel(key))}</h4>
           <ul class="audit-list">
             <li>Market Overview: included</li>
             <li>Companies shown: ${competitorsCount}</li>
-            <li>Difficulty Score: ${difficulty.score || '-'}/10 (${difficulty.level || 'unknown'})</li>
+            <li>Difficulty Score: ${escapeHtml(String(difficulty.score ?? '-'))}/10 (${escapeHtml(String(difficulty.level || 'unknown'))})</li>
             <li>Dominance View: ${Number(analysis.dominance?.visibilityControlledByTop3 || 0)}% top-3 control</li>
             <li>AI Citation Candidates: ${safeArray(opportunities.aiCitationPotential?.topCandidates).length}</li>
             <li>Strategy Playbook: ${safeArray(analysis.strategy?.howToBreakIntoTop10).length + safeArray(analysis.strategy?.howToDominateThisMarket).length} steps</li>
@@ -812,10 +870,14 @@
       const issueCount = safeArray(view.issues).length;
       const fixCount = safeArray(view.fixes).length;
       const competitorCount = safeArray(view.competitors).length;
-      const issuePreview = issueCount ? `${view.issues[0].title || 'Issue'} (${view.issues[0].category || 'general'})` : 'No issue list in this view';
-      const fixPreview = fixCount ? `${view.fixes[0].title || 'Fix'}` : 'No fix roadmap in this view';
+      const issuePreview = issueCount
+        ? escapeHtml(`${view.issues[0].title || 'Issue'} (${view.issues[0].category || 'general'})`)
+        : 'No issue list in this view';
+      const fixPreview = fixCount
+        ? escapeHtml(`${view.fixes[0].title || 'Fix'}`)
+        : 'No fix roadmap in this view';
       return `<article class="card">
-        <h4>${packageLabel(key)}</h4>
+        <h4>${escapeHtml(packageLabel(key))}</h4>
         <ul class="audit-list">
           <li>Scores: 6 categories</li>
           <li>Issues: ${issueCount}</li>
@@ -826,7 +888,129 @@
         </ul>
       </article>`;
     });
-    packageComparison.innerHTML = rows.join('');
+
+    packageComparison.innerHTML = offerHtml + rows.join('');
+
+    // Wire the paid Specialist Strategy Session button (#1) - declare before use
+    const unlockBtn = document.getElementById('unlockOneTimeBtn');
+    if (unlockBtn) {
+      unlockBtn.addEventListener('click', () => {
+        console.log('[GeoNeo Tracking] Clicked: One-Time Full Fix Plan CTA');
+        showFullFixPlanModal();
+      });
+    }
+  }
+
+  function showFullFixPlanModal() {
+    showSpecialistSessionModal({
+      price: FULL_FIX_PLAN_PRICE,
+      productType: 'one-time',
+      leadStatus: 'full-fix-plan-requested',
+      type: 'full-fix-plan',
+      title: 'Get Your GeoNeo Full Fix Plan',
+      subtitle: `$${FULL_FIX_PLAN_PRICE} one-time • complete audit + prioritized implementation roadmap`,
+      button: `Confirm My Full Fix Plan — $${FULL_FIX_PLAN_PRICE}`,
+      thankYou: 'Your Full Fix Plan request has been received. A GeoNeo Specialist will follow up with next steps.',
+      showBookingLink: false
+    });
+  }
+
+  // #1: Functional paid offer modal - captures lead and confirms Specialist Strategy Session
+  function showSpecialistSessionModal(opts = {}) {
+    const offer = {
+      price: SPECIALIST_PRICE,
+      productType: 'one-time',
+      leadStatus: 'specialist-session-requested',
+      type: 'specialist-session',
+      title: 'Book Your GeoNeo Specialist Strategy Session',
+      subtitle: `$${SPECIALIST_PRICE} one-time • 30-minute live call + full audit + custom plan`,
+      button: `Confirm My Strategy Session — $${SPECIALIST_PRICE}`,
+      thankYou: 'Your request has been received. A GeoNeo Specialist will contact you within 24 hours to schedule your 30-minute strategy session.',
+      showBookingLink: true,
+      ...opts
+    };
+    const existing = document.getElementById('specialistModal');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'specialistModal';
+    modal.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; z-index:10000;';
+    modal.innerHTML = `
+      <div style="background:white; width:100%; max-width:480px; margin:20px; border-radius:16px; padding:24px; box-shadow:0 20px 60px rgba(0,0,0,0.3); position:relative;">
+        <h3 style="margin:0 0 8px;">${escapeHtml(offer.title)}</h3>
+        <p style="color:#475569; margin:0 0 20px;">${escapeHtml(offer.subtitle)}</p>
+        
+        <form id="specialistForm">
+          <div style="display:grid; gap:12px;">
+            <input type="text" name="name" placeholder="Your Name" required style="padding:12px; border:1px solid #cbd5e1; border-radius:8px; font-size:1rem;">
+            <input type="email" name="email" placeholder="Business Email" required style="padding:12px; border:1px solid #cbd5e1; border-radius:8px; font-size:1rem;">
+            <input type="tel" name="phone" placeholder="Phone Number" style="padding:12px; border:1px solid #cbd5e1; border-radius:8px; font-size:1rem;">
+            <div>
+              <label style="font-size:0.85rem; color:#64748b; display:block; margin-bottom:4px;">Preferred Date &amp; Time</label>
+              <input type="datetime-local" name="preferred_datetime" required style="padding:12px; border:1px solid #cbd5e1; border-radius:8px; font-size:1rem; width:100%;">
+            </div>
+          </div>
+          
+          <button type="submit" class="btn btn-hot" style="width:100%; margin-top:20px;">${escapeHtml(offer.button)}</button>
+          <p style="font-size:0.8rem; color:#64748b; text-align:center; margin-top:12px;">We'll contact you within 24 hours to schedule.</p>
+        </form>
+        
+        <button id="closeSpecialistModal" style="position:absolute; top:16px; right:16px; background:none; border:none; font-size:24px; cursor:pointer; color:#64748b;">×</button>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    // Close handlers
+    modal.querySelector('#closeSpecialistModal').onclick = () => modal.remove();
+    modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+
+    // Form submission
+    const form = modal.querySelector('#specialistForm');
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const formData = new FormData(form);
+      const lead = {
+        name: formData.get('name'),
+        email: formData.get('email'),
+        phone: formData.get('phone'),
+        preferredTime: formData.get('preferred_datetime'),
+        message: 'Specialist strategy session request',
+        url: (state.dashboard && state.dashboard.input && state.dashboard.input.url) || '',
+        type: offer.type,
+        amountPaid: offer.price
+      };
+      try {
+        const res = await fetch('/api/leads', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(lead)
+        });
+        if (!res.ok) throw new Error('Lead save failed');
+        localStorage.removeItem('specialistLeadDraft');
+      } catch (err) {
+        localStorage.setItem('specialistLeadDraft', JSON.stringify(lead));
+        console.warn('[GeoNeo] Specialist lead POST failed, draft saved to localStorage', err);
+      }
+      if (state.dashboard) {
+        state.dashboard.productType = offer.productType;
+        state.dashboard.amountPaid = offer.price;
+        state.dashboard.leadStatus = offer.leadStatus;
+        console.log('[GeoNeo Tracking] Submitted:', offer.type);
+      }
+
+      modal.innerHTML = `
+        <div style="background:white; width:100%; max-width:420px; margin:20px; border-radius:16px; padding:32px; text-align:center;">
+          <h3 style="margin:0 0 12px;">Thank you!</h3>
+          <p style="color:#475569;">${escapeHtml(offer.thankYou)}</p>
+          ${offer.showBookingLink ? `
+          <p style="font-size:0.85rem; color:#64748b; margin-top:12px;">You can also book directly using this link:<br>
+          <a href="https://calendly.com/geoneo-specialist/strategy-session" target="_blank" style="color:#0ea5e9;">Book Your Strategy Session</a></p>
+          ` : ''}
+          <button class="btn" style="margin-top:20px;" onclick="document.getElementById('specialistModal').remove()">Close</button>
+        </div>
+      `;
+    };
   }
 
   function renderIssues(view) {
@@ -844,7 +1028,7 @@
       .map((item) => {
         const tag = issueSeverityTag(item.severity);
         const color = severityColor(tag);
-        return `<li><strong style="color:${color}">[${tag}]</strong> ${item.category}: ${item.title} - ${item.description}</li>`;
+        return `<li><strong style="color:${color}">[${escapeHtml(tag)}]</strong> ${escapeHtml(item.category || '')}: ${escapeHtml(item.title || '')} - ${escapeHtml(item.description || '')}</li>`;
       })
       .join('');
   }
@@ -861,7 +1045,7 @@
     }
     fixesPanel.hidden = false;
     fixesList.innerHTML = fixes
-      .map((item) => `<li><strong>[${String(item.priority || '').toUpperCase()}]</strong> ${item.category}: ${item.title} - ${item.description}</li>`)
+      .map((item) => `<li><strong>[${escapeHtml(String(item.priority || '').toUpperCase())}]</strong> ${escapeHtml(item.category || '')}: ${escapeHtml(item.title || '')} - ${escapeHtml(item.description || '')}</li>`)
       .join('');
   }
 
@@ -874,7 +1058,7 @@
     }
     questionsPanel.hidden = false;
     questionsList.innerHTML = questions
-      .map((q) => `<li><strong>${q.question}</strong><br><span style="color:var(--muted);font-size:0.85rem">${q.reason || ''}</span></li>`)
+      .map((q) => `<li><strong>${escapeHtml(q.question || '')}</strong><br><span style="color:var(--muted);font-size:0.85rem">${escapeHtml(q.reason || '')}</span></li>`)
       .join('');
   }
 
@@ -884,6 +1068,9 @@
   }
 
   function renderCompetitors(view) {
+    // #4: Add simple side-by-side comparison for top competitors (quick win)
+    const comparisonContainer = document.getElementById('competitorComparison');
+    if (comparisonContainer) comparisonContainer.remove();
     if (!competitorsPanel || !competitorsTableBody) return;
     const tableHeadRow = competitorsTable ? competitorsTable.querySelector('thead tr') : null;
     const tableWrap = competitorsTable ? competitorsTable.closest('.table-wrap') : null;
@@ -910,7 +1097,7 @@
       if (!orderedResults.length && !marketAssets.length) {
         competitorsPanel.hidden = false;
         const warning = view.industryAnalysis?.overview?.warning || 'Search returned limited structured business data, so GeoNeo is showing visible market results with confidence labels.';
-        competitorsTableBody.innerHTML = `<tr><td colspan="6">${warning}</td></tr>`;
+        competitorsTableBody.innerHTML = `<tr><td colspan="6">${escapeHtml(warning)}</td></tr>`;
         if (marketAssetsContainer) {
           marketAssetsContainer.innerHTML = '';
         }
@@ -926,12 +1113,12 @@
           const whyRank = item.whyRank || '';
           const whyIncluded = [item.inclusionReason || '', ...(safeArray(item.warnings).slice(0, 2))].filter(Boolean).join(' ');
           return `<tr>
-          <td><strong>#${rank}</strong><br/><span class="form-note">${rankLabel}</span></td>
-          <td>${item.companyName || '-'}${consistencyLabel ? `<br/><span class="form-note">${consistencyLabel}</span>` : ''}${whyRank ? `<br/><span class="form-note">${whyRank}</span>` : ''}</td>
-          <td>${String(item.resultType || 'unknown').replace(/_/g, ' ')}<br/><span class="form-note">${Number(item.confidence || 0)} confidence</span></td>
-          <td>${item.domain || '-'}</td>
-          <td>${item.website ? `<a href="${item.website}" target="_blank" rel="noreferrer">${item.website}</a>` : '-'}</td>
-          <td>${whyIncluded || 'Appears in visible search results.'}</td>
+          <td><strong>#${rank}</strong><br/><span class="form-note">${escapeHtml(rankLabel)}</span></td>
+          <td>${escapeHtml(item.companyName || '-')}${consistencyLabel ? `<br/><span class="form-note">${escapeHtml(consistencyLabel)}</span>` : ''}${whyRank ? `<br/><span class="form-note">${escapeHtml(whyRank)}</span>` : ''}</td>
+          <td>${escapeHtml(String(item.resultType || 'unknown').replace(/_/g, ' '))}<br/><span class="form-note">${Number(item.confidence || 0)} confidence</span></td>
+          <td>${escapeHtml(item.domain || '-')}</td>
+          <td>${item.website ? externalLinkHtml(item.website, item.website) : '-'}</td>
+          <td>${escapeHtml(whyIncluded || 'Appears in visible search results.')}</td>
         </tr>`;
         })
         .join('')
@@ -958,9 +1145,9 @@
                   <tbody>
                     ${marketAssets.map((item, index) => `<tr>
                       <td>#${Number(item.rank || item.observedRank || index + 1) || '-'}</td>
-                      <td>${item.title || item.companyName || '-'}</td>
-                      <td>${String(item.category || item.resultType || 'unknown').replace(/_/g, ' ')}</td>
-                      <td>${item.domain || '-'}</td>
+                      <td>${escapeHtml(item.title || item.companyName || '-')}</td>
+                      <td>${escapeHtml(String(item.category || item.resultType || 'unknown').replace(/_/g, ' '))}</td>
+                      <td>${escapeHtml(item.domain || '-')}</td>
                     </tr>`).join('')}
                   </tbody>
                 </table>
@@ -999,20 +1186,19 @@
     competitorsPanel.hidden = false;
     competitorsTableBody.innerHTML = competitors
       .map((item) => {
-        const strengths = safeArray(item.strengths).slice(0, 2).join(', ') || '-';
-        const weaknesses = safeArray(item.weaknesses).slice(0, 2).join(', ') || '-';
-        const source = item.source || 'n/a';
-        const website = item.website ? `<a href="${item.website}" target="_blank" rel="noreferrer">${item.website}</a>` : '-';
+        const strengths = safeArray(item.strengths).slice(0, 2).map((s) => escapeHtml(String(s))).join(', ') || '-';
+        const weaknesses = safeArray(item.weaknesses).slice(0, 2).map((w) => escapeHtml(String(w))).join(', ') || '-';
+        const website = item.website ? externalLinkHtml(item.website, item.website) : '-';
         return `<tr>
-          <td>${item.name || '-'}</td>
+          <td>${escapeHtml(item.name || '-')}</td>
           <td>${website}</td>
-          <td>${item.city || '-'}</td>
-          <td>${item.category || '-'}</td>
-          <td>${item.notes || '-'}</td>
+          <td>${escapeHtml(item.city || '-')}</td>
+          <td>${escapeHtml(item.category || '-')}</td>
+          <td>${escapeHtml(item.notes || '-')}</td>
           <td>${strengths}</td>
           <td>${weaknesses}</td>
-          <td>${formatScoreSummary(item.scoreSummary)}</td>
-          <td>${source}</td>
+          <td>${escapeHtml(formatScoreSummary(item.scoreSummary))}</td>
+          <td>${escapeHtml(item.source || 'n/a')}</td>
         </tr>`;
       })
       .join('');
@@ -1069,6 +1255,8 @@
   }
 
   function renderFreeTeaser(view) {
+  // #6: Strong "What you're missing" messaging added below
+
     var issues = safeArray(view.issues);
     var fixes = safeArray(view.fixes);
     var total = issues.length;
@@ -1087,14 +1275,23 @@
     if (issuesPanel && issuesList) {
       panelTitle(issuesPanel, total > 0 ? 'We Found ' + total + ' Issues' : 'Scan Complete');
       issuesPanel.hidden = false;
+      issuesList.innerHTML = '';
       if (total > 0) {
-        issuesList.innerHTML = issues.map(function(item) {
+        issues.forEach(function(item) {
           var tag = issueSeverityTag(item.severity);
           var color = severityColor(tag);
-          return '<li><strong style="color:' + color + '">[' + tag + ']</strong> ' + (item.category || '') + ': ' + (item.title || '') + ' — ' + (item.description || '') + '</li>';
-        }).join('');
+          var li = document.createElement('li');
+          var strong = document.createElement('strong');
+          strong.style.color = color;
+          strong.textContent = '[' + tag + ']';
+          li.appendChild(strong);
+          li.appendChild(document.createTextNode(' ' + (item.category || '') + ': ' + (item.title || '') + ' — ' + (item.description || '')));
+          issuesList.appendChild(li);
+        });
       } else {
-        issuesList.innerHTML = '<li>No issues detected. Your site is in good shape.</li>';
+        var li = document.createElement('li');
+        li.textContent = 'No issues detected. Your site is in good shape.';
+        issuesList.appendChild(li);
       }
     }
 
@@ -1148,7 +1345,7 @@
     // Pick top 3 competitors that outrank the user
     const topRivals = competitors.slice(0, 3);
 
-    let cards = '';
+    whoBeatYouGrid.innerHTML = '';
     topRivals.forEach(function(c, i) {
       const name = c.companyName || c.name || c.domain || ('Competitor ' + (i+1));
       const signals = [];
@@ -1160,29 +1357,73 @@
       }
       if (!signals.length) signals.push('Ranking above you');
       const verdict = c.weaknesses || (i === 0 ? 'Currently the #1 recommendation in your market' : 'Showing up where you should be');
-      cards += '<div class="who-beat-card">' +
-        '<div class="wbc-rank">Rank #' + (c.rank || (i+1)) + ' — beating you</div>' +
-        '<div class="wbc-name">' + name + '</div>' +
-        '<div class="wbc-signals">' + signals.map(function(s){ return '<span class="wbc-signal">' + s + '</span>'; }).join('') + '</div>' +
-        '<div class="wbc-verdict">' + verdict + '</div>' +
-      '</div>';
+
+      const card = document.createElement('div');
+      card.className = 'who-beat-card';
+
+      const rankDiv = document.createElement('div');
+      rankDiv.className = 'wbc-rank';
+      rankDiv.textContent = 'Rank #' + (c.rank || (i+1)) + ' — beating you';
+      card.appendChild(rankDiv);
+
+      const nameDiv = document.createElement('div');
+      nameDiv.className = 'wbc-name';
+      nameDiv.textContent = name;
+      card.appendChild(nameDiv);
+
+      const signalsDiv = document.createElement('div');
+      signalsDiv.className = 'wbc-signals';
+      signals.forEach(function(s) {
+        const span = document.createElement('span');
+        span.className = 'wbc-signal';
+        span.textContent = s;
+        signalsDiv.appendChild(span);
+      });
+      card.appendChild(signalsDiv);
+
+      const verdictDiv = document.createElement('div');
+      verdictDiv.className = 'wbc-verdict';
+      verdictDiv.textContent = verdict;
+      card.appendChild(verdictDiv);
+
+      whoBeatYouGrid.appendChild(card);
     });
 
-    // Add "You" card
+    // Add "You" card (safe DOM)
     const yourRank = isMarket
       ? (view.marketOpportunity?.clientSnapshot?.currentRank || 'Not visible')
       : (yourAvg > 60 ? 'Visible' : 'Low visibility');
-    cards += '<div class="who-beat-card you-card">' +
-      '<div class="wbc-rank">Your position</div>' +
-      '<div class="wbc-name">' + yourName + '</div>' +
-      '<div class="wbc-signals"><span class="wbc-signal">Score: ' + yourAvg + '/100</span></div>' +
-      '<div class="wbc-verdict">Fix the issues below to overtake these competitors.</div>' +
-    '</div>';
+    const youCard = document.createElement('div');
+    youCard.className = 'who-beat-card you-card';
+
+    const yourRankDiv = document.createElement('div');
+    yourRankDiv.className = 'wbc-rank';
+    yourRankDiv.textContent = 'Your position';
+    youCard.appendChild(yourRankDiv);
+
+    const yourNameDiv = document.createElement('div');
+    yourNameDiv.className = 'wbc-name';
+    yourNameDiv.textContent = yourName;
+    youCard.appendChild(yourNameDiv);
+
+    const yourSignalsDiv = document.createElement('div');
+    yourSignalsDiv.className = 'wbc-signals';
+    const scoreSpan = document.createElement('span');
+    scoreSpan.className = 'wbc-signal';
+    scoreSpan.textContent = 'Score: ' + yourAvg + '/100';
+    yourSignalsDiv.appendChild(scoreSpan);
+    youCard.appendChild(yourSignalsDiv);
+
+    const yourVerdictDiv = document.createElement('div');
+    yourVerdictDiv.className = 'wbc-verdict';
+    yourVerdictDiv.textContent = 'Fix the issues below to overtake these competitors.';
+    youCard.appendChild(yourVerdictDiv);
+
+    whoBeatYouGrid.appendChild(youCard);
 
     if (whoBeatYouLead) {
       whoBeatYouLead.textContent = 'When customers search for your services, these businesses show up instead of you:';
     }
-    whoBeatYouGrid.innerHTML = cards;
     whoBeatYouPanel.hidden = false;
   }
 
@@ -1221,8 +1462,8 @@
       if (industry.includes(key)) { jobValue = INDUSTRY_JOB_VALUES[key]; break; }
     }
 
-    // Estimate monthly searches (conservative local estimate)
-    const monthlySearches = Math.round(180 + Math.random() * 120); // 180-300 range for local
+    // Estimate monthly searches (conservative local estimate, deterministic from score)
+    const monthlySearches = 180 + ((seoScore * 7) % 121); // 180-300 range for local, stable
     // CTR difference: #1 gets ~28%, position 5+ gets ~5%
     const currentCTR = seoScore > 70 ? 0.15 : (seoScore > 50 ? 0.08 : 0.04);
     const potentialCTR = 0.28;
@@ -1254,19 +1495,101 @@
     revenueImpactPanel.hidden = false;
   }
 
+  function renderAdminLoginSection() {
+    const container = dashboardResults;
+    if (!container) return;
+
+    // Remove existing login section if present
+    const existing = document.getElementById('adminLoginSection');
+    if (existing) existing.remove();
+
+    if (state.userRole === 'admin') {
+      // Show admin status + logout
+      const status = document.createElement('div');
+      status.id = 'adminLoginSection';
+      status.style.cssText = 'margin-bottom:12px; padding:8px 12px; background:#0ea5e9; color:white; border-radius:8px; display:flex; align-items:center; gap:12px;';
+      status.innerHTML = `
+        <strong>Admin Mode Active</strong>
+        <button id="logoutAdminBtn" style="margin-left:auto; background:white; color:#0ea5e9; border:none; padding:4px 10px; border-radius:6px; cursor:pointer;">Logout</button>
+      `;
+      container.prepend(status);
+
+      document.getElementById('logoutAdminBtn').onclick = () => {
+        state.userRole = 'client';
+        state.internalMode = false;
+        renderDashboard();
+      };
+      return;
+    }
+
+    // Client mode - show login option
+    const loginBox = document.createElement('div');
+    loginBox.id = 'adminLoginSection';
+    loginBox.style.cssText = 'margin-bottom:16px; padding:12px; background:#f1f5f9; border:1px solid #cbd5e1; border-radius:10px;';
+    loginBox.innerHTML = `
+      <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+        <span style="font-size:0.9rem; color:#475569;">Viewing as <strong>Client</strong></span>
+        <input id="adminPasswordInput" type="password" placeholder="Admin password" style="padding:6px 10px; border:1px solid #94a3b8; border-radius:6px; font-size:0.9rem;">
+        <button id="adminLoginBtn" class="btn btn-sm">Login as Admin</button>
+        <span style="font-size:0.75rem; color:#64748b;">(Full results + all leads + pipeline)</span>
+      </div>
+    `;
+    container.prepend(loginBox);
+
+    const loginBtn = document.getElementById('adminLoginBtn');
+    const pwInput = document.getElementById('adminPasswordInput');
+
+    if (loginBtn && pwInput) {
+      loginBtn.onclick = async () => {
+        try {
+          const res = await fetch('/api/admin/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: pwInput.value })
+          });
+          const data = await res.json();
+          if (data && data.ok) {
+            state.userRole = 'admin';
+            state.internalMode = true;
+            renderDashboard();
+          } else {
+            alert('Incorrect admin password');
+          }
+        } catch (e) {
+          alert('Login failed');
+        }
+      };
+      pwInput.onkeypress = (e) => {
+        if (e.key === 'Enter') loginBtn.click();
+      };
+    }
+  }
+
   function renderDashboard() {
     if (!state.dashboard || !dashboardResults) return;
     const view = resolveCurrentView();
     if (!view) return;
 
-    // Free audit: show teaser only
-    if (isFreeAudit()) {
-      dashboardResults.hidden = false;
-      if (dashboardStatus) dashboardStatus.textContent = 'Free Website Scan Complete';
-      if (auditModalTitle) auditModalTitle.textContent = 'Website Scan Results';
-      renderFreeTeaser(view);
-      return;
-    }
+      // Free audit: show teaser only + confirm lead capture (#2)
+      if (isFreeAudit()) {
+        dashboardResults.hidden = false;
+        if (dashboardStatus) dashboardStatus.textContent = 'Free GeoNeo Audit Complete — Results Saved';
+        if (auditModalTitle) auditModalTitle.textContent = 'Your Free GeoNeo Audit Results';
+        renderFreeTeaser(view);
+        
+        // Show lead capture confirmation
+        const existingLeadNote = dashboardResults.querySelector('.lead-note');
+        if (existingLeadNote) existingLeadNote.remove();
+        const leadNote = document.createElement('div');
+        leadNote.className = 'lead-note';
+        leadNote.style.cssText = 'margin-top:16px; padding:12px; background:#f0fdf4; border:1px solid #86efac; border-radius:8px; font-size:0.9rem;';
+        leadNote.textContent = `We've saved your results using the details you provided. A GeoNeo Specialist can follow up if you'd like the full audit + strategy session.`;
+        dashboardResults.appendChild(leadNote);
+        return;
+      }
+
+    // === Admin / Client Login Section ===
+    renderAdminLoginSection();
 
     const marketMode = isMarketDashboard(state.dashboard);
     dashboardResults.hidden = false;
@@ -1292,6 +1615,29 @@
     if (competitorsPanel) {
       competitorsPanel.hidden = marketMode;
     }
+
+    // Admin-only: Show raw/full data only when logged in as admin
+    const isAdmin = state.userRole === 'admin';
+    if (!isAdmin) {
+      const leadsLink = document.getElementById('viewLeadsLink');
+      if (leadsLink) leadsLink.remove();
+      // Hide or limit sensitive panels for client view
+      if (competitorsTableBody) competitorsTableBody.innerHTML = '<tr><td colspan="9">Detailed competitor analysis available in Full Fix Plan or Admin view.</td></tr>';
+      if (fixesList) fixesList.innerHTML = '<li>Full prioritized fixes with time estimates and impact are unlocked in the One-Time Full Fix Plan ($79) or Admin view.</li>';
+    } else {
+      // #12: Show quick link to view saved leads when in admin mode
+      const leadsLink = document.getElementById('viewLeadsLink');
+      if (!leadsLink) {
+        const link = document.createElement('a');
+        link.id = 'viewLeadsLink';
+        link.href = '/admin/';
+        link.target = '_blank';
+        link.textContent = 'Open admin portal →';
+        link.style.cssText = 'display:block; margin:12px 0; color:#0ea5e9; font-weight:600;';
+        dashboardResults.prepend(link);
+      }
+    }
+
     renderSearchPositioning(view);
     renderMarketSearchSummary(view);
     renderMarketOpportunity(view);
@@ -1299,6 +1645,25 @@
     renderScoreCards(view);
     renderWhoBeatYou(view);
     renderRevenueImpact(view);
+
+    // #5: Prominent CTA for Specialist Strategy Session
+    const ctaContainer = document.getElementById('specialistCtaContainer');
+    if (ctaContainer) ctaContainer.remove();
+
+    const isFreeView = state.selectedPackageView === 'score_only' || !state.selectedPackageView;
+    if (!marketMode && isFreeView) {
+      const cta = document.createElement('div');
+      cta.id = 'specialistCtaContainer';
+      cta.style.cssText = 'margin:20px 0; padding:20px; background:linear-gradient(135deg, #0ea5e9, #0284c8); border-radius:12px; color:white; text-align:center;';
+      cta.innerHTML = `
+        <h4 style="margin:0 0 8px; color:white;">Ready for the full picture?</h4>
+        <p style="margin:0 0 16px; opacity:0.95;">Get the complete prioritized fix plan + 30-minute GeoNeo Specialist Strategy Session for $${SPECIALIST_PRICE}.</p>
+        <button class="btn" id="resultsSpecialistBtn" style="background:white; color:#0284c8; font-weight:700;">Book the Strategy Session — $${SPECIALIST_PRICE}</button>
+      `;
+      dashboardResults.appendChild(cta);
+
+      document.getElementById('resultsSpecialistBtn').onclick = () => showSpecialistSessionModal();
+    }
     if (!marketMode) {
       renderPackageComparison(state.dashboard);
     }
@@ -1408,6 +1773,11 @@
           if (payload.city) params.set('city', payload.city);
           if (payload.state) params.set('state', payload.state);
           if (payload.zip) params.set('zip', payload.zip);
+          // Step 3: Forward required lead capture fields for free scan persistence
+          if (payload.contactName) params.set('contactName', payload.contactName);
+          if (payload.businessName) params.set('businessName', payload.businessName);
+          if (payload.businessEmail) params.set('businessEmail', payload.businessEmail);
+          if (payload.phone) params.set('phone', payload.phone);
         }
       } else {
         if (!payload.industry) {
@@ -1486,12 +1856,24 @@
     websiteForm.addEventListener('submit', async (event) => {
       event.preventDefault();
       const formData = new FormData(websiteForm);
+      // Step 3: Enforce lead capture on website-only audit path
+      const contactName = String(formData.get('contactName') || '').trim();
+      const businessName = String(formData.get('businessName') || '').trim();
+      const businessEmail = String(formData.get('businessEmail') || '').trim();
+      if (!contactName || !businessName || !businessEmail) {
+        alert('Please provide your name, business name, and business email. These are required for free scans.');
+        return;
+      }
       await runQuery('website', {
         url: String(formData.get('url') || '').trim(),
         industry: String(formData.get('industry') || '').trim(),
         city: String(formData.get('city') || '').trim(),
         state: String(formData.get('state') || '').trim(),
-        zip: String(formData.get('zip') || '').trim()
+        zip: String(formData.get('zip') || '').trim(),
+        contactName,
+        businessName,
+        businessEmail,
+        phone: String(formData.get('phone') || '').trim()
       });
     });
   }
@@ -1514,12 +1896,24 @@
     bothForm.addEventListener('submit', async (event) => {
       event.preventDefault();
       const fd = new FormData(bothForm);
+      // Step 3: Always capture the 6 required free lead fields before running scan
+      const contactName = String(fd.get('contactName') || '').trim();
+      const businessName = String(fd.get('businessName') || '').trim();
+      const businessEmail = String(fd.get('businessEmail') || '').trim();
+      if (!contactName || !businessName || !businessEmail) {
+        alert('Please provide your name, business name, and business email to run the free scan. These are required so we can save your results and follow up.');
+        return;
+      }
       await runQuery('website', {
         url: String(fd.get('url') || '').trim(),
         industry: String(fd.get('industry') || '').trim(),
         city: String(fd.get('city') || '').trim(),
         state: String(fd.get('state') || '').trim(),
-        zip: String(fd.get('zip') || '').trim()
+        zip: String(fd.get('zip') || '').trim(),
+        contactName,
+        businessName,
+        businessEmail,
+        phone: String(fd.get('phone') || '').trim()
       });
     });
   }

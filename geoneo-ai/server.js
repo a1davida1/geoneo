@@ -18,21 +18,37 @@ const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { URL } = require('url');
 const {
   runLocalSearchVisibilityAudit,
   filterLocalSearchVisibilityByPackage
 } = require('./services/localSearchVisibility');
-const { createSerpProvider, extractRootDomain } = require('./services/serpProvider');
+const { createSerpProvider, extractRootDomain, normalizeDomain } = require('./services/serpProvider');
 const { runCitationFixer, generateTargetQueries, generateFixes, parsePageStructure, queryAIModel } = require('./services/citationFixer');
 const { calculateVisibilityScore } = require('./services/visibilityScoring');
 const { recordScore, getHistoryForDomain, getLatestScore } = require('./services/scoreHistory');
 const { getTrackedCompetitors, updateCompetitorScores } = require('./services/competitorTracking');
-const { startScheduler, runWeeklyScoring, getLastWeeklyRun } = require('./services/weeklyScoreScheduler');
+const { startScheduler, runWeeklyScoring, getLastWeeklyRun, isEligibleForWeeklyScore } = require('./services/weeklyScoreScheduler');
+const { getLatestAuditForDomain } = require('./services/auditLookup');
+const { buildWeeklyRecommendations, buildAiCitationBrief } = require('./services/memberBrief');
+const { analyzeTechnicalSeoDeep } = require('./services/technicalSeoDeep');
+const { buildCompetitorIntelligencePayload } = require('./services/competitorIntelligence');
+const { getTracker, upsertItem, deleteItem } = require('./services/fixTracker');
+const { authorizeInternalApi, authorizeInternalOrMember } = require('./services/apiAccess');
+const { loadAdminSummary } = require('./services/adminSummary');
 
 const PORT = process.env.PORT || 4173;
 const HOST = process.env.HOST || '127.0.0.1';
 const ROOT = __dirname;
+
+/** Same path as `services/auditLookup.js` so saves and GET lookups always match. */
+function resolvedAuditsJsonPath() {
+  return process.env.GEONEO_AUDITS_PATH
+    ? path.resolve(process.env.GEONEO_AUDITS_PATH)
+    : path.join(ROOT, 'data', 'audits.json');
+}
+
 const PAGESPEED_CACHE_TTL_MS = 10 * 60 * 1000;
 const PIPELINE_FILE = path.join(ROOT, 'data', 'pipeline.json');
 const PAGESPEED_TIMEOUT_MS = 25000; // Step 13: Raised to 25s with retry logic for production reliability under variable Google API load
@@ -58,7 +74,7 @@ async function loadPipelineData() {
 
 async function savePipelineData(data) {
   await fs.promises.mkdir(path.dirname(PIPELINE_FILE), { recursive: true });
-  const tmp = `${PIPELINE_FILE}.tmp`;
+  const tmp = `${PIPELINE_FILE}.${process.pid}.${Date.now()}.${crypto.randomBytes(6).toString('hex')}.tmp`;
   await fs.promises.writeFile(tmp, JSON.stringify(data, null, 2), 'utf8');
   await fs.promises.rename(tmp, PIPELINE_FILE);
 }
@@ -651,6 +667,53 @@ function buildReportLinks(auditId) {
   return {
     reportPath: `/api/audit-report?id=${encodeURIComponent(safeId)}`,
     downloadPath: `/api/audit-report/download?id=${encodeURIComponent(safeId)}`
+  };
+}
+
+function domainKeyFromAuditRecord(record) {
+  if (!record) return '';
+  return extractRootDomain(record.website || record.finalUrl || '') || '';
+}
+
+function buildVisibilityScoreInputFromAudit(audit) {
+  const record = audit || {};
+  const full = record.fullAuditResult || record;
+  const searchSnapshot = record.searchSnapshot || full.searchSnapshot || {};
+  const localVis = record.localSearchVisibility || full.localSearchVisibility || {};
+  const googleGrades = full.googleGrades || {};
+  const competitors = Array.isArray(searchSnapshot.competitors) ? searchSnapshot.competitors : [];
+  const top10Count = competitors.filter((c) => {
+    const rank = Number(c.rank || c.position || c.observedRank);
+    return Number.isFinite(rank) && rank > 0 && rank <= 10;
+  }).length;
+
+  return {
+    ...record,
+    fullAuditResult: full,
+    ourScore: Number(record.scores?.overall || full.scores?.overall) || 60,
+    googleAvgRank: Number(searchSnapshot.averageRank) || 12,
+    googleTop10Count: top10Count,
+    targetQueries: competitors.length || Number(localVis.summary?.queryCount) || 8,
+    searchSnapshotCompetitors: competitors,
+    mapPackAppearances: Number(localVis.summary?.foundInMapPackCount) || 0,
+    mapPackConsistency: Number(localVis.consistency) || 0.6,
+    aiQuestionCoverage: Array.isArray(full.aiCitationRecommendations) && full.aiCitationRecommendations.length ? 0.7 : 0.45,
+    schemaQuality: full.hasSchema ? 0.85 : 0.5,
+    lighthouseScores: {
+      performance: googleGrades.performance || full.performanceScore || 52,
+      seo: googleGrades.seo || full.seoScore || 68,
+      bestPractices: googleGrades.bestPractices || full.bestPracticesScore || 71
+    },
+    totalWords: full.wordCount || 950,
+    hasEeatSignals: full.trustDesign?.level === 'strong',
+    contentFreshness: 0.72,
+    reviewCount: full.reviewCount || 28,
+    reviewResponseRate: 0.65,
+    avgRating: full.avgRating || 4.3,
+    competitorAvgScore: 74,
+    gbpCompleteness: 0.78,
+    citationCount: 22,
+    localConsistency: 0.68
   };
 }
 
@@ -3323,6 +3386,7 @@ function buildAuditRecord({
   const normalizedPackage = normalizePackageLevel(purchasedPackage);
   const normalizedAmountPaid = resolveAmountPaid(amountPaid, normalizedPackage);
   const upgradeCreditAvailable = buildUpgradeCreditAvailable(normalizedPackage, normalizedAmountPaid);
+  const upgradeCredit = upgradeCreditAvailable?.amount || 0;
   const result = auditResult || {};
   const filteredForCustomer = customerResult || filterAuditResultByPackage(result, normalizedPackage);
   const effectiveAuditId = normalizeString(auditId) || makeAuditId({
@@ -3332,8 +3396,9 @@ function buildAuditRecord({
   });
   const reportLinks = buildReportLinks(effectiveAuditId);
 
-  const normalizedProductType = productType === PRODUCT_TYPES.ONE_TIME || productType === PRODUCT_TYPES.MEMBERSHIP
-    ? productType
+  const requestedProductType = productType || purchasedPackage?.productType || purchasedPackage?.type;
+  const normalizedProductType = requestedProductType === PRODUCT_TYPES.ONE_TIME || requestedProductType === PRODUCT_TYPES.MEMBERSHIP
+    ? requestedProductType
     : (normalizedAmountPaid > 0 ? PRODUCT_TYPES.ONE_TIME : PRODUCT_TYPES.FREE);
 
   return {
@@ -3368,8 +3433,8 @@ function buildAuditRecord({
     trustDesign: result.trustDesign || {},
     recommendation: {
       ...result.recommendation,
-      upgradeCreditAvailable: upgradeCreditAvailable || 0,
-      creditNote: upgradeCreditAvailable > 0 ? `$${upgradeCreditAvailable} credit available toward Neo Club` : ''
+      upgradeCreditAvailable: upgradeCredit,
+      creditNote: upgradeCredit > 0 ? `$${upgradeCredit} credit available toward Neo Club` : ''
     },
     searchSnapshot: result.searchSnapshot || {},
     localSearchVisibility: result.localSearchVisibility || {},
@@ -3387,7 +3452,7 @@ function buildAuditRecord({
 }
 
 async function saveAuditRecord(record, opts = {}) {
-  const filePath = opts.filePath || path.join(ROOT, 'data', 'audits.json');
+  const filePath = opts.filePath || resolvedAuditsJsonPath();
   const fsApi = opts.fsApi || fs.promises;
   const auditId = normalizeString(record && record.id);
   const tempPath = `${filePath}.tmp`;
@@ -3439,7 +3504,7 @@ async function saveAuditRecord(record, opts = {}) {
 }
 
 async function loadAuditRecords(opts = {}) {
-  const filePath = opts.filePath || path.join(ROOT, 'data', 'audits.json');
+  const filePath = opts.filePath || resolvedAuditsJsonPath();
   const fsApi = opts.fsApi || fs.promises;
 
   try {
@@ -3465,20 +3530,6 @@ async function getAuditRecordById(id, opts = {}) {
 
   const records = await loadAuditRecords(opts);
   return records.find((record) => normalizeString(record && record.id) === normalizedId) || null;
-}
-
-async function getLatestAuditForDomain(domain) {
-  const allRecords = await loadAuditRecords();
-  const domainLower = domain.toLowerCase();
-
-  const matches = allRecords.filter(r => {
-    const recordDomain = extractRootDomain(r.website || r.finalUrl || '');
-    return recordDomain === domainLower;
-  });
-
-  if (matches.length === 0) return null;
-
-  return matches.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))[0];
 }
 
 function buildAuditReportHtml(record) {
@@ -5291,14 +5342,16 @@ async function runAudit(targetInput, marketOrContext = '') {
       // Add timeout protection for AI calls
       const citationResults = await Promise.all(
         targetQueries.map(async (q) => {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 25000);
           try {
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 25000);
-            const result = await queryAIModel(q);
-            clearTimeout(timeout);
+            const result = await queryAIModel(q, controller.signal);
             return result;
-          } catch {
+          } catch (e) {
+            if (e && (e.name === 'AbortError' || e.code === 'ABORT_ERR')) return { aborted: true };
             return { citations: [], response: '', model: '' };
+          } finally {
+            clearTimeout(timeout);
           }
         })
       );
@@ -5678,12 +5731,35 @@ function sendJson(res, statusCode, data) {
   res.end(JSON.stringify(data));
 }
 
-function isLocalRequest(req) {
-  const remote = (req.socket && req.socket.remoteAddress) || '';
-  return remote === '127.0.0.1'
-    || remote === '::1'
-    || remote === '::ffff:127.0.0.1'
-    || remote === '';
+function sendApiForbidden(res) {
+  sendJson(res, 403, {
+    error: 'forbidden',
+    message:
+      'Internal API access denied. Use a loopback client or set GEONEO_INTERNAL_API_SECRET and send Authorization: Bearer <secret>.'
+  });
+}
+
+function sendMembershipRequired(res) {
+  sendJson(res, 403, {
+    error: 'membership_required',
+    message:
+      'This resource requires an eligible paid audit (membership, qualifying gold/admin purchase, or high-tier one-time within the grace window).'
+  });
+}
+
+/** Extra fields for /api/admin/* 404 when getLatestAuditForDomain returns null */
+function jsonAdminNoAudit(domain) {
+  const raw = normalizeString(domain);
+  const auditFile = resolvedAuditsJsonPath();
+  return {
+    auditsJsonPath: auditFile,
+    hint:
+      'No audit row in this file for that root domain. Run GET /api/audit with the full website URL; response must include saved: true. File: ' +
+      auditFile +
+      (raw
+        ? '. Diagnose: GET /api/admin/audits/debug?domain=' + encodeURIComponent(raw) + ' (internal auth).'
+        : '.')
+  };
 }
 
 function buildAdminLeadsHtml(records, pipeline = {}, paidLeads = []) {
@@ -5692,6 +5768,10 @@ function buildAdminLeadsHtml(records, pipeline = {}, paidLeads = []) {
 
   function domainFromRecord(r) {
     return extractRootDomain(r.finalUrl || r.website || '') || '';
+  }
+
+  function pipelineKeyForRecord(r) {
+    return domainFromRecord(r) || normalizeString(r && (r.auditId || r.id));
   }
 
   // Sort by newest first
@@ -5709,14 +5789,14 @@ function buildAdminLeadsHtml(records, pipeline = {}, paidLeads = []) {
     const priority = overall < 50 ? 'High' : (overall < 70 ? 'Medium' : 'Normal');
     const priorityClass = overall < 50 ? 'priority-high' : '';
 
-    const domain = domainFromRecord(record);
+    const domain = pipelineKeyForRecord(record);
     const pipe = safePipeline[domain] || { stage: 'new', notes: '', followUpDate: '', history: [] };
     const productType = record.productType || (record.amountPaid > 0 ? 'one-time' : 'free');
     const amountPaid = Number(record.amountPaid || 0);
 
     // Get top issues and fixes for expandable content
-    const issues = Array.isArray(record.fullAuditResult?.issues) ? record.fullAuditResult.issues.slice(0, 3) : [];
-    const fixes = Array.isArray(record.fullAuditResult?.fixes) ? record.fullAuditResult.fixes.slice(0, 3) : [];
+    const issues = Array.isArray(record.fullAuditResult?.checks) ? record.fullAuditResult.checks.slice(0, 3) : [];
+    const fixes = Array.isArray(record.fullAuditResult?.topFixes) ? record.fullAuditResult.topFixes.slice(0, 3) : [];
 
     const issuesHtml = issues.length
       ? issues.map(i => `<li><strong>${escapeHtml(i.category || '')}:</strong> ${escapeHtml(i.title || i.description || '')}</li>`).join('')
@@ -5800,6 +5880,16 @@ function buildAdminLeadsHtml(records, pipeline = {}, paidLeads = []) {
     .quick-call:hover { text-decoration: underline; }
   </style>
   <script>
+    function adminAuthHeaders(base) {
+      const h = Object.assign({}, base || {});
+      try {
+        const bearer = window.parent && window.parent !== window
+          ? window.parent.localStorage.getItem('geoneo_admin_bearer')
+          : null;
+        if (bearer) h.Authorization = 'Bearer ' + bearer;
+      } catch (e) { /* cross-origin parent */ }
+      return h;
+    }
     document.addEventListener('click', async (e) => {
       if (e.target.classList.contains('pipeline-save-btn')) {
         const domain = e.target.dataset.domain;
@@ -5810,7 +5900,7 @@ function buildAdminLeadsHtml(records, pipeline = {}, paidLeads = []) {
         try {
           const res = await fetch('/api/pipeline/' + encodeURIComponent(domain), {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: adminAuthHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ stage, followUpDate: followUp, notes })
           });
           if (res.ok) {
@@ -5825,8 +5915,12 @@ function buildAdminLeadsHtml(records, pipeline = {}, paidLeads = []) {
   </script>
 </head>
 <body>
+  <nav style="margin-bottom:16px; display:flex; gap:16px; align-items:center; flex-wrap:wrap;">
+    <a href="/admin/" style="color:#0ea5e9; font-weight:600;">← Admin home</a>
+    <span style="color:#64748b;">Internal leads</span>
+  </nav>
   <h1>GeoNeo Leads</h1>
-  <p>Internal dashboard. Search and filter leads below. All actions are local-only.</p>
+  <p>Pipeline and saved audits. Access is restricted to internal API clients (loopback or Bearer secret). Open <a href="/admin/">/admin/</a> for the full operator shell.</p>
   
   ${paidLeads.length > 0 ? `
   <div style="background:#fefce8; border:2px solid #fde047; border-radius:10px; padding:16px; margin-bottom:24px;">
@@ -5853,7 +5947,7 @@ function buildAdminLeadsHtml(records, pipeline = {}, paidLeads = []) {
             <td>${escapeHtml(lead.email || '')}</td>
             <td>${escapeHtml(lead.phone || '')}</td>
             <td>${escapeHtml(lead.preferredTime || '')}</td>
-            <td><strong>$${lead.amountPaid || 197}</strong></td>
+            <td><strong>$${escapeHtml(String(Number(lead.amountPaid) || 197))}</strong></td>
             <td><span style="background:#fef3c7; padding:2px 8px; border-radius:4px; font-size:12px;">${escapeHtml(lead.status || 'new')}</span></td>
           </tr>
         `).join('')}
@@ -5967,14 +6061,18 @@ async function requestHandler(req, res) {
   const reqUrl = new URL(req.url, `http://${req.headers.host}`);
 
   if (reqUrl.pathname === '/api/citation-fixer' && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) {
+      sendJson(res, 403, { error: 'forbidden' });
+      return;
+    }
     try {
       const url = reqUrl.searchParams.get('url') || '';
       const industry = reqUrl.searchParams.get('industry') || '';
       const city = reqUrl.searchParams.get('city') || '';
       const state = reqUrl.searchParams.get('state') || '';
       const businessName = reqUrl.searchParams.get('businessName') || '';
-      if (!url) {
-        sendJson(res, 400, { error: 'Missing url parameter.' });
+      if (!url || !/^https?:\/\//i.test(url)) {
+        sendJson(res, 400, { error: 'Missing or invalid url parameter (must start with http/https).' });
         return;
       }
       const result = await runCitationFixer({ url, industry, city, state, businessName });
@@ -6076,12 +6174,119 @@ async function requestHandler(req, res) {
     return;
   }
 
-  // === Visibility Scoring Endpoints (for Club Members) ===
-  
-  if (reqUrl.pathname === '/api/score' && req.method === 'GET') {
-    if (!isLocalRequest(req)) {
-      res.writeHead(403);
-      res.end('Forbidden');
+  if (reqUrl.pathname === '/api/admin/summary' && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) {
+      sendApiForbidden(res);
+      return;
+    }
+    try {
+      const summary = await loadAdminSummary();
+      sendJson(res, 200, {
+        ok: true,
+        summary,
+        lastWeeklyRunInMemory: getLastWeeklyRun()
+      });
+    } catch (e) {
+      sendJson(res, 500, { error: e.message || 'admin summary failed' });
+    }
+    return;
+  }
+
+  if (reqUrl.pathname === '/api/admin/audits/debug' && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) {
+      sendApiForbidden(res);
+      return;
+    }
+    try {
+      const domainParam = reqUrl.searchParams.get('domain') || '';
+      const records = await loadAuditRecords();
+      const sorted = Array.isArray(records)
+        ? records.slice().sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+        : [];
+      const queryRoot = extractRootDomain(normalizeDomain(domainParam));
+      const matches = queryRoot
+        ? sorted.filter((r) => extractRootDomain(r.website || r.finalUrl || '') === queryRoot)
+        : [];
+      const recentRoots = sorted.slice(0, 30).map((r) => ({
+        auditId: r.id || r.auditId || '',
+        createdAt: r.createdAt,
+        root: extractRootDomain(r.website || r.finalUrl || ''),
+        website: String(r.website || '').slice(0, 96),
+        finalUrl: String(r.finalUrl || '').slice(0, 96)
+      }));
+      const hints = queryRoot
+        ? sorted
+            .filter((r) => {
+              const blob = `${r.website || ''} ${r.finalUrl || ''}`.toLowerCase();
+              return blob.includes(queryRoot);
+            })
+            .slice(0, 8)
+            .map((r) => ({
+              auditId: r.id || '',
+              root: extractRootDomain(r.website || r.finalUrl || ''),
+              website: String(r.website || '').slice(0, 72)
+            }))
+        : [];
+
+      sendJson(res, 200, {
+        ok: true,
+        operator: true,
+        auditsJsonPath: resolvedAuditsJsonPath(),
+        queryInput: domainParam,
+        queryRoot: queryRoot || null,
+        totalRecords: sorted.length,
+        matchCount: matches.length,
+        latestMatchAuditId: matches[0] ? matches[0].id || matches[0].auditId || null : null,
+        recentRoots,
+        urlSubstringHints: hints
+      });
+    } catch (e) {
+      sendJson(res, 500, { ok: false, operator: true, error: e.message || 'audit debug failed' });
+    }
+    return;
+  }
+
+  if (reqUrl.pathname === '/admin' && req.method === 'GET') {
+    res.writeHead(302, { Location: '/admin/', 'Cache-Control': 'no-store' });
+    res.end();
+    return;
+  }
+
+  if (reqUrl.pathname === '/admin/index.html' && req.method === 'GET') {
+    res.writeHead(302, { Location: '/admin/', 'Cache-Control': 'no-store' });
+    res.end();
+    return;
+  }
+
+  if (reqUrl.pathname === '/admin/' && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) {
+      res.writeHead(403, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(`<!doctype html><html><head><meta charset="utf-8"><title>403 Admin</title></head><body style="font-family:system-ui;padding:2rem;max-width:42rem;">
+<h1>403 Forbidden</h1>
+<p>The admin shell requires loopback access or <code>Authorization: Bearer</code> matching <code>GEONEO_INTERNAL_API_SECRET</code>.</p>
+<p>For remote access, tunnel (for example <code>ssh -L 4173:127.0.0.1:4173</code>) or configure a reverse proxy that adds the header.</p>
+</body></html>`);
+      return;
+    }
+    const adminIndex = path.join(ROOT, 'admin', 'index.html');
+    try {
+      const data = await fs.promises.readFile(adminIndex);
+      res.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store'
+      });
+      res.end(data);
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Admin shell missing (admin/index.html).');
+    }
+    return;
+  }
+
+  // === Operator API (/api/admin/*): internal auth only; no membership / package gate ===
+  if (reqUrl.pathname === '/api/admin/score' && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) {
+      sendApiForbidden(res);
       return;
     }
     try {
@@ -6090,16 +6295,253 @@ async function requestHandler(req, res) {
         sendJson(res, 400, { error: 'Missing domain parameter' });
         return;
       }
-      
-      // For now, calculate from latest audit data (future: use stored weekly scores)
+      const persist = reqUrl.searchParams.get('persist');
+      const shouldPersist = persist !== '0' && persist !== 'false';
       const latestAudit = await getLatestAuditForDomain(domain);
       if (!latestAudit) {
-        sendJson(res, 404, { error: 'No audit data found for this domain' });
+        sendJson(
+          res,
+          404,
+          Object.assign({ error: 'No audit data found for this domain' }, jsonAdminNoAudit(domain))
+        );
+        return;
+      }
+      const scoreResult = calculateVisibilityScore(buildVisibilityScoreInputFromAudit(latestAudit));
+      const prev = await getLatestScore(domain);
+      if (prev && prev.overall != null) {
+        if (scoreResult.overall > prev.overall) scoreResult.trend = 'up';
+        else if (scoreResult.overall < prev.overall) scoreResult.trend = 'down';
+        else scoreResult.trend = 'stable';
+      } else {
+        scoreResult.trend = 'stable';
+      }
+      if (shouldPersist) {
+        await recordScore(domain, scoreResult);
+      }
+      sendJson(res, 200, { ok: true, operator: true, domain, score: scoreResult });
+    } catch (e) {
+      sendJson(res, 500, { error: 'Failed to calculate score' });
+    }
+    return;
+  }
+
+  if (reqUrl.pathname === '/api/admin/score/history' && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) {
+      sendApiForbidden(res);
+      return;
+    }
+    try {
+      const domain = reqUrl.searchParams.get('domain');
+      if (!domain) {
+        sendJson(res, 400, { error: 'Missing domain' });
+        return;
+      }
+      const latestAudit = await getLatestAuditForDomain(domain);
+      if (!latestAudit) {
+        sendJson(
+          res,
+          404,
+          Object.assign({ error: 'No audit data found for this domain' }, jsonAdminNoAudit(domain))
+        );
+        return;
+      }
+      const history = await getHistoryForDomain(domain);
+      sendJson(res, 200, { ok: true, operator: true, domain, history });
+    } catch (e) {
+      sendJson(res, 500, { error: 'Failed to load history' });
+    }
+    return;
+  }
+
+  if (reqUrl.pathname === '/api/admin/competitors/dashboard' && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) {
+      sendApiForbidden(res);
+      return;
+    }
+    try {
+      const domain = reqUrl.searchParams.get('domain');
+      if (!domain) {
+        sendJson(res, 400, { error: 'Missing domain' });
+        return;
+      }
+      const latestAudit = await getLatestAuditForDomain(domain);
+      if (!latestAudit) {
+        sendJson(
+          res,
+          404,
+          Object.assign({ ok: false, operator: true, error: 'no_audit' }, jsonAdminNoAudit(domain))
+        );
+        return;
+      }
+      const payload = await buildCompetitorIntelligencePayload(domain);
+      sendJson(res, payload.ok ? 200 : 404, Object.assign({ operator: true }, payload));
+    } catch (e) {
+      sendJson(res, 500, { error: 'Competitor dashboard failed', message: e.message });
+    }
+    return;
+  }
+
+  if (reqUrl.pathname === '/api/admin/member/brief' && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) {
+      sendApiForbidden(res);
+      return;
+    }
+    try {
+      const domain = reqUrl.searchParams.get('domain');
+      if (!domain) {
+        sendJson(res, 400, { error: 'Missing domain' });
+        return;
+      }
+      const audit = await getLatestAuditForDomain(domain);
+      if (!audit) {
+        sendJson(
+          res,
+          404,
+          Object.assign({ ok: false, operator: true, error: 'No audit' }, jsonAdminNoAudit(domain))
+        );
+        return;
+      }
+      const weeklyActions = buildWeeklyRecommendations(audit);
+      const aiCitation = buildAiCitationBrief(audit);
+      sendJson(res, 200, {
+        ok: true,
+        operator: true,
+        domain,
+        weeklyActions,
+        aiCitation
+      });
+    } catch (e) {
+      sendJson(res, 500, { error: 'Brief failed', message: e.message });
+    }
+    return;
+  }
+
+  if (reqUrl.pathname === '/api/admin/member/technical' && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) {
+      sendApiForbidden(res);
+      return;
+    }
+    try {
+      const domain = reqUrl.searchParams.get('domain');
+      if (!domain) {
+        sendJson(res, 400, { error: 'Missing domain' });
+        return;
+      }
+      const audit = await getLatestAuditForDomain(domain);
+      if (!audit) {
+        sendJson(
+          res,
+          404,
+          Object.assign({ ok: false, operator: true, error: 'No audit' }, jsonAdminNoAudit(domain))
+        );
+        return;
+      }
+      const deep = analyzeTechnicalSeoDeep(audit);
+      sendJson(res, 200, { ok: true, operator: true, domain, technical: deep });
+    } catch (e) {
+      sendJson(res, 500, { error: 'Technical analysis failed', message: e.message });
+    }
+    return;
+  }
+
+  if (reqUrl.pathname === '/api/admin/fix-tracker' && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) {
+      sendApiForbidden(res);
+      return;
+    }
+    try {
+      const domain = reqUrl.searchParams.get('domain');
+      if (!domain) {
+        sendJson(res, 400, { error: 'Missing domain' });
+        return;
+      }
+      const tracker = await getTracker(domain);
+      sendJson(res, 200, { ok: true, operator: true, ...tracker });
+    } catch (e) {
+      sendJson(res, 500, { error: 'Tracker load failed', message: e.message });
+    }
+    return;
+  }
+
+  if (reqUrl.pathname === '/api/admin/fix-tracker' && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) {
+      sendApiForbidden(res);
+      return;
+    }
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', async () => {
+      try {
+        const raw = Buffer.concat(chunks).toString('utf8');
+        const body = raw ? JSON.parse(raw) : {};
+        const domain = body.domain;
+        if (!domain) {
+          sendJson(res, 400, { error: 'Missing domain in body' });
+          return;
+        }
+        if (body.action === 'delete' && body.id) {
+          await deleteItem(domain, body.id);
+          sendJson(res, 200, { ok: true, operator: true, deleted: body.id });
+          return;
+        }
+        const item = await upsertItem(domain, body);
+        sendJson(res, 200, { ok: true, operator: true, item });
+      } catch (e) {
+        if (e.code === 'VALIDATION') {
+          sendJson(res, 400, { error: 'validation_failed', operator: true, details: e.validationErrors || [] });
+          return;
+        }
+        sendJson(res, 500, { error: 'Tracker save failed', message: e.message });
+      }
+    });
+    return;
+  }
+
+  // === Visibility Scoring Endpoints (for Club Members) ===
+  
+  if (reqUrl.pathname === '/api/score' && req.method === 'GET') {
+    if (!authorizeInternalOrMember(req)) {
+      sendApiForbidden(res);
+      return;
+    }
+    try {
+      const domain = reqUrl.searchParams.get('domain');
+      if (!domain) {
+        sendJson(res, 400, { error: 'Missing domain parameter' });
         return;
       }
 
-      const scoreResult = calculateVisibilityScore(latestAudit);
-      await recordScore(domain, scoreResult);
+      const persist = reqUrl.searchParams.get('persist');
+      const shouldPersist = persist !== '0' && persist !== 'false';
+
+      const latestAudit = await getLatestAuditForDomain(domain);
+      if (!latestAudit) {
+        sendJson(
+          res,
+          404,
+          Object.assign({ error: 'No audit data found for this domain' }, jsonAdminNoAudit(domain))
+        );
+        return;
+      }
+      if (!isEligibleForWeeklyScore(latestAudit)) {
+        sendMembershipRequired(res);
+        return;
+      }
+
+      const scoreResult = calculateVisibilityScore(buildVisibilityScoreInputFromAudit(latestAudit));
+
+      const prev = await getLatestScore(domain);
+      if (prev && prev.overall != null) {
+        if (scoreResult.overall > prev.overall) scoreResult.trend = 'up';
+        else if (scoreResult.overall < prev.overall) scoreResult.trend = 'down';
+        else scoreResult.trend = 'stable';
+      } else {
+        scoreResult.trend = 'stable';
+      }
+
+      if (shouldPersist) {
+        await recordScore(domain, scoreResult);
+      }
 
       sendJson(res, 200, {
         ok: true,
@@ -6113,13 +6555,29 @@ async function requestHandler(req, res) {
   }
 
   if (reqUrl.pathname === '/api/score/history' && req.method === 'GET') {
-    if (!isLocalRequest(req)) {
-      res.writeHead(403);
-      res.end('Forbidden');
+    if (!authorizeInternalOrMember(req)) {
+      sendApiForbidden(res);
       return;
     }
     try {
       const domain = reqUrl.searchParams.get('domain');
+      if (!domain) {
+        sendJson(res, 400, { error: 'Missing domain' });
+        return;
+      }
+      const latestAudit = await getLatestAuditForDomain(domain);
+      if (!latestAudit) {
+        sendJson(
+          res,
+          404,
+          Object.assign({ error: 'No audit data found for this domain' }, jsonAdminNoAudit(domain))
+        );
+        return;
+      }
+      if (!isEligibleForWeeklyScore(latestAudit)) {
+        sendMembershipRequired(res);
+        return;
+      }
       const history = await getHistoryForDomain(domain);
       sendJson(res, 200, { ok: true, domain, history });
     } catch (e) {
@@ -6128,11 +6586,171 @@ async function requestHandler(req, res) {
     return;
   }
 
-  // Weekly score scheduler endpoints (local-only for manual trigger)
+  if (reqUrl.pathname === '/api/competitors/dashboard' && req.method === 'GET') {
+    if (!authorizeInternalOrMember(req)) {
+      sendApiForbidden(res);
+      return;
+    }
+    try {
+      const domain = reqUrl.searchParams.get('domain');
+      if (!domain) {
+        sendJson(res, 400, { error: 'Missing domain' });
+        return;
+      }
+      const latestAudit = await getLatestAuditForDomain(domain);
+      if (!latestAudit) {
+        sendJson(res, 404, { ok: false, error: 'no_audit' });
+        return;
+      }
+      if (!isEligibleForWeeklyScore(latestAudit)) {
+        sendMembershipRequired(res);
+        return;
+      }
+      const payload = await buildCompetitorIntelligencePayload(domain);
+      sendJson(res, payload.ok ? 200 : 404, payload);
+    } catch (e) {
+      sendJson(res, 500, { error: 'Competitor dashboard failed', message: e.message });
+    }
+    return;
+  }
+
+  if (reqUrl.pathname === '/api/member/brief' && req.method === 'GET') {
+    if (!authorizeInternalOrMember(req)) {
+      sendApiForbidden(res);
+      return;
+    }
+    try {
+      const domain = reqUrl.searchParams.get('domain');
+      if (!domain) {
+        sendJson(res, 400, { error: 'Missing domain' });
+        return;
+      }
+      const audit = await getLatestAuditForDomain(domain);
+      if (!audit) {
+        sendJson(res, 404, { ok: false, error: 'No audit' });
+        return;
+      }
+      if (!isEligibleForWeeklyScore(audit)) {
+        sendMembershipRequired(res);
+        return;
+      }
+      const weeklyActions = buildWeeklyRecommendations(audit);
+      const aiCitation = buildAiCitationBrief(audit);
+      sendJson(res, 200, {
+        ok: true,
+        domain,
+        weeklyActions,
+        aiCitation
+      });
+    } catch (e) {
+      sendJson(res, 500, { error: 'Brief failed', message: e.message });
+    }
+    return;
+  }
+
+  if (reqUrl.pathname === '/api/member/technical' && req.method === 'GET') {
+    if (!authorizeInternalOrMember(req)) {
+      sendApiForbidden(res);
+      return;
+    }
+    try {
+      const domain = reqUrl.searchParams.get('domain');
+      if (!domain) {
+        sendJson(res, 400, { error: 'Missing domain' });
+        return;
+      }
+      const audit = await getLatestAuditForDomain(domain);
+      if (!audit) {
+        sendJson(res, 404, { ok: false, error: 'No audit' });
+        return;
+      }
+      if (!isEligibleForWeeklyScore(audit)) {
+        sendMembershipRequired(res);
+        return;
+      }
+      const deep = analyzeTechnicalSeoDeep(audit);
+      sendJson(res, 200, { ok: true, domain, technical: deep });
+    } catch (e) {
+      sendJson(res, 500, { error: 'Technical analysis failed', message: e.message });
+    }
+    return;
+  }
+
+  if (reqUrl.pathname === '/api/fix-tracker' && req.method === 'GET') {
+    if (!authorizeInternalOrMember(req)) {
+      sendApiForbidden(res);
+      return;
+    }
+    try {
+      const domain = reqUrl.searchParams.get('domain');
+      if (!domain) {
+        sendJson(res, 400, { error: 'Missing domain' });
+        return;
+      }
+      const latestAudit = await getLatestAuditForDomain(domain);
+      if (!latestAudit) {
+        sendJson(res, 404, { ok: false, error: 'No audit' });
+        return;
+      }
+      if (!isEligibleForWeeklyScore(latestAudit)) {
+        sendMembershipRequired(res);
+        return;
+      }
+      const tracker = await getTracker(domain);
+      sendJson(res, 200, { ok: true, ...tracker });
+    } catch (e) {
+      sendJson(res, 500, { error: 'Tracker load failed', message: e.message });
+    }
+    return;
+  }
+
+  if (reqUrl.pathname === '/api/fix-tracker' && req.method === 'POST') {
+    if (!authorizeInternalOrMember(req)) {
+      sendApiForbidden(res);
+      return;
+    }
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', async () => {
+      try {
+        const raw = Buffer.concat(chunks).toString('utf8');
+        const body = raw ? JSON.parse(raw) : {};
+        const domain = body.domain;
+        if (!domain) {
+          sendJson(res, 400, { error: 'Missing domain in body' });
+          return;
+        }
+        const latestAudit = await getLatestAuditForDomain(domain);
+        if (!latestAudit) {
+          sendJson(res, 404, { ok: false, error: 'No audit' });
+          return;
+        }
+        if (!isEligibleForWeeklyScore(latestAudit)) {
+          sendMembershipRequired(res);
+          return;
+        }
+        if (body.action === 'delete' && body.id) {
+          await deleteItem(domain, body.id);
+          sendJson(res, 200, { ok: true, deleted: body.id });
+          return;
+        }
+        const item = await upsertItem(domain, body);
+        sendJson(res, 200, { ok: true, item });
+      } catch (e) {
+        if (e.code === 'VALIDATION') {
+          sendJson(res, 400, { error: 'validation_failed', details: e.validationErrors || [] });
+          return;
+        }
+        sendJson(res, 500, { error: 'Tracker save failed', message: e.message });
+      }
+    });
+    return;
+  }
+
+  // Weekly score scheduler endpoints (manual trigger; requires internal API auth)
   if (reqUrl.pathname === '/api/score/run-weekly' && req.method === 'GET') {
-    if (!isLocalRequest(req)) {
-      res.writeHead(403);
-      res.end('Forbidden');
+    if (!authorizeInternalApi(req)) {
+      sendApiForbidden(res);
       return;
     }
     try {
@@ -6200,7 +6818,7 @@ async function requestHandler(req, res) {
       const hasMarketInputs = Boolean(normalizeString(industry) || normalizeString(city) || normalizeString(state) || normalizeString(zip));
       
       // Prioritize website analysis when a URL is provided (#3 fix)
-      const effectiveQueryType = targetUrl ? queryType : (hasMarketInputs ? 'market' : queryType);
+      const effectiveQueryType = targetUrl ? 'website' : (hasMarketInputs ? 'market' : queryType);
 
       if (effectiveQueryType === 'market') {
         const marketModel = await runMarketOnlyAudit({
@@ -6213,6 +6831,45 @@ async function requestHandler(req, res) {
         const packageViews = buildDashboardPackageViews(marketModel);
         const selectedPackageView = dashboardPackage || normalizeDashboardPackage(packageLevel);
         const selectedView = internalMode ? packageViews.full_data : (packageViews[selectedPackageView] || packageViews.full_data);
+        const marketAuditId = makeAuditId({
+          company: businessName || industry || 'market',
+          website: market || [industry, city, state, zip].filter(Boolean).join(' '),
+          createdAt
+        });
+        const marketCustomerResult = {
+          packageLevel,
+          queryType: 'market',
+          summary: marketModel.industryAnalysis?.overview?.summary || marketModel.sourceNote || '',
+          scores: marketModel.summaryScores || {}
+        };
+        const marketRecord = buildAuditRecord({
+          contactName,
+          businessName,
+          businessEmail,
+          phone,
+          industry,
+          businessCategory,
+          streetAddress,
+          city,
+          state,
+          zip,
+          competitorsInput,
+          competitorUrl,
+          competitorNotes,
+          searchQuery,
+          bestContactTime,
+          followupConsent,
+          website: targetUrl || '',
+          market,
+          auditMode,
+          createdAt,
+          auditId: marketAuditId,
+          auditResult: marketModel,
+          purchasedPackage: packageLevel,
+          amountPaid,
+          customerResult: marketCustomerResult
+        });
+        const marketSaveResult = await saveAuditRecord(marketRecord);
         sendJson(res, 200, {
           ok: true,
           mode: 'market',
@@ -6227,7 +6884,10 @@ async function requestHandler(req, res) {
             selectedView,
             internalView: packageViews.full_data
           },
-          ...selectedView
+          ...selectedView,
+          saved: Boolean(marketSaveResult.saved),
+          auditId: marketSaveResult.auditId || marketAuditId,
+          saveError: marketSaveResult.error || ''
         });
         return;
       }
@@ -6299,49 +6959,26 @@ async function requestHandler(req, res) {
 
         // === Auto-calculate and store Visibility Score (High Quality Integration) ===
         try {
-          const localVis = result?.localSearchVisibility || {};
-          const fullResult = result?.fullAuditResult || {};
-          const googleGrades = fullResult.googleGrades || {};
+          const visibilityScore = calculateVisibilityScore(buildVisibilityScoreInputFromAudit(record));
 
-          const visibilityScore = calculateVisibilityScore({
-            ourScore: Number(result?.scores?.overall) || 60,
-            googleAvgRank: result?.searchSnapshot?.averageRank || 12,
-            googleTop10Count: result?.searchSnapshot?.competitors?.filter(c => Number(c.rank) <= 10).length || 0,
-            targetQueries: result?.searchSnapshot?.competitors?.length || 8,
-            mapPackAppearances: localVis.summary?.foundInMapPackCount || 0,
-            mapPackConsistency: localVis.consistency || 0.6,
-            aiQuestionCoverage: fullResult.aiCitationRecommendations?.length ? 0.7 : 0.45,
-            schemaQuality: fullResult.hasSchema ? 0.85 : 0.5,
-            reviewSentiment: 0.78,
-            lighthouseScores: {
-              performance: googleGrades.performance || 52,
-              seo: googleGrades.seo || 68,
-              bestPractices: googleGrades.bestPractices || 71
-            },
-            totalWords: fullResult.wordCount || 950,
-            hasEeatSignals: fullResult.trustDesign?.level === 'strong',
-            contentFreshness: 0.72,
-            reviewCount: fullResult.reviewCount || 28,
-            reviewResponseRate: 0.65,
-            avgRating: fullResult.avgRating || 4.3,
-            competitorAvgScore: 74,
-            gbpCompleteness: 0.78,
-            citationCount: 22,
-            localConsistency: 0.68
-          });
-
-          await recordScore(domainFromRecord(record), visibilityScore);
-          console.log(`[GeoNeo] Visibility score calculated for ${domainFromRecord(record)}: ${visibilityScore.overall}`);
+          await recordScore(domainKeyFromAuditRecord(record), visibilityScore);
+          console.log(`[GeoNeo] Visibility score calculated for ${domainKeyFromAuditRecord(record)}: ${visibilityScore.overall}`);
 
           // Update competitor scores if we have tracked competitors
           try {
-            const tracked = await getTrackedCompetitors(domainFromRecord(record));
+            const tracked = await getTrackedCompetitors(domainKeyFromAuditRecord(record));
             if (tracked.length > 0) {
               const competitorScores = {};
-              tracked.forEach(comp => {
-                competitorScores[comp.domain] = Math.floor(Math.random() * 25) + 65; // Placeholder until real competitor scoring is built
-              });
-              await updateCompetitorScores(domainFromRecord(record), competitorScores);
+              for (const comp of tracked) {
+                const compAudit = await getLatestAuditForDomain(comp.domain);
+                if (compAudit) {
+                  const s = calculateVisibilityScore(buildVisibilityScoreInputFromAudit(compAudit));
+                  competitorScores[comp.domain] = s.overall;
+                }
+              }
+              if (Object.keys(competitorScores).length > 0) {
+                await updateCompetitorScores(domainKeyFromAuditRecord(record), competitorScores);
+              }
             }
           } catch (e) {
             console.warn('[GeoNeo] Competitor tracking update failed');
@@ -6411,6 +7048,50 @@ async function requestHandler(req, res) {
             )
           }
         };
+        const fallbackAuditResult = {
+          scores: filteredResult.scores,
+          summary: filteredResult.summary,
+          finalUrl: targetUrl,
+          auditFallback: true,
+          fallbackReason,
+          topFixes: []
+        };
+        try {
+          const record = buildAuditRecord({
+            contactName,
+            businessName,
+            businessEmail,
+            phone,
+            industry,
+            businessCategory,
+            streetAddress,
+            city,
+            state,
+            zip,
+            competitorsInput,
+            competitorUrl,
+            competitorNotes,
+            searchQuery,
+            bestContactTime,
+            followupConsent,
+            website: targetUrl,
+            market,
+            auditMode,
+            createdAt,
+            auditId: plannedAuditId,
+            auditResult: fallbackAuditResult,
+            purchasedPackage: packageLevel,
+            amountPaid,
+            customerResult: filteredResult
+          });
+          saveResult = await saveAuditRecord(record);
+        } catch (saveErr) {
+          saveResult = {
+            saved: false,
+            auditId: plannedAuditId,
+            error: saveErr && saveErr.message ? saveErr.message : 'Unable to save fallback audit record.'
+          };
+        }
       }
 
       const packageViews = buildDashboardPackageViews(unifiedModel);
@@ -6453,7 +7134,7 @@ async function requestHandler(req, res) {
   }
 
   if (reqUrl.pathname === '/admin/leads' && req.method === 'GET') {
-    if (!isLocalRequest(req)) {
+    if (!authorizeInternalApi(req)) {
       res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end('Forbidden');
       return;
@@ -6479,11 +7160,19 @@ async function requestHandler(req, res) {
     return;
   }
 
-  // Step 4: Pipeline update endpoint for the internal dashboard (local-only)
+  async function readRequestBody(req) {
+    return new Promise((resolve, reject) => {
+      let data = '';
+      req.on('data', (chunk) => { data += chunk; });
+      req.on('end', () => resolve(data));
+      req.on('error', reject);
+    });
+  }
+
+  // Step 4: Pipeline update endpoint for the internal dashboard (internal API auth)
   if (reqUrl.pathname.startsWith('/api/pipeline/') && req.method === 'POST') {
-    if (!isLocalRequest(req)) {
-      res.writeHead(403);
-      res.end('Forbidden');
+    if (!authorizeInternalApi(req)) {
+      sendApiForbidden(res);
       return;
     }
     try {
@@ -6540,7 +7229,7 @@ async function requestHandler(req, res) {
       await fs.promises.rename(tmp, leadsFile);
       
       // Log for Matt (in production this would send email/Slack)
-      console.log('[GeoNeo] New paid lead received:', newLead.email, newLead.name);
+      console.log(`[GeoNeo] New paid lead received: id=${newLead.id}, source=paid`);
       
       // In production: send confirmation email here using Resend / SendGrid
       sendJson(res, 200, { ok: true, leadId: newLead.id });

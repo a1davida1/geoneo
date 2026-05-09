@@ -664,6 +664,24 @@ body[data-audit-mode="website"] #fixesPanel {
   color: var(--ink);
 }
 
+/* Lead capture section (Step 3 - required for free scan persistence) */
+.lead-capture-section {
+  background: rgba(0, 229, 160, 0.03);
+  border: 1px solid rgba(0, 229, 160, 0.2);
+  border-radius: 12px;
+  padding: 0.75rem;
+  margin: 0.25rem 0;
+}
+
+.lead-capture-section .field-row {
+  gap: 0.6rem;
+}
+
+.lead-capture-section label .required {
+  color: var(--accent);
+  font-weight: 700;
+}
+
 .audit-form input:focus {
   outline: 2px solid rgba(0, 229, 160, 0.3);
   border-color: var(--brand);

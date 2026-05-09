@@ -58,13 +58,13 @@ happening, and no one is telling them whether they're getting recommended.
 
 ## The promise
 
-Every week, in plain English, we tell each customer:
+Every paying customer receives:
 
-1. **What local searches and AI searches you appeared in this week**
-   (e.g. "ChatGPT recommended Able Plumbing 7 times; recommended you 0 times").
-2. **Who beat you, and why** (specific competitors, specific reasons).
-3. **Three specific changes to make this week** to fix it — changes the owner
-   can do in an hour, or hand to any web person to implement.
+1. **Exact visibility snapshot** — What local Google, Maps, and AI searches (ChatGPT, Perplexity, Gemini, Google AI Overviews) you appeared in this week, with real citation counts where possible.
+2. **Competitor intelligence** — Who beat you on those exact queries, why (technical, content, local signals, E-E-A-T gaps), and side-by-side comparison.
+3. **Three prioritized changes to make this week** — Specific, time-bounded actions the owner can execute in under an hour or hand to any web person. Every fix includes estimated effort and expected business impact.
+
+Free scans show the visibility snapshot and high-level issues. The full prioritized implementation path (the "what to do this week" list with details) is unlocked via the one-time $79 purchase or Neo Club membership.
 
 No dashboards the owner won't open. No jargon. No annual contracts.
 
@@ -80,17 +80,28 @@ No dashboards the owner won't open. No jargon. No annual contracts.
 4. **No retainer.** Flat monthly price. Cancel anytime. This alone breaks the
    agency objection.
 
+## Two Paths to Paid Value (Year 1)
+
+GeoNeo offers two distinct commercial products that match how contractors actually buy:
+
+1. **One-Time Audit + Prioritized Fix Plan** — A single, low-price purchase that delivers the complete "what's wrong + exactly what to do this week" implementation guide (full Gold-level depth). Price: **$79 one-time**. No subscription. Perfect for owners who want the roadmap now and will implement themselves or hand it to a web person.
+
+2. **Neo Club Recurring Membership** — Ongoing visibility system: weekly strategy drops, expert tactical guides, private brief episodes, and direct access to Matt for questions and accountability. **$99–$199/mo** depending on scope. Includes the one-time audit credit.
+
+Free scans always surface both offers clearly after results.
+
 ## Pricing (Year 1)
 
-| Tier       | Price     | Who it's for                            |
-|------------|-----------|-----------------------------------------|
-| Free audit | $0        | Funnel entry — one-time visibility report |
-| Starter    | $99/mo    | Single location, single service area     |
-| Growth     | $249/mo   | Up to 3 locations or service areas       |
-| Multi-market | $499/mo | 4+ locations, multi-city operators       |
+| Product                  | Price          | Who it's for                                      |
+|--------------------------|----------------|---------------------------------------------------|
+| Free audit               | $0             | Funnel entry — real scores + summary of issues    |
+| One-Time Full Fix Plan   | $79 one-time   | Complete prioritized implementation roadmap       |
+| Specialist Strategy Session | $197 one-time | Full audit + 30-minute live strategy call with Matt |
+| Neo Club (Starter)       | $99/mo         | Single location + weekly strategy + Matt access   |
+| Neo Club (Growth)        | $199/mo        | Up to 3 locations + deeper support                |
+| Neo Club (Multi-market)  | $399/mo        | 4+ locations + priority access                    |
 
-**Credit logic** (already implemented): lower-tier payments credit toward
-upgrades so nobody loses money when they grow with us.
+**Credit logic**: The $79 one-time payment (One-Time Full Fix Plan) and the distinct $197 "Full Audit + Specialist Strategy Session" (30-min call with Matt + full audit + custom plan) are both available. The $79 is credited in full toward any Neo Club membership. Lower-tier recurring payments credit toward higher tiers. No one loses money when they grow with us.
 
 ## Success indicators (what "working" means)
 
@@ -102,12 +113,12 @@ upgrades so nobody loses money when they grow with us.
 
 ## Non-negotiables
 
-- Output must be owner-readable, not marketer-readable.
-- Every audit must answer "what do I do this week?" with a concrete list.
-- AI-search visibility is always in the report, not an upsell bolt-on.
-- We never hide a finding behind a paywall — we show *what's wrong* for free
-  and charge for *the prioritized implementation path*.
+- Output must be owner-readable, not marketer-readable. Every sentence must be actionable by a busy contractor.
+- Every paid audit must deliver exactly three prioritized, time-estimated fixes for "this week" with clear effort and expected lift. Vague advice is not acceptable.
+- AI-search visibility (citation readiness, question-to-answer coverage, E-E-A-T signals) is a core part of every report, never an upsell.
+- We never hide a finding behind a paywall — free shows *what's wrong*; paid shows *the exact prioritized fixes and how to implement them*.
 - We never lock into contracts. Month-to-month, cancel anytime.
+- The one-time $79 path and the recurring Neo Club path must both be presented clearly after every scan.
 
 ## What this positioning explicitly rejects
 
@@ -119,5 +130,7 @@ upgrades so nobody loses money when they grow with us.
 
 ---
 
-_Last updated: 2026-05-06_
+_Last updated: 2026-05-07_
 _Owner: Matt (founder)_
+
+**Note on product evolution**: This document now explicitly defines the two commercial products (One-Time Full Fix Plan at $79 and Neo Club recurring membership) as the primary paid value propositions. All code, UI copy, and marketing must align with this structure.
