@@ -1,17 +1,26 @@
 # GeoNeo AI - CEO Technical Brief (AI-Ready)
 
+> **Positioning source of truth:** see [`POSITIONING.md`](./POSITIONING.md).
+> This brief covers implementation. `POSITIONING.md` covers who we serve
+> and what we promise. If this doc disagrees with `POSITIONING.md`,
+> `POSITIONING.md` wins and this doc needs to be updated.
+
 ## 1) What This Company Product Is
 
-GeoNeo AI is a conversion-focused audit platform for local businesses.
-It evaluates website readiness across:
-- SEO (traditional search performance)
-- GEO (local/geographic relevance)
-- AI-search visibility (citation/recommendation readiness)
+GeoNeo AI is the AI-search visibility tool for Ozarks-area home-service
+contractors (plumbing, HVAC, roofing, electrical, pest control, tree
+service, garage door, restoration). It evaluates each business across:
+
+- SEO (traditional Google search performance)
+- GEO (local/geographic relevance: Google Maps, map pack, local directories)
+- AI-search visibility (citation/recommendation readiness in ChatGPT,
+  Perplexity, Google AI Overviews, Gemini)
 
 The platform is designed to:
-1. Capture qualified leads.
-2. Deliver immediate value through an on-demand audit.
-3. Convert users from lower tiers to higher tiers.
+1. Capture qualified contractor leads via a free instant scan.
+2. Deliver immediate, owner-readable audit output (not a marketer's dashboard).
+3. Convert free-scan users into Starter ($99/mo) and upgrade them to
+   Growth ($199) / Multi-market ($399) as they expand.
 4. Support internal follow-up with saved records and a local leads dashboard.
 
 ## 2) Current Product Behavior (Live Model)
@@ -130,13 +139,17 @@ No full sending engine is hard-wired yet (by design).
 
 ## 9) Immediate CEO-Level Priorities
 
-1. Decide if Free should remain "overall-only" or include additional summary metrics.
+1. Land first 5 paying Starter customers ($99/mo) in SW Missouri by end of
+   Month 1 (see `POSITIONING.md` success indicators).
 2. Define follow-up SLA by tier (response time + owner).
 3. Set conversion KPIs:
-- Free -> Silver
-- Silver -> Gold
-- Lead -> Closed revenue
+   - Free → Starter ($99)
+   - Starter → Growth ($199)
+   - Growth → Multi-market ($399)
+   - Lead → closed revenue
 4. Choose first integration target (CRM or webhook receiver).
+5. Ship industry-specific landing pages under `/ozarks/<industry>.html`
+   (done) and drive first targeted traffic to them.
 
 ## 10) AI Context Pack (Copy/Paste)
 
@@ -144,7 +157,27 @@ Use this block when briefing an AI assistant:
 
 ```yaml
 project: GeoNeo AI
-purpose: Conversion-focused SEO/GEO/AI-visibility audit + lead capture
+purpose: AI-search visibility audit for Ozarks home-service contractors
+positioning_doc: docs/POSITIONING.md
+target_verticals:
+  - plumbing
+  - hvac
+  - roofing
+  - electrical
+  - pest_control
+  - tree_service
+  - garage_door
+  - restoration
+target_geography_year1:
+  - Springfield, MO
+  - Branson, MO
+  - Ozark, MO
+  - Nixa, MO
+  - Joplin, MO
+  - Fayetteville, AR
+  - Rogers, AR
+  - Bentonville, AR
+  - Little Rock, AR
 stack:
   frontend: html/css/js
   backend: node_http_server

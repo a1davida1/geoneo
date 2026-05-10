@@ -7,8 +7,21 @@
       "config": {
         "includeFiles": [
           "index.html",
+          "website-audit.html",
+          "industry-audit.html",
+          "both-audit.html",
+          "branson-report.html",
+          "pricing.html",
+          "pitch-deck.html",
+          "neo-club.html",
+          "neo-club.js",
           "styles.css",
-          "script.js"
+          "script.js",
+          "robots.txt",
+          "sitemap.xml",
+          "og-image.png",
+          "services/**",
+          "data/**"
         ]
       }
     }

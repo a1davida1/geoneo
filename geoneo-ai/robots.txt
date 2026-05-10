@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /admin/
+
+# Step 14: SEO - Ensure all vertical industry pages are crawlable
+Allow: /ozarks/
+
+Sitemap: https://geoneo.ai/sitemap.xml

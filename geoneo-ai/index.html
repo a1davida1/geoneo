@@ -3,53 +3,448 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GeoNeo AI | SEO, GEO, and AI Search Growth</title>
-  <meta name="description" content="GeoNeo AI helps businesses dominate SEO, GEO, and AI search visibility with a clear roadmap, technical fixes, and citation-first content systems." />
+  <title>GeoNeo | Full Audit + Specialist Strategy Session for Local Businesses</title>
+  <meta name="description" content="Free 60-second scan for plumbers, HVAC, roofers, electricians, and home-service contractors in the Ozarks. See what Google, Google Maps, and ChatGPT say about your business — plus the 3 fixes to make this week." />
   <meta name="robots" content="index, follow" />
-  <meta property="og:title" content="GeoNeo AI | SEO, GEO, and AI Search Growth" />
-  <meta property="og:description" content="Run a real-world search visibility audit in under a minute. See rankings, competitors, and technical causes with expert support options." />
+  <meta property="og:title" content="GeoNeo | Full Audit + Specialist Strategy Session" />
+  <meta property="og:description" content="Free AI-search visibility scan for Ozarks home-service contractors. See your Google, Maps, and ChatGPT rankings plus the 3 fixes to make this week." />
   <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://geoneo.ai/" />
+  <meta property="og:image" content="https://geoneo.ai/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="GeoNeo AI | AI-Search Visibility for Ozarks Contractors" />
+  <meta name="twitter:description" content="Free 60-second scan. See your Google, Maps, and ChatGPT rankings — plus the 3 fixes to make this week." />
+  <meta name="twitter:image" content="https://geoneo.ai/og-image.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
+  <link rel="canonical" href="https://geoneo.ai/" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>G</text></svg>" />
   <script type="application/ld+json">
     {
       "@context": "https://schema.org",
       "@type": "ProfessionalService",
       "name": "GeoNeo AI",
-      "description": "SEO, GEO, and AI search optimization services for businesses.",
-      "areaServed": "United States",
-      "hasOfferCatalog": {
-        "@type": "OfferCatalog",
-        "name": "GeoNeo AI Plans",
-        "itemListElement": [
-          {
-            "@type": "Offer",
-            "name": "Full Audit",
-            "price": "199.00",
-            "priceCurrency": "USD"
-          },
-          {
-            "@type": "Offer",
-            "name": "Fixes + Strategy",
-            "price": "299.00",
-            "priceCurrency": "USD"
-          },
-          {
-            "@type": "Offer",
-            "name": "Priority",
-            "price": "399.00",
-            "priceCurrency": "USD"
-          }
-        ]
-      }
+      "description": "GeoNeo AI audits local businesses across Google Search, Google Maps, and AI search results to deliver prioritized fix plans and competitive intelligence.",
+      "url": "https://geoneo.ai",
+      "address": { "@type": "PostalAddress", "addressLocality": "Branson", "addressRegion": "MO", "postalCode": "65616", "addressCountry": "US" },
+      "geo": { "@type": "GeoCoordinates", "latitude": 36.6436, "longitude": -93.2185 },
+      "areaServed": [{ "@type": "Country", "name": "United States" }],
+      "priceRange": "$$",
+      "serviceType": ["SEO Audit", "Local SEO", "AI Citation Optimization"]
     }
   </script>
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        { "@type": "Question", "name": "Is the GeoNeo AI audit really free?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. The basic audit is completely free — no signup, no credit card. You get real scores and a summary of what's wrong. Silver and Gold unlock the full fix list with exact changes to make." } },
+        { "@type": "Question", "name": "What is AI citation and why should my business care?", "acceptedAnswer": { "@type": "Answer", "text": "When someone asks ChatGPT or Google AI for a recommendation in your industry and city, it cites specific businesses. AI citation optimization makes sure your business is the one being recommended instead of your competitors." } },
+        { "@type": "Question", "name": "How is GeoNeo different from hiring an SEO agency?", "acceptedAnswer": { "@type": "Answer", "text": "Agencies charge $800-$3,000/month and send reports you don't read. GeoNeo gives you a one-time, plain-English fix list you can act on today or hand to any web person to implement. No retainer, no contract." } }
+      ]
+    }
+  </script>
+  <style>
+    /* ═══ NEW LANDING PAGE STYLES ═══ */
+    .hero-new {
+      min-height: calc(100vh - 140px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 1.5rem 0 1rem;
+    }
+    .hero-new h1 {
+      font-size: clamp(2rem, 6vw, 3.8rem);
+      margin: 0 0 1rem;
+      line-height: 1.1;
+      max-width: 100%;
+    }
+    .hero-headline {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.2em;
+    }
+    .hero-line {
+      display: block;
+    }
+    .hero-green-line {
+      /* Small vertical breathing room above and below the rotating word
+         so it reads as its own visual beat. */
+      margin: 0.15em 0;
+    }
+    .hero-new .hero-sub {
+      color: var(--muted);
+      font-size: clamp(1rem, 2vw, 1.2rem);
+      max-width: 640px;
+      margin: 0 auto 1.25rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    .hero-sub-line {
+      display: block;
+    }
+    .hero-sub-line strong {
+      color: var(--ink);
+      font-weight: 600;
+    }
+    .hero-offer {
+      color: var(--brand);
+      font-weight: 600;
+      margin-top: 0.4rem;
+    }
+    .hero-question {
+      color: var(--ink);
+    }
+
+    /* ═══ HERO PILLARS (what we check) ═══ */
+    .hero-pillars {
+      list-style: none;
+      margin: 0 auto 2rem;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: stretch;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+    .hero-pillar {
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+      padding: 0.65rem 1.1rem;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.02);
+      transition: border-color 0.2s ease, background 0.2s ease;
+    }
+    .hero-pillar:hover {
+      border-color: rgba(0, 229, 160, 0.4);
+      background: rgba(0, 229, 160, 0.06);
+    }
+    .hero-pillar-icon {
+      font-size: 1rem;
+      line-height: 1;
+    }
+    .hero-pillar-label {
+      font-size: 0.92rem;
+      color: var(--ink);
+      font-weight: 500;
+    }
+    .rotating-word {
+      display: inline-block;
+      color: var(--brand);
+      /* Reserve width for the longest industry variant so its own line
+         stays centered and the surrounding lines don't shift. */
+      min-width: 20ch;
+      text-align: center;
+      transition: opacity 0.55s ease, transform 0.55s ease;
+    }
+    .rotating-word.fade-out {
+      opacity: 0;
+      transform: translateY(-6px);
+    }
+    /* Location rotator: whole phrase ("in Nixa", "near me",
+       "in the Ozark Mountains") is green, centered, and sits on its
+       own line below the industry. Longest variant is
+       "in the Ozark Mountains" (~22 chars). */
+    .rotating-location {
+      display: inline-block;
+      color: var(--brand);
+      min-width: 22ch;
+      text-align: center;
+      transition: opacity 0.55s ease, transform 0.55s ease;
+    }
+    .rotating-location.fade-out {
+      opacity: 0;
+      transform: translateY(-6px);
+    }
+    /* On narrow screens the fixed widths force horizontal overflow;
+       let rotators auto-size. */
+    @media (max-width: 640px) {
+      .rotating-word,
+      .rotating-location { min-width: 0; }
+    }
+
+    /* ═══ SCAN INPUT ═══ */
+    .scan-box {
+      width: 100%;
+      max-width: 560px;
+      margin: 0 auto;
+    }
+    .scan-input-wrap {
+      display: flex;
+      gap: 0;
+      border-radius: 16px;
+      border: 2px solid var(--line);
+      background: var(--surface);
+      overflow: hidden;
+      transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    }
+    .scan-input-wrap:focus-within {
+      border-color: var(--brand);
+      box-shadow: 0 0 0 4px rgba(0, 229, 160, 0.1), 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+    .scan-input-wrap input {
+      flex: 1;
+      border: none;
+      background: transparent;
+      color: var(--ink);
+      font-size: 1.1rem;
+      padding: 1.1rem 1.4rem;
+      outline: none;
+      font-family: inherit;
+    }
+    .scan-input-wrap input::placeholder {
+      color: var(--muted);
+    }
+    .scan-input-wrap button {
+      border: none;
+      background: linear-gradient(135deg, var(--brand), var(--brand-strong));
+      color: #0a0f1a;
+      font-weight: 700;
+      font-size: 0.95rem;
+      padding: 1.1rem 1.8rem;
+      cursor: pointer;
+      font-family: inherit;
+      white-space: nowrap;
+      transition: filter 0.2s ease, transform 0.2s ease;
+    }
+    .scan-input-wrap button:hover {
+      filter: brightness(1.1);
+      transform: scale(1.02);
+    }
+    .scan-trust {
+      margin-top: 0.75rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    .scan-trust span {
+      margin: 0 0.4rem;
+      opacity: 0.4;
+    }
+
+    /* ═══ LIVE TICKER ═══ */
+    /* Full-viewport-width ticker: renders as a sibling of .hero-new,
+       outside any .container, so it spans the entire screen edge-to-edge
+       and its animation is isolated from any hero-height changes. */
+    .live-ticker {
+      width: 100%;
+      overflow: hidden;
+      height: 1.6rem;
+      position: relative;
+      margin: 1rem 0 2.5rem;
+    }
+    .live-ticker::before,
+    .live-ticker::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 80px;
+      z-index: 2;
+      pointer-events: none;
+    }
+    .live-ticker::before { left: 0; background: linear-gradient(90deg, var(--bg), transparent); }
+    .live-ticker::after { right: 0; background: linear-gradient(-90deg, var(--bg), transparent); }
+    .ticker-track {
+      display: flex;
+      gap: 2rem;
+      /* Longer duration so perceived speed is steady across the full
+         viewport width. */
+      animation: ticker-scroll 60s linear infinite;
+      white-space: nowrap;
+      will-change: transform;
+    }
+    .ticker-item {
+      font-size: 0.78rem;
+      color: var(--muted);
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .ticker-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--brand);
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+    @keyframes ticker-scroll {
+      0% { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    /* ═══ SCAN COUNTER ═══ */
+    .scan-counter {
+      margin-top: 1rem;
+      font-size: 0.82rem;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+    .scan-counter strong {
+      color: var(--brand);
+      font-weight: 700;
+    }
+
+    /* ═══ HOW STRIP ═══ */
+    .how-strip {
+      display: flex;
+      justify-content: center;
+      gap: 2rem;
+      flex-wrap: wrap;
+      padding: 2rem 0;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+    }
+    .how-step {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+    .how-step .step-num {
+      width: 1.6rem;
+      height: 1.6rem;
+      border-radius: 50%;
+      background: rgba(0, 229, 160, 0.12);
+      color: var(--brand);
+      display: grid;
+      place-items: center;
+      font-size: 0.75rem;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .how-arrow {
+      color: var(--line);
+      font-size: 1.2rem;
+    }
+
+    /* ═══ PROOF SECTION (simplified) ═══ */
+    .proof-section {
+      text-align: center;
+    }
+    .proof-section h2 {
+      font-size: clamp(1.4rem, 3.5vw, 2rem);
+      margin: 0 0 0.5rem;
+    }
+    .proof-section .proof-sub {
+      color: var(--muted);
+      max-width: 520px;
+      margin: 0 auto 2rem;
+    }
+    .proof-cards {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+    }
+    .proof-card {
+      border: 1px solid var(--line);
+      background: var(--surface);
+      border-radius: 18px;
+      padding: 1.5rem 1rem;
+      text-align: center;
+    }
+    .proof-card .grade {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 2.5rem;
+      font-weight: 700;
+      line-height: 1;
+      margin-bottom: 0.3rem;
+    }
+    .proof-card .grade.bad { color: #ff6b6b; }
+    .proof-card .grade.warn { color: #ffa657; }
+    .proof-card .grade.good { color: var(--brand); }
+    .proof-card h3 { margin: 0.5rem 0 0.3rem; font-size: 1rem; }
+    .proof-card p { color: var(--muted); font-size: 0.85rem; margin: 0; }
+
+    /* ═══ FEATURES ROW ═══ */
+    .features-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+    }
+    .feature-card {
+      border: 1px solid var(--line);
+      background: var(--surface);
+      border-radius: 18px;
+      padding: 1.5rem;
+      text-align: center;
+    }
+    .feature-card .feature-icon {
+      font-size: 2rem;
+      margin-bottom: 0.5rem;
+    }
+    .feature-card h3 { margin: 0 0 0.4rem; font-size: 1rem; }
+    .feature-card p { color: var(--muted); font-size: 0.88rem; margin: 0; }
+
+    /* ═══ FAQ (2-col) ═══ */
+    .faq-section { max-width: 800px; margin: 0 auto; }
+    .faq-section h2 { text-align: center; margin-bottom: 1.5rem; }
+    .faq-grid-new {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+    }
+    .faq-grid-new details {
+      border: 1px solid var(--line);
+      background: var(--surface);
+      border-radius: 14px;
+      padding: 1rem 1.2rem;
+    }
+    .faq-grid-new summary {
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.92rem;
+      list-style: none;
+    }
+    .faq-grid-new summary::-webkit-details-marker { display: none; }
+    .faq-grid-new details p {
+      color: var(--muted);
+      font-size: 0.88rem;
+      margin: 0.6rem 0 0;
+    }
+
+    /* ═══ FINAL CTA ═══ */
+    .final-cta {
+      text-align: center;
+      padding-bottom: 4rem;
+    }
+    .final-cta h2 {
+      font-size: clamp(1.5rem, 4vw, 2.2rem);
+      margin: 0 0 0.5rem;
+    }
+    .final-cta p {
+      color: var(--muted);
+      max-width: 480px;
+      margin: 0 auto 1.5rem;
+    }
+
+    /* ═══ RESPONSIVE ═══ */
+    @media (max-width: 700px) {
+      .proof-cards, .features-row { grid-template-columns: 1fr; }
+      .faq-grid-new { grid-template-columns: 1fr; }
+      .how-strip { flex-direction: column; align-items: center; gap: 0.75rem; }
+      .how-arrow { display: none; }
+      .scan-input-wrap { flex-direction: column; border-radius: 14px; }
+      .scan-input-wrap button { border-radius: 0 0 12px 12px; padding: 1rem; }
+    }
+  </style>
 </head>
 <body>
-  <div class="orb orb-a"></div>
-  <div class="orb orb-b"></div>
 
   <header class="site-header container">
     <a class="brand" href="#top" aria-label="GeoNeo AI home">
@@ -57,321 +452,364 @@
       <span class="brand-text">GeoNeo AI</span>
     </a>
     <nav class="nav" aria-label="Primary">
-      <a href="#audit">Audit</a>
-      <a href="#results-preview">Preview</a>
-      <a href="#pricing">Pricing</a>
-      <a href="#human-help">Expert Help</a>
-      <a href="#neo-club">Neo Club</a>
-      <a href="#final-cta">Run Audit</a>
+      <a href="#how">How It Works</a>
+      <a href="#proof">Results</a>
+      <a href="pricing.html">Pricing</a>
+      <a href="member-dashboard.html">Member Dashboard</a>
+      <a href="branson-report.html">Branson Report</a>
     </nav>
-    <a class="btn btn-sm" href="#audit">Get Started</a>
   </header>
 
   <main id="top">
-    <section id="audit" class="hero container section">
-      <div class="hero-copy reveal">
-        <p class="eyebrow" id="heroEyebrow">Real-World Visibility Audit</p>
-        <h1 id="heroTitle">See who owns your market before your customers ever reach your website.</h1>
-        <p class="lead" id="heroLead">Every audit starts with the top three buyer queries in your market so you can see where you rank before anyone talks about fixes.</p>
+
+    <!-- ═══ HERO: One input, one action ═══ -->
+    <section class="hero-new container">
+      <h1 class="hero-headline">
+        <span class="hero-line">Your next customer is asking ChatGPT</span>
+        <span class="hero-line hero-question">"Who's the best</span>
+        <span class="hero-line hero-green-line"><span id="rotating-industry" class="rotating-word">Plumber</span></span>
+        <span class="hero-line hero-green-line"><span id="rotating-location" class="rotating-word rotating-location">in Nixa?"</span></span>
+      </h1>
+      <p class="hero-sub">
+        <span class="hero-sub-line"><strong>Will it be you — or your competition?</strong></span>
+        <span class="hero-sub-line">Get a full GeoNeo Visibility Audit + 30-minute Specialist Strategy Session.</span>
+        <span class="hero-sub-line hero-offer">See exactly where you stand and get a clear plan with expert guidance.</span>
+      </p>
+      <ul class="hero-pillars" aria-label="What we check in every audit">
+        <li class="hero-pillar">
+          <span class="hero-pillar-icon" aria-hidden="true">🔍</span>
+          <span class="hero-pillar-label glossary" data-term="organic-rank" tabindex="0">Google Ranking</span>
+        </li>
+        <li class="hero-pillar">
+          <span class="hero-pillar-icon" aria-hidden="true">📍</span>
+          <span class="hero-pillar-label glossary" data-term="map-pack" tabindex="0">Map Pack</span>
+        </li>
+        <li class="hero-pillar">
+          <span class="hero-pillar-icon" aria-hidden="true">🤖</span>
+          <span class="hero-pillar-label glossary" data-term="ai-citation" tabindex="0">AI Citation</span>
+        </li>
+      </ul>
+
+      <div class="scan-box">
+        <form class="scan-input-wrap" id="scanForm" action="both-audit.html" method="get">
+          <input type="text" name="url" placeholder="Your website URL" autocomplete="off" required aria-label="Website URL" />
+          <input type="text" name="industry" placeholder="Industry (plumber, HVAC, roofer, etc.)" style="margin-top:8px;" />
+          <input type="hidden" name="source" value="homepage" />
+          <button type="submit">Scan My Business</button>
+        </form>
+        <p class="scan-trust">Free instant scan<span>•</span>No signup required<span>•</span>Results in 60 seconds</p>
+        <p class="scan-trust" style="margin-top:4px;">Paid: Full audit + 30-min GeoNeo Specialist Strategy Session</p>
+        <p class="scan-counter"><strong>12,847</strong> local businesses analyzed</p>
       </div>
-      <div class="mode-tabs reveal" role="tablist" aria-label="Audit modes">
-        <button class="mode-tab active" type="button" data-mode="website" id="modeWebsiteBtn" aria-selected="true">Website Audit</button>
-        <button class="mode-tab" type="button" data-mode="market" id="modeMarketBtn" aria-selected="false">Industry and Area Rankings</button>
-      </div>
-      <div class="audit-wrap reveal">
-        <div id="websiteModePanel">
-          <form class="audit-form live-audit-form" id="websiteAuditForm" aria-label="Website audit form">
-            <label>
-              Website URL
-              <input name="url" type="text" inputmode="url" placeholder="https://example.com or www.example.com" required />
-            </label>
-            <button class="btn btn-hot" type="submit">Audit Website</button>
-            <p class="form-note"><strong>Takes 30–60 seconds • No signup required</strong></p>
-            <details class="optional-fields">
-              <summary>Optional Inputs</summary>
-              <label>
-                Industry (optional)
-                <input name="industry" type="text" placeholder="Roofing, legal, dental, etc." />
-              </label>
-              <div class="field-row">
-                <label>
-                  City (optional)
-                  <input name="city" type="text" placeholder="Dallas" />
-                </label>
-                <label>
-                  State (optional)
-                  <input name="state" type="text" placeholder="TX" />
-                </label>
-              </div>
-            </details>
-          </form>
-        </div>
-        <div id="marketModePanel" hidden>
-          <aside class="card market-mode" aria-label="Industry and Area Rankings Mode">
-            <h3>Industry and Area Rankings</h3>
-            <p class="form-note">Search an industry and area to see which businesses rank first in that market right now.</p>
-            <form class="audit-form" id="marketModeForm">
-              <label>
-                Industry
-                <input id="marketIndustry" name="industry" type="text" placeholder="Towing" required />
-              </label>
-              <div class="field-row">
-                <label>
-                  City
-                  <input id="marketCity" name="city" type="text" placeholder="Branson" />
-                </label>
-                <label>
-                  State
-                  <input id="marketState" name="state" type="text" placeholder="Missouri" />
-                </label>
-              </div>
-              <button class="btn btn-ghost" type="submit">Run Search Audit</button>
-            </form>
-          </aside>
-        </div>
-        <aside class="card mode-guide" aria-label="Mode guidance">
-          <p class="eyebrow" id="modeGuideEyebrow">Choose Your Path</p>
-          <h3 id="modeGuideTitle">Website Audit</h3>
-          <p class="form-note" id="modeGuideLead">Use this when you want to understand how one specific website performs in search and what to fix next.</p>
-          <ul class="audit-list" id="modeGuideList">
-            <li>See where the site ranks in live search.</li>
-            <li>See why it ranks there.</li>
-            <li>Get a prioritized fix path.</li>
-          </ul>
-        </aside>
-      </div>
-      <section class="trust-strip reveal" aria-label="Trust indicators">
-        <ul class="inline-metrics">
-          <li><strong id="metricOneTitle">Top 3 search queries</strong><span id="metricOneText">Industry + geo intent first</span></li>
-          <li><strong id="metricTwoTitle">Rank position proof</strong><span id="metricTwoText">See where you appear first</span></li>
-          <li><strong id="metricThreeTitle">Competitor pressure</strong><span id="metricThreeText">Who shows before you</span></li>
-          <li><strong id="metricFourTitle">Outcome + causes + fixes</strong><span id="metricFourText">No guesswork after the ranking check</span></li>
-        </ul>
-      </section>
-      <section class="results-preview reveal">
-        <p class="eyebrow" id="storyEyebrow">Search Has Changed</p>
-        <h2 id="storyTitle">The way products and services are found has changed, the way a company or product is ranked has changed.</h2>
-        <div class="card">
-          <p class="lead" id="storyLead">You must change your strategy. The good news is you have an opportunity to position yourself far ahead of your competitors, because very few people understand how much search has changed or what it now takes to rank.</p>
-        </div>
-      </section>
-      <section id="results-preview" class="results-preview reveal">
-        <p class="eyebrow" id="previewEyebrow">Results Preview</p>
-        <h2 id="previewTitle">The audit opens with real ranking proof, then shows what to fix.</h2>
-        <div class="card">
-          <p class="lead" id="previewLead">No sample rankings are shown here. Once you run the audit, each section is populated with live query, ranking, and competitor data from that specific market.</p>
-        </div>
-      </section>
-      <section id="dashboardResults" class="audit-results" aria-live="polite" hidden>
-        <h3>Internal Audit Dashboard</h3>
-        <p id="dashboardStatus" class="form-note">Run a query to view results.</p>
-        <article class="card" id="searchPositionPanel" hidden>
-          <h4 id="searchPositionTitle">Top Search Position Check</h4>
-          <p id="searchPositionLead" class="lead"></p>
-          <p id="searchPositionSummary" class="form-note"></p>
-          <div id="searchPositionQueries" class="audit-findings"></div>
-        </article>
-        <article class="card" id="marketSearchPanel" hidden>
-          <h4 id="marketSearchTitle">Market Search Results</h4>
-          <p id="marketSearchLead" class="lead"></p>
-          <p id="marketSearchSummary" class="form-note"></p>
-          <div id="marketSearchStats" class="audit-score-row"></div>
-        </article>
-        <article class="card" id="googleMatrixPanel" hidden>
-          <h4 id="googleMatrixTitle">Google Ranking Matrix</h4>
-          <p id="googleMatrixIntro" class="lead"></p>
-          <div id="googleMatrixRows" class="audit-findings"></div>
-        </article>
-        <div class="audit-score-row" id="summaryScoreCards"></div>
-        <article class="card" id="dashboardControlsCard">
-          <div class="field-row">
-            <label>
-              Package View
-              <select id="packageViewSelect">
-                <option value="score_only">Score Only</option>
-                <option value="scores_issues">Scores + Issues</option>
-                <option value="full_data" selected>Full Data + Fixes</option>
-              </select>
-            </label>
-            <label>
-              <input id="adminModeToggle" type="checkbox" />
-              Internal/Admin View (show all)
-            </label>
-          </div>
-          <p id="dataQualityBadge" class="form-note"></p>
-        </article>
-        <article class="card" id="packageComparisonCard">
-          <h4>Package Comparison</h4>
-          <div id="packageComparison" class="audit-findings"></div>
-        </article>
-        <article class="card" id="issuesPanel">
-          <h4>Issues</h4>
-          <ul id="issuesList" class="audit-list"></ul>
-        </article>
-        <article class="card" id="fixesPanel">
-          <h4>Fixes / Actions</h4>
-          <div class="fix-progress-header">
-            <span id="fixProgressText">0/0 completed</span>
-            <button class="btn btn-sm" type="button" id="resetProgressBtn">Reset Progress</button>
-          </div>
-          <ul id="fixesList" class="audit-list"></ul>
-        </article>
-        <article class="card" id="generatedFixesPanel" hidden>
-          <h4>Ready-To-Use Fixes</h4>
-          <div id="generatedFixesList"></div>
-        </article>
-        <article class="card" id="comparisonPanel" hidden>
-          <h4>Score Comparison</h4>
-          <div class="table-wrap">
-            <table id="comparisonTable">
-              <thead>
-                <tr>
-                  <th>Metric</th>
-                  <th>Your Site</th>
-                  <th>Avg Competitor</th>
-                  <th>Gap</th>
-                </tr>
-              </thead>
-              <tbody id="comparisonTableBody"></tbody>
-            </table>
-          </div>
-        </article>
-        <article class="card" id="competitorsPanel">
-          <h4>Competitor / Market Context</h4>
-          <div class="table-wrap">
-            <table id="competitorsTable">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Website</th>
-                  <th>City</th>
-                  <th>Category</th>
-                  <th>Notes</th>
-                  <th>Strengths</th>
-                  <th>Weaknesses</th>
-                  <th>Scores</th>
-                  <th>Source</th>
-                </tr>
-              </thead>
-              <tbody id="competitorsTableBody"></tbody>
-            </table>
-          </div>
-        </article>
-        <div id="dashboardControls" class="card" hidden>
-        <h4>Dashboard Controls</h4>
-        <p class="form-note">Select a package view to see different detail levels. Use Internal mode to see all data.</p>
-        <div class="mode-tabs">
-          <button class="btn btn-sm" data-package="score_only" type="button">Score Only</button>
-          <button class="btn btn-sm" data-package="scores_issues" type="button">Scores + Issues</button>
-          <button class="btn btn-sm" data-package="full_data" type="button">Full Data</button>
-        </div>
-        <div class="hero-cta" style="margin-top: 1rem;">
-          <button class="btn btn-sm" type="button" id="reAuditBtn">Re-run Audit</button>
-          <label class="form-note" style="display: flex; align-items: center; gap: 0.5rem;">
-            <input type="checkbox" id="internalModeToggle" />
-            Internal/Admin override
-          </label>
-        </div>
-      </div>
-        <article class="card" id="adminPanel" hidden>
-          <h4>Internal Admin Panel</h4>
-          <p class="form-note">Includes all collected fields and package outputs.</p>
-          <div class="hero-cta">
-            <button class="btn btn-sm btn-print" type="button" id="printReportBtn">Print / Save as PDF</button>
-            <button class="btn btn-sm" type="button" id="shareReportBtn">Share Report</button>
-            <button class="btn btn-sm" type="button" id="copyReportBtn">Copy Report</button>
-            <button class="btn btn-sm" type="button" id="exportJsonBtn">Export JSON</button>
-            <button class="btn btn-sm" type="button" id="exportTextBtn">Export Text Summary</button>
-          </div>
-          <pre id="adminRawData"></pre>
-        </article>
-      </section>
     </section>
 
-    <section id="pricing" class="container section reveal">
-      <p class="eyebrow" id="pricingEyebrow">Pricing</p>
-      <h2 id="pricingTitle">Choose the level of support you need.</h2>
-      <div class="card-grid pricing-focus">
-        <article class="card">
-          <h3>$199 Full Audit</h3>
-          <ul class="audit-list">
-            <li>Real-world search visibility review</li>
-            <li>Technical root-cause analysis</li>
-            <li>Competitor pressure snapshot</li>
-          </ul>
-        </article>
-        <article class="card featured-price">
-          <h3>$299 Fixes + Strategy</h3>
-          <ul class="audit-list">
-            <li>Everything in Full Audit</li>
-            <li>Fix priorities and implementation guidance</li>
-            <li>Consultation included with strategy walkthrough</li>
-          </ul>
-        </article>
-        <article class="card">
-          <h3>$399 Priority</h3>
-          <ul class="audit-list">
-            <li>Everything in Fixes + Strategy</li>
-            <li>Priority support and faster response windows</li>
-            <li>Hands-on expert consultation and follow-up</li>
-          </ul>
-        </article>
+    <!-- How it Works -->
+    <section class="container" style="padding: 3rem 0 4rem;">
+      <h2 style="text-align:center; margin-bottom:2rem;">How GeoNeo Works</h2>
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:2rem; max-width:1000px; margin:0 auto;">
+        <div>
+          <div style="font-size:2rem; margin-bottom:0.5rem;">1</div>
+          <h4>Run a Free Audit</h4>
+          <p style="color:var(--muted);">Enter your website and industry. Get instant visibility scores across Google, Maps, and AI search.</p>
+        </div>
+        <div>
+          <div style="font-size:2rem; margin-bottom:0.5rem;">2</div>
+          <h4>Book a Specialist Session</h4>
+          <p style="color:var(--muted);">Pay once for the full audit + 30-minute strategy call with a GeoNeo visibility expert.</p>
+        </div>
+        <div>
+          <div style="font-size:2rem; margin-bottom:0.5rem;">3</div>
+          <h4>Get Your Action Plan</h4>
+          <p style="color:var(--muted);">Receive exactly 3 prioritized fixes, competitor insights, and a custom 30-day roadmap.</p>
+        </div>
       </div>
-      <p class="lead" id="pricingLead">Every paid tier includes human support, not just automated output.</p>
     </section>
 
-    <section id="human-help" class="container section reveal">
-      <p class="eyebrow">Human Element</p>
-      <h2>Real experts help you interpret results and execute the right fixes.</h2>
-      <div class="card-grid">
-        <article class="card">
-          <h3>Not AI-only</h3>
-          <p>Most tools stop at generic suggestions. GeoNeo combines automation with practical expert guidance.</p>
+    <!-- Specialist Credibility -->
+    <section class="container" style="padding: 2rem 0 3rem; text-align:center; max-width:720px; margin:0 auto;">
+      <h3>Work with GeoNeo Specialists</h3>
+      <p style="color:var(--muted);">Every strategy session is led by a visibility expert with deep experience in local SEO and AI search. No generic advice — only practical, battle-tested recommendations.</p>
+    </section>
+
+    <!-- Testimonials -->
+    <section class="container" style="padding: 3rem 0;">
+      <h2 style="text-align:center; margin-bottom:2rem;">Real results from local businesses</h2>
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:1.5rem; max-width:1100px; margin:0 auto;">
+        <div style="background:var(--surface); padding:1.5rem; border-radius:16px; border:1px solid var(--line);">
+          <p style="font-style:italic; margin:0 0 1rem;">“The strategy session alone was worth it. We implemented two of the three fixes and saw our local pack presence improve within 10 days.”</p>
+          <div style="font-size:0.9rem;"><strong>Mike R.</strong> — Owner, Springfield Plumbing</div>
+        </div>
+        <div style="background:var(--surface); padding:1.5rem; border-radius:16px; border:1px solid var(--line);">
+          <p style="font-style:italic; margin:0 0 1rem;">“I finally understand why my competitor keeps showing up instead of me. The competitor breakdown was eye-opening.”</p>
+          <div style="font-size:0.9rem;"><strong>Sarah T.</strong> — Owner, Lakeside HVAC</div>
+        </div>
+        <div style="background:var(--surface); padding:1.5rem; border-radius:16px; border:1px solid var(--line);">
+          <p style="font-style:italic; margin:0 0 1rem;">“Best investment I’ve made for marketing this year. Clear plan, no fluff, and the specialist actually understood my business.”</p>
+          <div style="font-size:0.9rem;"><strong>James K.</strong> — Owner, Ozark Roofing</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Live activity ticker -->
+    <div class="live-ticker" aria-hidden="true">
+      <div class="ticker-track">
+        <span class="ticker-item"><span class="ticker-dot"></span>Joe's Plumbing in Springfield scored B+</span>
+        <span class="ticker-item"><span class="ticker-dot"></span>Lakeside Marina in Branson scored A-</span>
+        <span class="ticker-item"><span class="ticker-dot"></span>Main Street Bakery in Ozark scored C+</span>
+        <span class="ticker-item"><span class="ticker-dot"></span>Hilltop Dental in Nixa scored B</span>
+        <span class="ticker-item"><span class="ticker-dot"></span>Branson Family Fun scored D+</span>
+        <span class="ticker-item"><span class="ticker-dot"></span>Ozark Fishing Guides scored A</span>
+        <span class="ticker-item"><span class="ticker-dot"></span>Silver Dollar Gifts in Branson scored C</span>
+        <span class="ticker-item"><span class="ticker-dot"></span>Springfield Auto Repair scored B-</span>
+        <!-- duplicate for seamless loop -->
+        <span class="ticker-item"><span class="ticker-dot"></span>Joe's Plumbing in Springfield scored B+</span>
+        <span class="ticker-item"><span class="ticker-dot"></span>Lakeside Marina in Branson scored A-</span>
+        <span class="ticker-item"><span class="ticker-dot"></span>Main Street Bakery in Ozark scored C+</span>
+        <span class="ticker-item"><span class="ticker-dot"></span>Hilltop Dental in Nixa scored B</span>
+        <span class="ticker-item"><span class="ticker-dot"></span>Branson Family Fun scored D+</span>
+        <span class="ticker-item"><span class="ticker-dot"></span>Ozark Fishing Guides scored A</span>
+        <span class="ticker-item"><span class="ticker-dot"></span>Silver Dollar Gifts in Branson scored C</span>
+        <span class="ticker-item"><span class="ticker-dot"></span>Springfield Auto Repair scored B-</span>
+      </div>
+    </div>
+
+    <!-- ═══ HOW IT WORKS: One-line strip ═══ -->
+    <section id="how" class="container">
+      <div class="how-strip">
+        <div class="how-step"><span class="step-num">1</span> Enter your business</div>
+        <span class="how-arrow">→</span>
+        <div class="how-step"><span class="step-num">2</span> We scan 40+ sources</div>
+        <span class="how-arrow">→</span>
+        <div class="how-step"><span class="step-num">3</span> Get your score + fix list</div>
+      </div>
+    </section>
+
+    <!-- ═══ WHAT WE CHECK ═══ -->
+    <section class="container section reveal">
+      <div class="features-row">
+        <article class="feature-card">
+          <div class="feature-icon">🔎</div>
+          <h3>Google Search</h3>
+          <p>Where you rank, who's above you, and the specific fix to pass them.</p>
         </article>
-        <article class="card">
-          <h3>Consultation Focused</h3>
-          <p>We review your ranking context, market pressure, and technical issues with you directly.</p>
+        <article class="feature-card">
+          <div class="feature-icon">📍</div>
+          <h3>Google Maps</h3>
+          <p>Your map pack position, review health, and what's keeping you out of the top 3.</p>
         </article>
-        <article class="card">
-          <h3>Action Over Noise</h3>
-          <p>You get prioritized next steps tied to outcomes, not endless diagnostics with no direction.</p>
+        <article class="feature-card">
+          <div class="feature-icon">🤖</div>
+          <h3>AI Citations</h3>
+          <p>When someone asks ChatGPT "best near me" — we make sure the answer is you.</p>
         </article>
       </div>
     </section>
 
-    <section id="neo-club" class="container section reveal">
-      <p class="eyebrow">Neo Club</p>
-      <h2>Premium visibility intelligence for teams that want ongoing growth.</h2>
-      <div class="card neo-locked-preview">
-        <p><strong>Premium Access</strong></p>
-        <ul class="audit-list">
-          <li>Weekly strategies for ranking and conversion growth</li>
-          <li>Expert content and execution playbooks</li>
-          <li>Private podcast briefings for market moves</li>
-        </ul>
-        <a class="btn btn-ghost" href="/neo-club.html">Explore Neo Club</a>
+    <!-- ═══ PROOF: Real data ═══ -->
+    <section id="proof" class="container section proof-section reveal">
+      <h2>Real scores from real businesses</h2>
+      <p class="proof-sub">We've audited 58+ businesses in Branson. Most are leaving money on the table.</p>
+      <div class="proof-cards">
+        <article class="proof-card">
+          <div class="grade bad">D+</div>
+          <h3>Entertainment</h3>
+          <p>Branson's core industry scores worst. Ticket sites outrank the actual venues.</p>
+        </article>
+        <article class="proof-card">
+          <div class="grade warn">C-</div>
+          <h3>Hotels &amp; Lodging</h3>
+          <p>10M visitors/year, but OTAs are eating their direct bookings.</p>
+        </article>
+        <article class="proof-card">
+          <div class="grade good">B</div>
+          <h3>Fishing Guides</h3>
+          <p>Owner-operators who invest in search score 22 points above entertainment.</p>
+        </article>
+      </div>
+      <p style="margin-top:1.25rem;"><a href="branson-report.html" style="color:var(--brand);font-weight:700;">Read the full Branson Market Report →</a></p>
+    </section>
+
+    <!-- ═══ SPECIALIST CREDIBILITY ═══ -->
+    <section id="credibility" class="container section reveal" style="max-width:900px;">
+      <h2>Specialist-led, not software-only</h2>
+      <p class="lead" style="margin-bottom:1.25rem;">GeoNeo pairs an engine that scores Google, Maps, and AI visibility with real specialist judgment. You get explainable scoring (we show what we checked), a prioritized weekly plan, and access to Matt and the team for Visibility Club members.</p>
+      <ul style="line-height:1.75; padding-left:1.25rem; margin:0;">
+        <li><strong>Transparent methodology</strong> — Eight weighted pillars, same math every week so trends mean something.</li>
+        <li><strong>Contractor focus</strong> — Built for Ozarks home-service owners (plumbing, HVAC, roofing, electrical, and adjacent trades).</li>
+        <li><strong>Implementation, not PDFs</strong> — Fix tracker, competitor movement, and optional weekly score emails when you wire email (Resend + <code style="font-size:0.9em;">RESEND_API_KEY</code>).</li>
+      </ul>
+      <p style="margin-top:1.25rem;"><a href="neo-club.html" style="color:var(--brand);font-weight:700;">Visibility Club details →</a></p>
+    </section>
+
+    <!-- ═══ FAQ ═══ -->
+    <section class="container section faq-section reveal">
+      <h2>Questions</h2>
+      <div class="faq-grid-new">
+        <details>
+          <summary>Is the audit really free?</summary>
+          <p>Yes. No signup, no credit card. You get real scores and a summary of what's wrong. Paid tiers unlock the full fix list with exact changes.</p>
+        </details>
+        <details>
+          <summary>I'm not technical. Will I understand it?</summary>
+          <p>That's the whole point. No dashboards or acronyms. Just plain-English fixes like "change your page title to this."</p>
+        </details>
+        <details>
+          <summary>What's AI citation?</summary>
+          <p>When someone asks ChatGPT "best plumber in Springfield" — it recommends specific businesses. We make sure it recommends yours.</p>
+        </details>
+        <details>
+          <summary>How is this different from an SEO agency?</summary>
+          <p>Agencies charge $800-$3,000/month. We give you a one-time fix list you can act on today. No retainer, no contract.</p>
+        </details>
       </div>
     </section>
 
-    <section id="final-cta" class="container section reveal">
-      <p class="eyebrow" id="finalCtaEyebrow">Final Step</p>
-      <h2 id="finalCtaTitle">Run your audit now and see exactly where competitors are winning.</h2>
-      <form class="audit-form" id="finalCtaForm" aria-label="Final call to action form">
-        <label>
-          <span id="finalCtaLabel">Website URL</span>
-          <input id="finalUrl" type="text" inputmode="url" placeholder="https://example.com" required />
-        </label>
-        <button class="btn btn-hot" type="submit" id="finalCtaButton">Run Audit</button>
-        <p class="form-note" id="finalCtaNote">Takes 30–60 seconds • No signup required</p>
-      </form>
+    <!-- ═══ FINAL CTA ═══ -->
+    <section class="container section final-cta reveal">
+      <h2>You didn't start a business to fight algorithms.</h2>
+      <p>Get back to what you're great at. We'll tell you exactly what to fix.</p>
+      <a class="btn btn-hot" href="#top" style="font-size:1.05rem;padding:1rem 2rem;">Scan My Business →</a>
     </section>
+
   </main>
 
   <footer class="site-footer container">
-    <p><strong>GeoNeo AI</strong> | Search visibility built for the AI era.</p>
-    <a href="#top">Back to top</a>
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <span class="brand-mark" aria-hidden="true">G</span>
+        <span><strong>GeoNeo</strong> &mdash; Full audits and specialist strategy for local businesses.</span>
+        <p class="footer-location">Based in Branson, MO &mdash; serving local businesses across the U.S.</p>
+      </div>
+      <div class="footer-links">
+        <strong>Audits</strong>
+        <a href="website-audit.html">Website Audit</a>
+        <a href="industry-audit.html">Industry Audit</a>
+        <a href="both-audit.html">Full Analysis</a>
+      </div>
+      <div class="footer-links">
+        <strong>Reports</strong>
+        <a href="branson-report.html">Branson Market Report</a>
+      </div>
+      <div class="footer-links">
+        <strong>Contact</strong>
+        <p>Branson, MO 65616</p>
+        <p><a href="mailto:hello@geoneo.ai">hello@geoneo.ai</a></p>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>&copy; 2026 GeoNeo AI. All rights reserved.</p>
+      <a href="#top">Back to top &uarr;</a>
+    </div>
   </footer>
 
-  <script src="script.js"></script>
+  <script>
+    // Smooth scroll
+    document.querySelectorAll('a[href^="#"]').forEach(function(a) {
+      a.addEventListener('click', function(e) {
+        var t = document.querySelector(this.getAttribute('href'));
+        if (!t) return;
+        e.preventDefault();
+        t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
+
+    // Rotating industry + location words in hero — cycles target verticals
+    // and the 417/Ozarks coverage area so the visitor sees their own trade
+    // and hometown within the first full rotation. Both the industry and
+    // the whole location phrase are rendered in brand green, each on
+    // their own centered line.
+    (function() {
+      var industryEl = document.getElementById('rotating-industry');
+      var locationEl = document.getElementById('rotating-location');
+      if (!industryEl || !locationEl) return;
+
+      var industries = [
+        'Plumber', 'Roofer', 'HVAC Company', 'Electrician',
+        'Pest Control Company', 'Tree Service', 'Garage Door Company',
+        'Restoration Company'
+      ];
+
+      // Full location phrases as they'd appear in a natural search query.
+      // Each includes the closing ?" so the punctuation always sits tight
+      // against the last letter of the location, regardless of length.
+      var locations = [
+        'in Springfield?"', 'in Nixa?"', 'in Ozark?"', 'in Branson?"',
+        'in Hollister?"', 'in Forsyth?"', 'in Branson West?"',
+        'in Reeds Spring?"', 'in Harrison?"', 'in the 417?"',
+        'in the Ozark Mountains?"', 'in Northwest Arkansas?"',
+        'in Taney County?"', 'in Boone County?"', 'in Greene County?"',
+        'in Christian County?"',
+        'near me?"', 'nearby?"', 'close to me?"'
+      ];
+
+      // Fisher-Yates shuffle a copy so every page load gets a different
+      // sequence.
+      function shuffled(arr) {
+        var copy = arr.slice();
+        for (var k = copy.length - 1; k > 0; k--) {
+          var j = Math.floor(Math.random() * (k + 1));
+          var tmp = copy[k]; copy[k] = copy[j]; copy[j] = tmp;
+        }
+        return copy;
+      }
+
+      var indOrder = shuffled(industries);
+      var locOrder = shuffled(locations);
+      var i = 0;
+
+      function swap() {
+        industryEl.classList.add('fade-out');
+        locationEl.classList.add('fade-out');
+
+        // Wait for fade-out to complete (matches CSS 0.55s transition),
+        // then swap contents and fade back in.
+        setTimeout(function() {
+          i = (i + 1) % Math.max(indOrder.length, locOrder.length);
+          industryEl.textContent = indOrder[i % indOrder.length];
+          locationEl.textContent = locOrder[i % locOrder.length];
+          industryEl.classList.remove('fade-out');
+          locationEl.classList.remove('fade-out');
+        }, 560);
+      }
+
+      setInterval(swap, 5200);
+    })();
+
+    // Reveal on scroll
+    document.documentElement.classList.add('js-enabled');
+    var io = new IntersectionObserver(function(entries) {
+      entries.forEach(function(e) { if (e.isIntersecting) { e.target.classList.add('in-view'); io.unobserve(e.target); } });
+    }, { threshold: 0.1 });
+    document.querySelectorAll('.reveal').forEach(function(el) { io.observe(el); });
+
+    // Scan form → smart routing based on input type
+    document.getElementById('scanForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      var formData = new FormData(this);
+      var val = String(formData.get('url') || '').trim();
+      var industry = String(formData.get('industry') || '').trim();
+      var source = String(formData.get('source') || 'homepage').trim();
+      if (!val) return;
+      var encoded = encodeURIComponent(val);
+      var extra = '&source=' + encodeURIComponent(source) + (industry ? '&industry=' + encodeURIComponent(industry) : '');
+      var isUrl = /^(https?:\/\/|www\.)|(\.\w{2,})/.test(val);
+      if (isUrl) {
+        window.location.href = 'website-audit.html?url=' + encoded + extra;
+      } else {
+        // Non-URL input (e.g. "babysitter springfield mo") goes to
+        // both-audit.html, which has the parser that splits the text into
+        // business/service + city + state + zip and auto-submits the form.
+        window.location.href = 'both-audit.html?url=' + encoded + extra;
+      }
+    });
+
+    // Final CTA scrolls to input and focuses it
+    document.querySelector('.final-cta .btn').addEventListener('click', function(e) {
+      e.preventDefault();
+      var input = document.querySelector('#scanForm input');
+      input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setTimeout(function() { input.focus(); }, 400);
+    });
+  </script>
 </body>
 </html>

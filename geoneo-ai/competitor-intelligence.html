@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Competitor Intelligence | GeoNeo</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .competitor-card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 1.75rem;
+      margin-bottom: 1.5rem;
+    }
+    .competitor-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 1.25rem;
+    }
+    .score-change {
+      font-size: 0.9rem;
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-weight: 600;
+    }
+    .change-up { background: #dcfce7; color: #166534; }
+    .change-down { background: #fee2e2; color: #991b1b; }
+    .change-neutral { background: #f1f5f9; color: #475569; }
+    .gap-list { margin-top: 1rem; }
+    .gap-item {
+      padding: 10px 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 0.95rem;
+    }
+    .insight {
+      font-size: 0.9rem;
+      color: var(--muted);
+      margin-top: 0.75rem;
+    }
+    .domain-row { max-width: 520px; margin: 0 auto 2rem; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: center; }
+    .domain-row input { flex: 1; min-width: 200px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+  </style>
+</head>
+<body>
+  <header class="site-header container">
+    <a class="brand" href="index.html"><span class="brand-mark">G</span> <span class="brand-text">GeoNeo</span></a>
+    <nav>
+      <a href="member-dashboard.html">My Dashboard</a>
+      <a href="pricing.html">Pricing</a>
+      <a href="neo-club.html">Visibility Club</a>
+    </nav>
+  </header>
+
+  <main class="container">
+    <h1>Live competitor intelligence</h1>
+    <p class="lead">Scores are evidence-based from GeoNeo audits on file. Competitors without an audit show as pending—run a scan on their domain to unlock benchmarks and movement.</p>
+
+    <div class="domain-row">
+      <input type="text" id="domainInput" placeholder="yourbusiness.com" aria-label="Your domain">
+      <button type="button" class="btn btn-hot" id="loadBtn">Load competitors</button>
+    </div>
+
+    <p id="yourScoreLine" class="form-note" style="text-align:center; display:none;"></p>
+
+    <div id="competitorContainer"></div>
+    <p id="statusLine" class="form-note" style="text-align:center;"></p>
+  </main>
+
+  <script>
+    function escapeHtml(s) {
+      const d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    async function loadCompetitorIntelligence() {
+      let domain = document.getElementById('domainInput').value.trim();
+      if (!domain) {
+        alert('Enter your domain');
+        return;
+      }
+      domain = domain.replace(/^https?:\/\//, '').split('/')[0].toLowerCase();
+      localStorage.setItem('geoneo_last_domain', domain);
+
+      const container = document.getElementById('competitorContainer');
+      const status = document.getElementById('statusLine');
+      const yourLine = document.getElementById('yourScoreLine');
+      container.innerHTML = '';
+      status.textContent = 'Loading…';
+      yourLine.style.display = 'none';
+
+      let res, data;
+      try {
+        res = await fetch(`/api/competitors/dashboard?domain=${encodeURIComponent(domain)}`);
+        data = await res.json().catch(() => ({}));
+      } catch (e) {
+        status.textContent = 'Network error fetching score for ' + domain;
+        const domainInputSection = document.getElementById('domainInputSection');
+        if (domainInputSection) domainInputSection.style.display = 'block';
+        container.style.display = 'none';
+        const dashboardToolbar = document.getElementById('dashboardToolbar');
+        if (dashboardToolbar) dashboardToolbar.style.display = 'none';
+        return;
+      }
+
+      if (res.status === 403) {
+        status.textContent = data.message || data.error || 'Access denied.';
+        return;
+      }
+
+      if (!res.ok || !data.ok) {
+        status.textContent = data.error === 'no_audit' || data.error === 'No audit'
+          ? 'No audit on file for that domain. Run a GeoNeo audit from the homepage first.'
+          : (data.error || 'Could not load competitor data.');
+        return;
+      }
+
+      status.textContent = '';
+      yourLine.style.display = 'block';
+      yourLine.textContent = `Your latest GeoNeo visibility score: ${data.yourScore}`;
+
+      if (data.message) {
+        status.textContent = data.message;
+      }
+
+      if (!data.competitors || !data.competitors.length) {
+        return;
+      }
+
+      data.competitors.forEach((comp) => {
+        const pending = comp.scoreSource === 'pending' || comp.currentScore == null;
+        const scoreDisp = pending ? '—' : comp.currentScore;
+        const changeClass = pending ? 'change-neutral' : (comp.change > 0 ? 'change-up' : (comp.change < 0 ? 'change-down' : 'change-neutral'));
+        const changeText = pending
+          ? 'Pending audit'
+          : (comp.change > 0 ? `+${comp.change}` : (comp.change < 0 ? String(comp.change) : '0'));
+        const gapsHtml = (comp.gaps || []).map((g) => `<div class="gap-item">• ${escapeHtml(g)}</div>`).join('');
+
+        const card = document.createElement('div');
+        card.className = 'competitor-card';
+        card.innerHTML = `
+          <div class="competitor-header">
+            <div>
+              <strong style="font-size:1.2rem;">${escapeHtml(comp.name)}</strong><br>
+              <span style="font-size:0.85rem; color:var(--muted);">${escapeHtml(comp.domain)}</span>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:2.1rem; font-weight:700;">${pending ? '<span style="font-size:1.35rem;">Pending</span>' : scoreDisp}</div>
+              <div class="score-change ${changeClass}">${changeText}${pending ? '' : ' since last snapshot'}</div>
+            </div>
+          </div>
+          <div class="insight"><strong>Notes:</strong> ${escapeHtml(comp.insight)}</div>
+          <div style="margin-top:1.25rem;">
+            <strong>Gap focus:</strong>
+            <div class="gap-list">${gapsHtml}</div>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    document.getElementById('loadBtn').addEventListener('click', loadCompetitorIntelligence);
+
+    window.onload = () => {
+      const params = new URLSearchParams(window.location.search);
+      const q = params.get('domain');
+      if (q) document.getElementById('domainInput').value = q;
+      const last = localStorage.getItem('geoneo_last_domain');
+      if (!document.getElementById('domainInput').value && last) {
+        document.getElementById('domainInput').value = last;
+      }
+    };
+  </script>
+</body>
+</html>

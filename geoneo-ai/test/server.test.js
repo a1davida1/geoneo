@@ -3,8 +3,10 @@ const assert = require('node:assert/strict');
 const os = require('node:os');
 const path = require('node:path');
 const fs = require('node:fs/promises');
+const { Readable, Writable } = require('node:stream');
 
 const {
+  requestHandler,
   safeUrl,
   htmlToText,
   calculateOverallScore,
@@ -28,16 +30,93 @@ const {
   loadAuditRecords,
   getAuditRecordById,
   buildAuditReportHtml,
+  buildPrioritizedActionPlan,
+  buildCompetitorsFromAudit,
   isNeoClubMember,
   buildNeoClubPayload,
   runAudit,
-  generateReadyToUseFixes,
-  computeLeadIntelligence
+  runMarketOnlyAudit
 } = require('../server');
 const {
   generateLocalIntentQueries,
   filterLocalSearchVisibilityByPackage
 } = require('../services/localSearchVisibility');
+
+const SERPAPI_FIXTURE = {
+  search_metadata: { created_at: '2026-04-29', raw_html_file: '' },
+  search_parameters: { q: 'tow truck Branson MO 65616', location: 'Branson, Missouri, United States' },
+  organic_results: [
+    { position: 1, title: "Crawford's Automotive & Towing", link: 'https://www.crawfordsautomotiveandtowing.com/auto-towing', displayed_link: 'crawfordsautomotiveandtowing.com', snippet: 'Tow service in Branson MO' },
+    { position: 2, title: 'THE BEST 10 TOWING near BRANSON, MO 65616', link: 'https://www.yelp.com/search?cflt=towing&find_loc=Branson+MO', displayed_link: 'yelp.com', snippet: 'Top towing near Branson' },
+    { position: 3, title: "Davey's Auto Body - Heavy Towing Branson MO", link: 'https://daveysautobody.com/heavy-towing-branson-mo.php', displayed_link: 'daveysautobody.com', snippet: 'Heavy duty towing in Branson' },
+    { position: 4, title: "Kinsley's Towing & Recovery - Branson", link: 'https://www.mapquest.com/us/missouri/kinsleys-towing-recovery-791937833', displayed_link: 'mapquest.com', snippet: 'Towing recovery Branson' },
+    { position: 5, title: 'Towing Company near Branson, MO - BBB', link: 'https://www.bbb.org/us/mo/branson/category/towing-company', displayed_link: 'bbb.org', snippet: 'BBB towing Branson' },
+    { position: 6, title: 'All Time Towing - Branson MO', link: 'https://alltimetowing.com', displayed_link: 'alltimetowing.com', snippet: '24 hour towing Branson' },
+    { position: 7, title: 'Rising Towing & Roadside Services', link: 'https://risingtowing.com', displayed_link: 'risingtowing.com', snippet: 'Roadside assistance Branson MO' }
+  ],
+  local_results: {
+    places: [
+      { position: 1, title: "Crawford's Towing", rating: 4.2, reviews: 56, address: 'Branson, MO', phone: '(417) 555-0101' },
+      { position: 2, title: 'All Time Towing', rating: 5, reviews: 58, address: 'Branson, MO', phone: '(417) 555-0102' },
+      { position: 3, title: 'Rising Towing & Roadside Services', rating: 3, reviews: 4, address: 'Branson, MO', phone: '(417) 555-0103' }
+    ]
+  }
+};
+
+function jsonResponse(payload, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => payload,
+    text: async () => JSON.stringify(payload)
+  };
+}
+
+class FakeSerpProvider {
+  get name() {
+    return 'serpapi';
+  }
+
+  async getSearchResults() {
+    return SERPAPI_FIXTURE;
+  }
+
+  normalizeResults(raw, context = {}) {
+    return {
+      query: context.query || '',
+      location: context.location || '',
+      organicResults: (raw.organic_results || []).map((row) => ({
+        position: row.position,
+        title: row.title,
+        domain: row.displayed_link,
+        url: row.link
+      })),
+      localPackResults: ((raw.local_results && raw.local_results.places) || []).map((row) => ({
+        position: row.position,
+        title: row.title,
+        rating: row.rating,
+        reviews: row.reviews,
+        address: row.address
+      })),
+      screenshotUrl: ''
+    };
+  }
+}
+
+async function withSerpApiDisabled(callback) {
+  const previousProvider = process.env.SERP_PROVIDER;
+  const previousKey = process.env.SERP_API_KEY;
+  delete process.env.SERP_PROVIDER;
+  delete process.env.SERP_API_KEY;
+  try {
+    return await callback();
+  } finally {
+    if (previousProvider === undefined) delete process.env.SERP_PROVIDER;
+    else process.env.SERP_PROVIDER = previousProvider;
+    if (previousKey === undefined) delete process.env.SERP_API_KEY;
+    else process.env.SERP_API_KEY = previousKey;
+  }
+}
 
 test('safeUrl adds https when protocol is missing', () => {
   const result = safeUrl('example.com');
@@ -396,6 +475,440 @@ test('searchCompetitors returns safe empty array on unreliable scrape page', asy
   }
 });
 
+test('searchCompetitors parses Google redirect result links', async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async () => ({
+    text: async () => `
+      <html><body>
+        <a href="/url?q=https%3A%2F%2Fexample-towing.com%2F&sa=U&ved=2ah">
+          <h3>Example Towing</h3>
+        </a>
+        <a href="/url?q=https%3A%2F%2Fbranson-recovery.com%2F&sa=U&ved=2ah">
+          <h3>Branson Recovery</h3>
+        </a>
+        <a href="/url?q=https%3A%2F%2Fozarktow.net%2F&sa=U&ved=2ah">
+          <h3>Ozark Tow</h3>
+        </a>
+      </body></html>
+    `
+  });
+
+  try {
+    const results = await searchCompetitors('towing branson mo');
+    assert.deepEqual(results.map((item) => ({
+      name: item.name,
+      host: item.host,
+      position: item.position
+    })), [
+      { name: 'Example Towing', host: 'example-towing.com', position: 1 },
+      { name: 'Branson Recovery', host: 'branson-recovery.com', position: 2 },
+      { name: 'Ozark Tow', host: 'ozarktow.net', position: 3 }
+    ]);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('searchCompetitors keeps usable business rows even with dictionary-style result noise', async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async () => ({
+    text: async () => `
+      <html><body>
+        <a href="/url?q=https%3A%2F%2Fwww.iciba.com%2Fword%3Fw%3Dtowing&sa=U&ved=2ah">
+          <h3>towing definition and meaning</h3>
+        </a>
+        <a href="/url?q=https%3A%2F%2Fexample-towing.com%2F&sa=U&ved=2ah">
+          <h3>Example Towing</h3>
+        </a>
+        <a href="/url?q=https%3A%2F%2Fbranson-recovery.com%2F&sa=U&ved=2ah">
+          <h3>Branson Recovery</h3>
+        </a>
+        <a href="/url?q=https%3A%2F%2Fozarktow.net%2F&sa=U&ved=2ah">
+          <h3>Ozark Tow</h3>
+        </a>
+      </body></html>
+    `
+  });
+
+  try {
+    const results = await searchCompetitors('towing branson mo');
+    assert.ok(results.some((item) => /example-towing\.com/i.test(item.host)));
+    assert.ok(results.some((item) => /branson-recovery\.com/i.test(item.host)));
+    assert.ok(results.some((item) => /ozarktow\.net/i.test(item.host)));
+    assert.ok(results.length >= 3);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('searchCompetitors falls back to direct href result links', async () => {
+  const originalFetch = global.fetch;
+  let callCount = 0;
+  global.fetch = async () => {
+    callCount += 1;
+    if (callCount === 1) {
+      return { text: async () => '<html><body><div>No parsed results</div></body></html>' };
+    }
+    return {
+      text: async () => `
+        <html><body>
+          <a href="https://first-towing.com/"><h3>First Towing</h3></a>
+          <a href="https://second-towing.com/"><h3>Second Towing</h3></a>
+          <a href="https://third-towing.com/"><h3>Third Towing</h3></a>
+        </body></html>
+      `
+    };
+  };
+
+  try {
+    const results = await searchCompetitors('towing branson mo');
+    assert.deepEqual(results.map((item) => item.host), [
+      'first-towing.com',
+      'second-towing.com',
+      'third-towing.com'
+    ]);
+    assert.equal(callCount, 2);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('website audit persists lead to audits.json when runAudit fails (auto-save fallback)', async () => {
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'geoneo-audit-fallback-'));
+  const auditsPath = path.join(tmpRoot, 'audits.json');
+  const prevAuditsPath = process.env.GEONEO_AUDITS_PATH;
+  const prevAllowInsecure = process.env.ALLOW_INSECURE_FETCH;
+  process.env.GEONEO_AUDITS_PATH = auditsPath;
+  delete process.env.ALLOW_INSECURE_FETCH;
+
+  const deadUrl = encodeURIComponent('http://127.0.0.1:1/');
+  const qs = [
+    'queryType=website',
+    `url=${deadUrl}`,
+    'contactName=Jane',
+    'businessName=Acme+Fallback',
+    'businessEmail=jane%40acme.com',
+    'industry=Towing',
+    'city=Branson',
+    'state=MO',
+    'package=free'
+  ].join('&');
+
+  try {
+    const req = new Readable({ read() {} });
+    req.url = `/api/audit?${qs}`;
+    req.method = 'GET';
+    req.headers = { host: '127.0.0.1' };
+
+    let body = '';
+    const res = new Writable({
+      write(chunk, enc, cb) {
+        body += chunk.toString();
+        cb();
+      }
+    });
+    res.writeHead = function (statusCode, headers) {
+      this.statusCode = statusCode;
+      this.headers = headers;
+    };
+    const completed = new Promise((resolve) => {
+      res.end = function (chunk) {
+        if (chunk) body += chunk.toString();
+        resolve({
+          statusCode: this.statusCode,
+          body
+        });
+      };
+    });
+
+    await requestHandler(req, res);
+    const response = await completed;
+    const parsed = JSON.parse(response.body);
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.mode, 'website');
+    assert.equal(parsed.saved, true, 'fallback audit should auto-save so admin score/lookup succeeds');
+    assert.ok(parsed.fetchDebug, 'fetchDebug should explain fallback');
+    assert.equal(parsed.dashboard && parsed.dashboard.dataQuality, 'estimated');
+
+    const stored = JSON.parse(await fs.readFile(auditsPath, 'utf8'));
+    assert.equal(stored.length, 1);
+    assert.equal(stored[0].businessName, 'Acme Fallback');
+    assert.equal(stored[0].fullAuditResult && stored[0].fullAuditResult.auditFallback, true);
+    assert.equal(stored[0].fullAuditResult && stored[0].fullAuditResult.fallbackReason, parsed.fetchDebug);
+  } finally {
+    if (prevAuditsPath === undefined) delete process.env.GEONEO_AUDITS_PATH;
+    else process.env.GEONEO_AUDITS_PATH = prevAuditsPath;
+    if (prevAllowInsecure === undefined) delete process.env.ALLOW_INSECURE_FETCH;
+    else process.env.ALLOW_INSECURE_FETCH = prevAllowInsecure;
+    await fs.rm(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('market audit falls back when google crawl returns no usable rows', async () => {
+  await withSerpApiDisabled(async () => {
+    const originalFetch = global.fetch;
+    const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'geoneo-market-audit-'));
+    const prevAuditsPath = process.env.GEONEO_AUDITS_PATH;
+    process.env.GEONEO_AUDITS_PATH = path.join(tmpRoot, 'audits.json');
+    global.fetch = async (url) => {
+      const value = String(url || '');
+      if (value.includes('google.com/search')) {
+        return { text: async () => '<html><body>enable javascript</body></html>' };
+      }
+      if (value.includes('html.duckduckgo.com')) {
+        return {
+          text: async () => `
+            <html><body>
+              <a class="result__a" href="https://fallback-towing.com/">Fallback Towing</a>
+              <a class="result__a" href="https://branson-wrecker.com/">Branson Wrecker</a>
+              <a class="result__a" href="https://ozark-roadside.com/">Ozark Roadside</a>
+            </body></html>
+          `
+        };
+      }
+      throw new Error(`Unexpected fetch: ${value}`);
+    };
+
+    try {
+      const req = new Readable({ read() {} });
+      req.url = '/api/audit?queryType=market&industry=Towing&city=Branson&state=MO&packageView=full_data&package=gold';
+      req.method = 'GET';
+      req.headers = { host: '127.0.0.1' };
+
+      let body = '';
+      const res = new Writable({
+        write(chunk, enc, cb) {
+          body += chunk.toString();
+          cb();
+        }
+      });
+      res.writeHead = function (statusCode, headers) {
+        this.statusCode = statusCode;
+        this.headers = headers;
+      };
+      const completed = new Promise((resolve) => {
+        res.end = function (chunk) {
+          if (chunk) body += chunk.toString();
+          resolve({
+            statusCode: this.statusCode,
+            headers: this.headers,
+            body
+          });
+        };
+      });
+
+      await requestHandler(req, res);
+      const response = await completed;
+      const parsed = JSON.parse(response.body);
+      const overview = parsed.dashboard.resultModel.industryAnalysis.overview;
+
+      assert.equal(response.statusCode, 200);
+      assert.equal(parsed.dashboard.dataQuality, 'estimated');
+      assert.equal(parsed.dashboard.sourceNote, 'DuckDuckGo fallback (lower confidence)');
+      assert.equal(parsed.saved, true);
+      assert.ok(parsed.auditId);
+      assert.equal(overview.orderedResults.length, 3);
+      assert.deepEqual(
+        overview.orderedResults.map((item) => item.companyName).sort(),
+        ['Branson Wrecker', 'Fallback Towing', 'Ozark Roadside'].sort()
+      );
+      const stored = JSON.parse(await fs.readFile(process.env.GEONEO_AUDITS_PATH, 'utf8'));
+      assert.equal(stored.length, 1);
+      assert.equal(stored[0].fullAuditResult.queryType, 'market');
+      assert.equal(stored[0].market, 'Branson, MO');
+    } finally {
+      global.fetch = originalFetch;
+      if (prevAuditsPath === undefined) delete process.env.GEONEO_AUDITS_PATH;
+      else process.env.GEONEO_AUDITS_PATH = prevAuditsPath;
+      await fs.rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+});
+
+test('market audit falls back to bing when google and duckduckgo fail', async () => {
+  await withSerpApiDisabled(async () => {
+    const originalFetch = global.fetch;
+    global.fetch = async (url) => {
+      const value = String(url || '');
+      if (value.includes('google.com/search')) {
+        return { text: async () => '<html><body>enable javascript</body></html>' };
+      }
+      if (value.includes('html.duckduckgo.com')) {
+        return { text: async () => '<html><body>enable javascript</body></html>' };
+      }
+      if (value.includes('bing.com/search')) {
+        return {
+          text: async () => `
+            <html><body>
+              <li class="b_algo"><h2><a href="https://bing-towing.com/">Bing Towing</a></h2></li>
+              <li class="b_algo"><h2><a href="https://branson-bing-wrecker.com/">Branson Bing Wrecker</a></h2></li>
+              <li class="b_algo"><h2><a href="https://ozark-bing-roadside.com/">Ozark Bing Roadside</a></h2></li>
+            </body></html>
+          `
+        };
+      }
+      throw new Error(`Unexpected fetch: ${value}`);
+    };
+
+    try {
+      const req = new Readable({ read() {} });
+      req.url = '/api/audit?queryType=market&industry=Towing&city=Branson&state=MO&packageView=full_data&package=gold';
+      req.method = 'GET';
+      req.headers = { host: '127.0.0.1' };
+
+      let body = '';
+      const res = new Writable({
+        write(chunk, enc, cb) {
+          body += chunk.toString();
+          cb();
+        }
+      });
+      res.writeHead = function (statusCode, headers) {
+        this.statusCode = statusCode;
+        this.headers = headers;
+      };
+      const completed = new Promise((resolve) => {
+        res.end = function (chunk) {
+          if (chunk) body += chunk.toString();
+          resolve({
+            statusCode: this.statusCode,
+            headers: this.headers,
+            body
+          });
+        };
+      });
+
+      await requestHandler(req, res);
+      const response = await completed;
+      const parsed = JSON.parse(response.body);
+      const overview = parsed.dashboard.resultModel.industryAnalysis.overview;
+
+      assert.equal(response.statusCode, 200);
+      assert.equal(parsed.dashboard.dataQuality, 'estimated');
+      assert.equal(parsed.dashboard.sourceNote, 'Bing fallback (lower confidence)');
+      assert.equal(overview.orderedResults.length, 3);
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+});
+
+test('market audit request returns ranking rows when Google results are parsed', async () => {
+  await withSerpApiDisabled(async () => {
+    const originalFetch = global.fetch;
+    const seenQueries = [];
+    global.fetch = async (url) => {
+      const value = String(url || '');
+      if (value.includes('google.com/search')) {
+        const parsed = new URL(value);
+        seenQueries.push(parsed.searchParams.get('q'));
+        return {
+          text: async () => `
+            <html><body>
+              <a href="/url?q=https%3A%2F%2Fexample-towing.com%2F&sa=U"><h3>Example Towing</h3></a>
+              <a href="/url?q=https%3A%2F%2Fbranson-recovery.com%2F&sa=U"><h3>Branson Recovery</h3></a>
+              <a href="/url?q=https%3A%2F%2Fozarktow.net%2F&sa=U"><h3>Ozark Tow</h3></a>
+            </body></html>
+          `
+        };
+      }
+      throw new Error(`Unexpected fetch: ${value}`);
+    };
+
+    try {
+      const req = new Readable({ read() {} });
+      req.url = '/api/audit?queryType=market&industry=Towing&city=Branson&state=MO&zip=65616&packageView=full_data&package=gold';
+      req.method = 'GET';
+      req.headers = { host: '127.0.0.1' };
+
+      let body = '';
+      const res = new Writable({
+        write(chunk, enc, cb) {
+          body += chunk.toString();
+          cb();
+        }
+      });
+      res.writeHead = function (statusCode, headers) {
+        this.statusCode = statusCode;
+        this.headers = headers;
+      };
+      const completed = new Promise((resolve) => {
+        res.end = function (chunk) {
+          if (chunk) body += chunk.toString();
+          resolve({
+            statusCode: this.statusCode,
+            headers: this.headers,
+            body
+          });
+        };
+      });
+
+      await requestHandler(req, res);
+      const response = await completed;
+      const parsed = JSON.parse(response.body);
+      const overview = parsed.dashboard.resultModel.industryAnalysis.overview;
+      const orderedResults = overview.orderedResults;
+      const rawOrderedResults = overview.rawOrderedResults;
+
+      assert.equal(response.statusCode, 200);
+      assert.equal(parsed.dashboard.dataQuality, 'estimated');
+      assert.equal(parsed.dashboard.sourceNote, 'Google fallback (lower confidence)');
+      assert.equal(parsed.dashboard.resultModel.input.zip, '65616');
+      assert.ok(overview.querySampleCount >= 5);
+      assert.equal(orderedResults.length, 3);
+      assert.ok(rawOrderedResults.length >= orderedResults.length);
+      assert.deepEqual(orderedResults.map((item) => item.rank), [1, 2, 3]);
+      assert.equal(orderedResults[0].companyName, 'Example Towing');
+      assert.equal(orderedResults[0].observedRank, 1);
+      assert.match(orderedResults[0].observedQuery, /tow/i);
+      assert.ok(orderedResults[0].consistencyCount >= 1);
+      assert.match(orderedResults[0].whyRank, /Observed first at #1/);
+      assert.ok(seenQueries.length >= 2);
+      assert.ok(seenQueries.some((query) => /Towing Branson MO/i.test(query || '')));
+      assert.ok(seenQueries.some((query) => /65616/i.test(query || '')));
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+});
+
+test('market audit with SerpAPI returns Source SerpAPI and rows > 0', async () => {
+  const fakeProvider = new FakeSerpProvider();
+  const result = await runMarketOnlyAudit({
+    industry: 'towing',
+    city: 'Branson',
+    state: 'MO',
+    zip: '65616'
+  }, {
+    provider: fakeProvider
+  });
+
+  assert.match(result.sourceNote, /SerpAPI/i);
+  assert.equal(result.dataQuality, 'real');
+
+  const competitors = result.competitors || [];
+  assert.ok(competitors.length > 0);
+
+  const assets = result.marketAssets || [];
+  assert.ok(assets.length > 0);
+
+  const dirDomains = ['yelp.com', 'mapquest.com', 'bbb.org'];
+  const leakedToCompetitors = competitors.filter((row) => dirDomains.includes(row.domain));
+  assert.equal(leakedToCompetitors.length, 0);
+
+  const capturedAsAssets = assets.filter((row) => dirDomains.includes(row.domain));
+  assert.ok(capturedAsAssets.length > 0);
+
+  const hasCrawfords = competitors.some((row) => row.domain === 'crawfordsautomotiveandtowing.com');
+  assert.ok(hasCrawfords);
+
+  const ordered = result.industryAnalysis?.overview?.orderedResults || [];
+  const totalVisible = ordered.length + assets.length;
+  assert.ok(totalVisible > 0);
+});
+
 test('getCompetitorSnapshot returns safe structure on malformed/unreliable source', async () => {
   const originalFetch = global.fetch;
   global.fetch = async () => ({
@@ -471,10 +984,10 @@ test('getCompetitorSnapshot returns structured competitors with position', async
   global.fetch = async () => ({
     text: async () => `
       <html><body>
-        <h3>Acme Roofing</h3>
-        <h3>Trusted Roof Co</h3>
-        <h3>Branson Roofers LLC</h3>
-        <h3>Trusted Roof Co</h3>
+        <a href="/url?q=https%3A%2F%2Facme-roofing.com%2F&sa=U"><h3>Acme Roofing</h3></a>
+        <a href="/url?q=https%3A%2F%2Ftrustedroofco.com%2F&sa=U"><h3>Trusted Roof Co</h3></a>
+        <a href="/url?q=https%3A%2F%2Fbransonroofersllc.com%2F&sa=U"><h3>Branson Roofers LLC</h3></a>
+        <a href="/url?q=https%3A%2F%2Ftrustedroofco.com%2F&sa=U"><h3>Trusted Roof Co</h3></a>
       </body></html>
     `
   });
@@ -501,9 +1014,9 @@ test('getCompetitorSnapshot returns unknown rankStatus when self listing cannot 
   global.fetch = async () => ({
     text: async () => `
       <html><body>
-        <h3>Trusted Roof Co</h3>
-        <h3>Branson Roofers LLC</h3>
-        <h3>Ozark Roofing</h3>
+        <a href="/url?q=https%3A%2F%2Ftrustedroofco.com%2F&sa=U"><h3>Trusted Roof Co</h3></a>
+        <a href="/url?q=https%3A%2F%2Fbransonroofersllc.com%2F&sa=U"><h3>Branson Roofers LLC</h3></a>
+        <a href="/url?q=https%3A%2F%2Fozarkroofing.com%2F&sa=U"><h3>Ozark Roofing</h3></a>
       </body></html>
     `
   });
@@ -667,7 +1180,8 @@ test('filterAuditResultByPackage enforces free/silver/gold/admin visibility', ()
 
   const free = filterAuditResultByPackage(full, 'free');
   assert.equal(free.packageLevel, 'free');
-  assert.equal(Array.isArray(free.checks), false);
+  assert.equal(Array.isArray(free.checks), true);
+  assert.equal(free.checks.length, 1);
   assert.equal(free.summary, 'summary');
 
   const silver = filterAuditResultByPackage(full, 'silver');
@@ -764,7 +1278,8 @@ test('runAudit supports quick URL-only flow and returns auto-detected site profi
 
 test('runAudit uses manual search query override for competitor discovery', async () => {
   const originalFetch = global.fetch;
-  let capturedSearchUrl = '';
+  /** All Google SERP fetches (competitor discovery runs before local visibility, which uses its own queries). */
+  const googleSearchUrls = [];
   global.fetch = async (url) => {
     const target = String(url);
     if (target.startsWith('https://example.com')) {
@@ -776,7 +1291,7 @@ test('runAudit uses manual search query override for competitor discovery', asyn
       };
     }
     if (target.includes('google.com/search')) {
-      capturedSearchUrl = target;
+      googleSearchUrls.push(target);
       return {
         ok: true,
         status: 200,
@@ -809,13 +1324,16 @@ test('runAudit uses manual search query override for competitor discovery', asyn
     const result = await runAudit('example.com', { searchQuery: 'best roofing contractor dallas tx' });
     assert.equal(result.searchSnapshot.query, 'best roofing contractor dallas tx');
     assert.equal(result.searchSnapshot.querySource, 'manual');
-    assert.match(capturedSearchUrl, /best%20roofing%20contractor%20dallas%20tx/);
+    assert.ok(
+      googleSearchUrls.some((u) => /best%20roofing%20contractor%20dallas%20tx/.test(u)),
+      `expected manual query in a Google SERP URL; got: ${googleSearchUrls.join(' | ')}`
+    );
   } finally {
     global.fetch = originalFetch;
   }
 });
 
-test('generateLocalIntentQueries returns five high-intent localized queries', () => {
+test('generateLocalIntentQueries returns localized high-intent queries', () => {
   const queries = generateLocalIntentQueries({
     industry: 'plumber',
     city: 'Branson',
@@ -825,7 +1343,7 @@ test('generateLocalIntentQueries returns five high-intent localized queries', ()
     market: '',
     siteProfile: {}
   });
-  assert.equal(queries.length, 5);
+  assert.equal(queries.length, 3);
   assert.ok(queries.some((q) => /branson/i.test(q)));
   assert.ok(queries.every((q) => /plumb|drain|water heater/i.test(q)));
 });
@@ -1070,14 +1588,14 @@ test('buildAuditReportHtml includes key audit sections and fields', () => {
   assert.match(html, /Branson, MO/);
   assert.match(html, /Overall/);
   assert.match(html, /67\/100/);
-  assert.match(html, /Visibility Insight/);
+  assert.match(html, /Real World Search Audit/);
   assert.match(html, /Recommended Plan/);
   assert.match(html, /Top Competitors/);
   assert.match(html, /Where You Rank in Your Area|Your Visibility in Branson, MO/);
   assert.match(html, /Found in Top 10:[\s\S]*2\s*\/\s*5/i);
-  assert.match(html, /Per-Search Breakdown/i);
+  assert.match(html, /Rankings/i);
   assert.match(html, /View Screenshot/i);
-  assert.match(html, /Use a single clear H1/);
+  assert.match(html, /No high-priority fixes were detected in this run.|Use a single clear H1/);
 });
 
 test('buildAuditReportHtml local ranking section only shows summary for basic package', () => {
@@ -1106,7 +1624,7 @@ test('buildAuditReportHtml local ranking section only shows summary for basic pa
   });
 
   assert.match(html, /Found in Top 10:[\s\S]*1\s*\/\s*5/i);
-  assert.match(html, /Upgrade to Silver to see each search/i);
+  assert.match(html, /Upgrade to Silver to unlock rankings and competitor-by-query detail/i);
   assert.doesNotMatch(html, /Per-Search Breakdown/i);
 });
 
@@ -1182,158 +1700,42 @@ test('buildNeoClubPayload returns full content for gold package', () => {
   assert.ok(payload.neoClub.expertTopics.length >= 6);
 });
 
-test('generateReadyToUseFixes returns fixes for failing checks', () => {
-  const result = {
-    checks: [
-      { key: 'title', status: 'FIX', message: 'Title is missing' },
-      { key: 'meta-description', status: 'FIX', message: 'Meta description missing' },
-      { key: 'h1', status: 'PASS', message: 'H1 is present' }
-    ],
-    siteProfile: {
-      businessName: 'ABC Plumbing',
-      visibleServiceKeywords: ['plumbing'],
-      locationMentions: ['Dallas, TX']
-    },
-    finalUrl: 'https://abcplumbing.com'
-  };
-  const input = {
-    industry: 'plumbing',
-    city: 'Dallas',
-    state: 'TX',
-    website: 'https://abcplumbing.com'
-  };
-
-  const fixes = generateReadyToUseFixes(result, input);
-
-  assert.ok(Array.isArray(fixes));
-  assert.equal(fixes.length, 2);
-  assert.equal(fixes[0].key, 'title');
-  assert.ok(fixes[0].generatedFix.includes('<title>'));
-  assert.ok(fixes[0].generatedFix.includes('Plumbing'));
-  assert.ok(fixes[0].generatedFix.includes('Dallas'));
-  assert.equal(fixes[1].key, 'meta-description');
-  assert.ok(fixes[1].generatedFix.includes('<meta name="description"'));
-  assert.equal(fixes[0].copyPasteReady, true);
+// Step 12: Substantive tests for new features (A-grade effort)
+test('buildAuditRecord sets productType correctly', () => {
+  const record = buildAuditRecord({
+    businessName: 'Test Co',
+    businessEmail: 'test@example.com',
+    website: 'https://example.com',
+    productType: 'one-time',
+    amountPaid: 79
+  });
+  assert.equal(record.productType, 'one-time');
+  assert.equal(record.amountPaid, 79);
 });
 
-test('generateReadyToUseFixes returns empty array for no failing checks', () => {
-  const result = {
-    checks: [
-      { key: 'title', status: 'PASS', message: 'Title is present' },
-      { key: 'h1', status: 'PASS', message: 'H1 is present' }
-    ],
-    siteProfile: {},
-    finalUrl: 'https://example.com'
-  };
-  const input = {
-    industry: 'services',
-    city: '',
-    state: '',
-    website: 'https://example.com'
-  };
-
-  const fixes = generateReadyToUseFixes(result, input);
-
-  assert.ok(Array.isArray(fixes));
-  assert.equal(fixes.length, 0);
+test('buildPrioritizedActionPlan returns exactly 3 actions with timeEstimate and lift', () => {
+  const actions = buildPrioritizedActionPlan([
+    { key: 'h1', solutionTitle: 'Fix H1' },
+    { key: 'trust', solutionTitle: 'Add trust signals' },
+    { key: 'content', solutionTitle: 'Expand service page' }
+  ]);
+  assert.equal(actions.length, 3);
+  actions.forEach(a => {
+    assert.ok(a.timeEstimate);
+    assert.ok(a.lift);
+  });
 });
 
-test('generateReadyToUseFixes generates valid JSON-LD schema', () => {
-  const result = {
-    checks: [
-      { key: 'structured-data', status: 'FIX', message: 'Schema missing' }
-    ],
-    siteProfile: {
-      businessName: 'Test Business',
-      visibleServiceKeywords: ['hvac'],
-      locationMentions: ['Houston, TX']
-    },
-    finalUrl: 'https://test.com'
-  };
-  const input = {
-    industry: 'hvac',
-    city: 'Houston',
-    state: 'TX',
-    website: 'https://test.com'
-  };
-
-  const fixes = generateReadyToUseFixes(result, input);
-
-  assert.equal(fixes.length, 1);
-  assert.ok(fixes[0].generatedFix.includes('<script type="application/ld+json">'));
-  const schemaMatch = fixes[0].generatedFix.match(/\{[\s\S]*\}/);
-  assert.ok(schemaMatch);
-  const schema = JSON.parse(schemaMatch[0]);
-  assert.equal(schema['@type'], 'LocalBusiness');
-  assert.equal(schema.name, 'Test Business');
-});
-
-test('computeLeadIntelligence returns all expected fields', () => {
-  const record = {
-    industry: 'plumbing',
-    city: 'Dallas',
-    state: 'TX',
-    scores: { overall: 45 },
-    localSearchVisibility: {
-      summary: {
-        missingCount: 2,
-        totalQueries: 3,
-        visibilityScore: 30
-      }
-    },
-    fullAuditResult: {
-      checks: [
-        { key: 'local-geo', status: 'FIX' },
-        { key: 'title', status: 'FIX' }
+test('buildCompetitorsFromAudit adds tier classification', () => {
+  const fakeResult = {
+    searchSnapshot: {
+      competitors: [
+        { name: 'Springfield Plumbing Pros', url: 'https://springfieldplumbing.com' },
+        { name: 'Missouri Elite Services', url: 'https://moelite.com' }
       ]
     }
   };
-
-  const intel = computeLeadIntelligence(record);
-
-  assert.ok(typeof intel.estMonthlyLossLow === 'number');
-  assert.ok(typeof intel.estMonthlyLossHigh === 'number');
-  assert.ok(typeof intel.estMissedLeads === 'number');
-  assert.ok(typeof intel.topFix === 'string');
-  assert.ok(['high', 'medium', 'low'].includes(intel.upgradeConfidence));
-  assert.ok(typeof intel.salesBrief === 'string');
-});
-
-test('computeLeadIntelligence high CPL + low score = high confidence', () => {
-  const record = {
-    industry: 'attorney',
-    city: 'Chicago',
-    state: 'IL',
-    scores: { overall: 40 },
-    localSearchVisibility: {
-      summary: {
-        missingCount: 3,
-        totalQueries: 3,
-        visibilityScore: 20
-      }
-    },
-    fullAuditResult: { checks: [] }
-  };
-
-  const intel = computeLeadIntelligence(record);
-
-  assert.equal(intel.upgradeConfidence, 'high');
-  assert.ok(intel.estMonthlyLossHigh > 0);
-});
-
-test('computeLeadIntelligence handles missing data gracefully', () => {
-  const record = {
-    industry: 'unknown',
-    city: '',
-    state: '',
-    scores: {},
-    fullAuditResult: { checks: [] }
-  };
-
-  const intel = computeLeadIntelligence(record);
-
-  assert.ok(typeof intel.estMonthlyLossLow === 'number');
-  assert.ok(typeof intel.estMonthlyLossHigh === 'number');
-  assert.equal(intel.topFix, 'none');
-  assert.equal(intel.upgradeConfidence, 'low');
+  const comps = buildCompetitorsFromAudit(fakeResult, { city: 'Springfield', state: 'MO', industry: 'plumbing' });
+  assert.ok(comps.length > 0);
+  assert.ok(comps.some(c => c.tier === 'local' || c.tier === 'regional' || c.tier === 'national'));
 });

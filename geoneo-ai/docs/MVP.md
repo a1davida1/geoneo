@@ -20,9 +20,15 @@
 ## MVP Non-Goals
 
 - Full CRM integration
-- Automated outbound email engine
+- Guaranteed deliverability for weekly score email (optional Resend integration; outbox file fallback)
 - Multi-user authentication system
 - External analytics/data warehouse integration
+
+## Post-MVP Member Surfaces (Shipped in Repo)
+
+- Member dashboard: weekly brief, AI citation summary, technical deep pass, fix tracker, score history
+- Competitor intelligence API + page (audit-backed scores, tracked history)
+- Weekly scheduler + optional `RESEND_API_KEY` weekly report hook
 
 ## MVP Quality Bar
 

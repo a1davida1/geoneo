@@ -229,11 +229,11 @@
     if (data.lockedPreview) {
       renderBenefits(data.lockedPreview.benefits);
       if (upgradeTopEl) {
-        upgradeTopEl.textContent = data.lockedPreview.ctaLabel || 'Upgrade to Gold ($199)';
+        upgradeTopEl.textContent = data.lockedPreview.ctaLabel || 'Join GeoNeo Visibility Club';
         upgradeTopEl.href = data.lockedPreview.ctaHref || '/#purchase';
       }
       if (upgradeMainEl) {
-        upgradeMainEl.textContent = data.lockedPreview.ctaLabel || 'Upgrade to Gold ($199)';
+        upgradeMainEl.textContent = data.lockedPreview.ctaLabel || 'Join GeoNeo Visibility Club ($99/mo)';
         upgradeMainEl.href = data.lockedPreview.ctaHref || '/#purchase';
       }
     }
@@ -254,6 +254,21 @@
       if (statusEl) {
         statusEl.textContent = `Neo Club unavailable: ${error && error.message ? error.message : 'Please try again.'}`;
         statusEl.classList.add('locked');
+      }
+    }
+
+    // Step 9: Book 15-min call with Matt (production calendar link)
+    const bookBtn = document.getElementById('bookCallBtn');
+    if (bookBtn) {
+      bookBtn.addEventListener('click', () => {
+        // Replace with real Calendly / scheduling link in production
+        window.open('https://calendly.com/geoneo-matt/15min', '_blank');
+        // Record intent (future: POST to /api/lead-intent)
+      });
+      // Show button for Gold/Admin members
+      const stored = loadNeoClubSession();
+      if (stored && (stored.packageLevel === 'gold' || stored.packageLevel === 'admin')) {
+        bookBtn.hidden = false;
       }
     }
   }
