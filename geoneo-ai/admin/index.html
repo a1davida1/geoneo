@@ -309,6 +309,16 @@
       font-size: 0.75rem;
     }
     .leadgen-note { min-height: 54px; resize: vertical; }
+    select.leadgen-state-favorable {
+      border-color: rgba(74, 222, 128, 0.7) !important;
+      box-shadow: 0 0 0 1px rgba(74, 222, 128, 0.25);
+      background: rgba(20, 83, 45, 0.35) !important;
+    }
+    select.leadgen-state-caution {
+      border-color: rgba(251, 191, 36, 0.75) !important;
+      box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.22);
+      background: rgba(113, 63, 18, 0.38) !important;
+    }
   </style>
 </head>
 <body>
@@ -319,6 +329,8 @@
       <nav id="nav">
         <a href="#overview" data-panel="overview">Command Center</a>
         <a href="#inspector" data-panel="inspector" class="active">Quick Audit</a>
+        <a href="#deepaudit" data-panel="deepaudit">Deep Audit</a>
+        <a href="#closersheet" data-panel="closersheet">Closer Sheet</a>
         <a href="#tools" data-panel="tools">Operator Toolbox</a>
         <a href="#leadgen" data-panel="leadgen">Prospect Hunter</a>
         <a href="#leads" data-panel="leads">Lead Pipeline</a>
@@ -425,6 +437,123 @@
         </details>
       </section>
 
+      <section id="panel-deepaudit" class="panel">
+        <h2>Deep Audit</h2>
+        <p style="color:var(--admin-muted);font-size:0.9rem;max-width:56rem;">
+          Full-depth audit fanning out to schema, E-E-A-T, and GEO/AI-search analyzers in parallel.
+          Returns scores, findings, dollar opportunity, and ready-to-paste assets (LocalBusiness schema, llms.txt).
+          Tier filter gates ONLY the copy-paste blocks for free — findings + dollar math + scores stay visible.
+        </p>
+        <div class="btn-row" style="align-items:flex-end;flex-wrap:wrap;max-width:64rem;">
+          <label style="flex:1;min-width:240px;">
+            <span style="font-size:0.75rem;color:var(--admin-muted);">URL</span>
+            <input id="deepUrl" class="inline-text" style="width:100%;margin-top:4px;" type="text" placeholder="https://example.com" />
+          </label>
+          <label style="flex:1;min-width:140px;">
+            <span style="font-size:0.75rem;color:var(--admin-muted);">Industry</span>
+            <input id="deepIndustry" class="inline-text" style="width:100%;margin-top:4px;" type="text" placeholder="plumber" />
+          </label>
+          <label style="width:140px;">
+            <span style="font-size:0.75rem;color:var(--admin-muted);">City</span>
+            <input id="deepCity" class="inline-text" style="width:100%;margin-top:4px;" type="text" placeholder="Branson" />
+          </label>
+          <label style="width:90px;">
+            <span style="font-size:0.75rem;color:var(--admin-muted);">State</span>
+            <input id="deepState" class="inline-text" style="width:100%;margin-top:4px;" type="text" placeholder="MO" />
+          </label>
+          <label style="width:120px;">
+            <span style="font-size:0.75rem;color:var(--admin-muted);">Tier view</span>
+            <select id="deepTier" class="inline-text" style="width:100%;margin-top:4px;padding:10px;">
+              <option value="free">free</option>
+              <option value="silver">silver</option>
+              <option value="gold" selected>gold</option>
+              <option value="admin">admin</option>
+            </select>
+          </label>
+        </div>
+        <div class="btn-row">
+          <button type="button" class="primary" id="btnRunDeepAudit">Run deep audit</button>
+          <button type="button" id="btnExportDeepJson" disabled>Export JSON</button>
+        </div>
+        <p id="deepAuditStatus" style="color:var(--admin-accent);font-size:0.85rem;min-height:1.25rem;"></p>
+        <div id="deepAuditOverview" style="display:none;margin-bottom:1rem;">
+          <div id="deepAuditScoreCards" class="grid"></div>
+          <h3 class="tools-section">Top 5 findings (ranked by $$ impact)</h3>
+          <div id="deepAuditFindings"></div>
+          <h3 class="tools-section">Dollar opportunity</h3>
+          <div id="deepAuditDollar"></div>
+          <h3 class="tools-section">Generated assets (paid tier only)</h3>
+          <div id="deepAuditAssets" style="font-size:0.85rem;color:var(--admin-muted);"></div>
+        </div>
+        <details style="margin-top:1rem;">
+          <summary style="cursor:pointer;color:var(--admin-muted);font-size:0.85rem;">Raw audit JSON</summary>
+          <pre id="deepAuditOut" class="out" style="max-height:560px;">Run an audit to see the response.</pre>
+        </details>
+      </section>
+
+      <section id="panel-closersheet" class="panel">
+        <h2>Closer Sheet</h2>
+        <p style="color:var(--admin-muted);font-size:0.9rem;max-width:56rem;">
+          The 1-2 page sales artifact. Combines the deep audit with prospect intel + their current monthly marketing spend.
+          Auto-detects persona (Bar-Friend Victim / Escapee / High-LTV Specialist / etc.), recommends the right tier,
+          shows ROI math, and produces ready-to-read microscripts (opener, pain validation, 8 objection handlers, close ask, follow-up).
+        </p>
+        <div class="btn-row" style="flex-direction:column;align-items:stretch;max-width:56rem;">
+          <div class="btn-row" style="margin-bottom:0;">
+            <label style="flex:1;"><span style="font-size:0.75rem;color:var(--admin-muted);">URL</span><br />
+              <input id="closerUrl" class="inline-text" style="width:100%;" type="text" placeholder="https://example.com" />
+            </label>
+            <label style="flex:1;"><span style="font-size:0.75rem;color:var(--admin-muted);">Business name</span><br />
+              <input id="closerBiz" class="inline-text" style="width:100%;" type="text" />
+            </label>
+          </div>
+          <div class="btn-row" style="margin-bottom:0;">
+            <label style="flex:1;"><span style="font-size:0.75rem;color:var(--admin-muted);">Industry</span><br />
+              <input id="closerIndustry" class="inline-text" style="width:100%;" type="text" />
+            </label>
+            <label style="flex:1;"><span style="font-size:0.75rem;color:var(--admin-muted);">City</span><br />
+              <input id="closerCity" class="inline-text" style="width:100%;" type="text" />
+            </label>
+            <label style="width:80px;"><span style="font-size:0.75rem;color:var(--admin-muted);">State</span><br />
+              <input id="closerState" class="inline-text" style="width:100%;" type="text" />
+            </label>
+            <label style="flex:1;"><span style="font-size:0.75rem;color:var(--admin-muted);">Contact name</span><br />
+              <input id="closerContact" class="inline-text" style="width:100%;" type="text" />
+            </label>
+          </div>
+          <div class="btn-row" style="margin-bottom:0;">
+            <label style="flex:1;"><span style="font-size:0.75rem;color:var(--admin-muted);">Phone</span><br />
+              <input id="closerPhone" class="inline-text" style="width:100%;" type="text" />
+            </label>
+            <label style="flex:1;"><span style="font-size:0.75rem;color:var(--admin-muted);">Current monthly spend ($)</span><br />
+              <input id="closerSpend" class="inline-text" style="width:100%;" type="number" min="0" placeholder="450" />
+            </label>
+            <label style="flex:1;"><span style="font-size:0.75rem;color:var(--admin-muted);">Current vendor (optional)</span><br />
+              <input id="closerVendor" class="inline-text" style="width:100%;" type="text" placeholder="e.g. local guy / agency name" />
+            </label>
+          </div>
+          <div class="btn-row" style="margin-bottom:0;">
+            <label style="width:140px;"><span style="font-size:0.75rem;color:var(--admin-muted);">Years in business</span><br />
+              <input id="closerYears" class="inline-text" style="width:100%;" type="number" min="0" />
+            </label>
+            <label style="width:140px;"><span style="font-size:0.75rem;color:var(--admin-muted);"># Locations</span><br />
+              <input id="closerLocations" class="inline-text" style="width:100%;" type="number" min="1" value="1" />
+            </label>
+          </div>
+          <div class="btn-row" style="margin-top:0.5rem;">
+            <button type="button" class="primary" id="btnBuildCloser">Build Closer Sheet</button>
+            <button type="button" id="btnPrintCloser" disabled>Print / Save as PDF</button>
+            <button type="button" id="btnCopyCloser" disabled>Copy script to clipboard</button>
+          </div>
+        </div>
+        <p id="closerStatus" style="color:var(--admin-accent);font-size:0.85rem;min-height:1.25rem;"></p>
+        <div id="closerSheetRendered" style="display:none;margin-top:1rem;"></div>
+        <details style="margin-top:1rem;">
+          <summary style="cursor:pointer;color:var(--admin-muted);font-size:0.85rem;">Raw closer sheet JSON</summary>
+          <pre id="closerOut" class="out" style="max-height:560px;">Build a closer sheet to see the response.</pre>
+        </details>
+      </section>
+
       <section id="panel-tools" class="panel">
         <h2>Operator Toolbox</h2>
         <p style="color:var(--admin-muted);font-size:0.9rem;max-width:52rem;">
@@ -455,7 +584,10 @@
             <label style="display:flex;align-items:flex-end;padding-bottom:4px;"><input type="checkbox" id="auditInternalMode" /> <span style="margin-left:8px;font-size:0.85rem;">internalMode</span></label>
           </div>
           <div class="btn-row" style="margin-bottom:0;">
-            <label style="flex:1;"><span style="font-size:0.75rem;color:var(--admin-muted);">industry</span><br /><input id="auditIndustry" class="inline-text" style="width:100%;" type="text" /></label>
+            <label style="flex:1;"><span style="font-size:0.75rem;color:var(--admin-muted);">industry / vertical</span><br />
+              <select id="auditIndustry" class="inline-text" style="width:100%;padding:10px;"></select>
+              <input id="auditIndustryCustom" class="inline-text" style="width:100%;margin-top:6px;display:none;" type="text" placeholder="Custom vertical (e.g. epoxy garage floors)" autocomplete="off" aria-label="Custom industry" aria-hidden="true" />
+            </label>
             <label style="flex:1;"><span style="font-size:0.75rem;color:var(--admin-muted);">businessName</span><br /><input id="auditBusinessName" class="inline-text" style="width:100%;" type="text" /></label>
           </div>
           <div class="btn-row" style="margin-bottom:0;">
@@ -486,7 +618,10 @@
         <div class="btn-row" style="flex-direction:column;align-items:stretch;max-width:52rem;">
           <label><span style="font-size:0.75rem;color:var(--admin-muted);">url (required)</span><br /><input id="cfUrl" class="inline-text" style="width:100%;" type="text" placeholder="https://example.com" /></label>
           <div class="btn-row" style="margin-bottom:0;">
-            <label style="flex:1;"><span style="font-size:0.75rem;color:var(--admin-muted);">industry</span><br /><input id="cfIndustry" class="inline-text" style="width:100%;" /></label>
+            <label style="flex:1;"><span style="font-size:0.75rem;color:var(--admin-muted);">industry / vertical</span><br />
+              <select id="cfIndustry" class="inline-text" style="width:100%;padding:10px;"></select>
+              <input id="cfIndustryCustom" class="inline-text" style="width:100%;margin-top:6px;display:none;" type="text" placeholder="Custom vertical" autocomplete="off" aria-label="Custom industry for citation fixer" aria-hidden="true" />
+            </label>
             <label style="flex:1;"><span style="font-size:0.75rem;color:var(--admin-muted);">city</span><br /><input id="cfCity" class="inline-text" style="width:100%;" /></label>
             <label style="flex:1;"><span style="font-size:0.75rem;color:var(--admin-muted);">state</span><br /><input id="cfState" class="inline-text" style="width:100%;" /></label>
             <label style="flex:1;"><span style="font-size:0.75rem;color:var(--admin-muted);">businessName</span><br /><input id="cfBusinessName" class="inline-text" style="width:100%;" /></label>
@@ -564,20 +699,32 @@
       <section id="panel-leadgen" class="panel">
         <h2>Prospect Hunter</h2>
         <p style="color:var(--admin-muted);font-size:0.9rem;max-width:56rem;">
-          Pick a vertical + city → discover the ranking businesses → deep-audit them in bulk → tag winners with owner, years-in-business, notes, and SEO provider attribution. Optional Ahrefs enrichment for backlink and authority signals. Export to CSV when ready to outreach.
+          Pick a vertical + state + city → discover the ranking businesses → deep-audit them in bulk → tag winners with owner, years-in-business, notes, and SEO provider attribution. Optional Ahrefs enrichment for backlink and authority signals. Export to CSV when ready to outreach.
+        </p>
+        <p style="font-size:0.78rem;color:var(--admin-muted);max-width:56rem;line-height:1.45;">
+          <strong>State colors (Prospect Hunter model only):</strong> green = modeled lower friction for AI-assisted dialing (one-party recording; no extra GeoNeo AI-disclosure flag). yellow = modeled higher friction (all-party consent states and/or states we flag for stricter AI disclosure). This is <strong>not</strong> legal advice: federal TCPA, FTC, FCC AI-voice rules, and consent still apply everywhere.
         </p>
         <div class="btn-row" style="align-items:flex-end;max-width:64rem;">
-          <label style="flex:1;min-width:180px;">
+          <label style="flex:1;min-width:200px;">
             <span style="font-size:0.75rem;color:var(--admin-muted);">Industry / vertical</span>
-            <input id="leadGenIndustry" class="inline-text" style="width:100%;margin-top:4px;" type="text" placeholder="hotel, plumber, restaurant" />
+            <select id="leadGenIndustry" class="inline-text" style="width:100%;margin-top:4px;padding:10px;"></select>
+            <input id="leadGenIndustryCustom" class="inline-text" style="width:100%;margin-top:6px;display:none;" type="text" placeholder="Custom vertical (not listed above)" autocomplete="off" aria-label="Custom vertical" aria-hidden="true" />
           </label>
-          <label style="flex:1;min-width:140px;">
-            <span style="font-size:0.75rem;color:var(--admin-muted);">City</span>
-            <input id="leadGenCity" class="inline-text" style="width:100%;margin-top:4px;" type="text" placeholder="Branson" />
-          </label>
-          <label style="width:110px;">
+          <label style="flex:0 1 260px;min-width:220px;">
             <span style="font-size:0.75rem;color:var(--admin-muted);">State</span>
-            <input id="leadGenState" class="inline-text" style="width:100%;margin-top:4px;" type="text" placeholder="MO" />
+            <select id="leadGenState" class="inline-text" style="width:100%;margin-top:4px;padding:10px;">
+              <option value="">Select state…</option>
+            </select>
+            <span id="leadGenStateHint" style="font-size:0.68rem;color:var(--admin-muted);display:block;margin-top:5px;line-height:1.35;">
+              Select a state to load cities. Colors reflect modeled call-friction tiers, not a guarantee that AI calls are lawful without consent.
+            </span>
+          </label>
+          <label style="flex:1;min-width:200px;">
+            <span style="font-size:0.75rem;color:var(--admin-muted);">City</span>
+            <select id="leadGenCity" class="inline-text" style="width:100%;margin-top:4px;padding:10px;" disabled>
+              <option value="">Select a state first</option>
+            </select>
+            <input id="leadGenCityCustom" class="inline-text" style="width:100%;margin-top:6px;display:none;" type="text" placeholder="City if not listed (Census places + Other)" autocomplete="address-level2" aria-label="Custom city name" aria-hidden="true" />
           </label>
           <label style="width:110px;">
             <span style="font-size:0.75rem;color:var(--admin-muted);">Quantity</span>
@@ -663,8 +810,19 @@
   </div>
 
   <script>
-    (function () {
+    (async function () {
       const LS_KEY = 'geoneo_admin_bearer';
+      /** When admin HTML is opened from file:// or another port, set localStorage geoneo_api_base to the GeoNeo server root, e.g. http://127.0.0.1:4173 */
+      const LS_API_BASE = 'geoneo_api_base';
+
+      function resolveApiUrl(url) {
+        if (!url || /^https?:\/\//i.test(url)) return url;
+        let base = (localStorage.getItem(LS_API_BASE) || '').trim().replace(/\/$/, '');
+        if (!base && window.location.protocol === 'file:') {
+          base = 'http://127.0.0.1:4173';
+        }
+        return base ? base + url : url;
+      }
 
       function getHeaders() {
         const t = localStorage.getItem(LS_KEY);
@@ -692,8 +850,128 @@
           .replace(/'/g, '&#39;');
       }
 
+      /**
+       * Prospect verticals: single source data/prospect-verticals.json (served at /api/geo/prospect-verticals).
+       */
+      async function fetchProspectVerticalGroups() {
+        const { res, data } = await fetchJson('/api/geo/prospect-verticals');
+        if (!res.ok || !data || !Array.isArray(data.groups)) {
+          throw new Error('prospect_verticals_bad_response');
+        }
+        return data.groups;
+      }
+
+      function buildVerticalSelectInnerHtml(groups) {
+        var html = '<option value="">Select vertical…</option>';
+        (groups || []).forEach(function (g) {
+          html += '<optgroup label="' + escapeHtml(g.label) + '">';
+          (g.items || []).forEach(function (item) {
+            html += '<option value="' + escapeHtml(item.value) + '">' + escapeHtml(item.label) + '</option>';
+          });
+          html += '</optgroup>';
+        });
+        html += '<option value="__custom__">Custom (type below)…</option>';
+        return html;
+      }
+
+      function getVerticalFieldValue(selectId, customId) {
+        var sel = document.getElementById(selectId);
+        var custom = document.getElementById(customId);
+        if (!sel) return '';
+        if (sel.value === '__custom__') {
+          return custom ? String(custom.value || '').trim() : '';
+        }
+        return String(sel.value || '').trim();
+      }
+
+      function wireVerticalSelect(selectId, customId) {
+        var sel = document.getElementById(selectId);
+        var custom = document.getElementById(customId);
+        if (!sel || !custom) return;
+        function sync() {
+          var show = sel.value === '__custom__';
+          custom.style.display = show ? 'block' : 'none';
+          custom.hidden = !show;
+          custom.setAttribute('aria-hidden', show ? 'false' : 'true');
+          if (!show) custom.value = '';
+        }
+        sel.addEventListener('change', sync);
+        sync();
+      }
+
+      async function initProspectVerticalSelects() {
+        var groups;
+        try {
+          groups = await fetchProspectVerticalGroups();
+        } catch (err) {
+          console.error('[GeoNeo admin] prospect verticals load failed', err);
+          showFlash('Could not load vertical presets. Use Custom or fix /api/geo/prospect-verticals.', false);
+          groups = [];
+        }
+        var html = buildVerticalSelectInnerHtml(groups);
+        ['leadGenIndustry', 'auditIndustry', 'cfIndustry'].forEach(function (id) {
+          var el = document.getElementById(id);
+          if (el && el.tagName === 'SELECT') el.innerHTML = html;
+        });
+        wireVerticalSelect('leadGenIndustry', 'leadGenIndustryCustom');
+        wireVerticalSelect('auditIndustry', 'auditIndustryCustom');
+        wireVerticalSelect('cfIndustry', 'cfIndustryCustom');
+      }
+
+      function normalizeUrlWithHttps(raw) {
+        var t = String(raw || '').trim();
+        if (!t) return '';
+        if (/^https?:\/\//i.test(t)) return t;
+        if (/^\/\//.test(t)) return 'https:' + t;
+        return 'https://' + t.replace(/^\/+/, '');
+      }
+
+      function attachHttpsPrefill(inputEl) {
+        if (!inputEl) return;
+        inputEl.addEventListener('focus', function () {
+          if (!String(inputEl.value || '').trim()) {
+            inputEl.value = 'https://';
+            try {
+              inputEl.setSelectionRange(8, 8);
+            } catch (e) { /* not all input types */ }
+          }
+        });
+      }
+
+      /** Sync-filled so State dropdown works even when API is unreachable (file://, wrong port). */
+      const INLINE_US_STATES = [
+        ['AL', 'Alabama'], ['AK', 'Alaska'], ['AZ', 'Arizona'], ['AR', 'Arkansas'], ['CA', 'California'],
+        ['CO', 'Colorado'], ['CT', 'Connecticut'], ['DE', 'Delaware'], ['DC', 'District of Columbia'],
+        ['FL', 'Florida'], ['GA', 'Georgia'], ['HI', 'Hawaii'], ['ID', 'Idaho'], ['IL', 'Illinois'],
+        ['IN', 'Indiana'], ['IA', 'Iowa'], ['KS', 'Kansas'], ['KY', 'Kentucky'], ['LA', 'Louisiana'],
+        ['ME', 'Maine'], ['MD', 'Maryland'], ['MA', 'Massachusetts'], ['MI', 'Michigan'], ['MN', 'Minnesota'],
+        ['MS', 'Mississippi'], ['MO', 'Missouri'], ['MT', 'Montana'], ['NE', 'Nebraska'], ['NV', 'Nevada'],
+        ['NH', 'New Hampshire'], ['NJ', 'New Jersey'], ['NM', 'New Mexico'], ['NY', 'New York'],
+        ['NC', 'North Carolina'], ['ND', 'North Dakota'], ['OH', 'Ohio'], ['OK', 'Oklahoma'], ['OR', 'Oregon'],
+        ['PA', 'Pennsylvania'], ['RI', 'Rhode Island'], ['SC', 'South Carolina'], ['SD', 'South Dakota'],
+        ['TN', 'Tennessee'], ['TX', 'Texas'], ['UT', 'Utah'], ['VT', 'Vermont'], ['VA', 'Virginia'],
+        ['WA', 'Washington'], ['WV', 'West Virginia'], ['WI', 'Wisconsin'], ['WY', 'Wyoming']
+      ];
+
+      function paintLeadGenStatesInline() {
+        const stateSel = document.getElementById('leadGenState');
+        if (!stateSel) return;
+        const optHint =
+          'Friction-tier colors (green/yellow) load when the GeoNeo API is reachable. If cities fail to load, set localStorage geoneo_api_base to your server root (e.g. http://127.0.0.1:4173). ';
+        const opts = [
+          '<option value="">Select state…</option>'
+        ].concat(
+          INLINE_US_STATES.map(([code, name]) => (
+            `<option value="${escapeHtml(code)}" data-tier="" title="${escapeHtml(optHint + name + ' (' + code + ')')}">${escapeHtml(name)} (${escapeHtml(code)})</option>`
+          ))
+        );
+        stateSel.innerHTML = opts.join('');
+        stateSel.dataset.tierSource = 'inline';
+        applyLeadGenStateTierStyle();
+      }
+
       async function fetchJson(url, opts) {
-        const res = await fetch(url, Object.assign({ headers: getHeaders() }, opts || {}));
+        const res = await fetch(resolveApiUrl(url), Object.assign({ headers: getHeaders() }, opts || {}));
         const text = await res.text();
         let data;
         try { data = JSON.parse(text); } catch { data = { _raw: text }; }
@@ -701,7 +979,7 @@
       }
 
       async function postJson(url, bodyObj) {
-        const res = await fetch(url, {
+        const res = await fetch(resolveApiUrl(url), {
           method: 'POST',
           headers: Object.assign({ 'Content-Type': 'application/json; charset=utf-8' }, getHeaders()),
           body: JSON.stringify(bodyObj)
@@ -713,7 +991,7 @@
       }
 
       async function postJsonRaw(url, rawBody) {
-        const res = await fetch(url, {
+        const res = await fetch(resolveApiUrl(url), {
           method: 'POST',
           headers: Object.assign({ 'Content-Type': 'application/json; charset=utf-8' }, getHeaders()),
           body: rawBody
@@ -821,7 +1099,7 @@
         const hint = document.getElementById('leadsLoadHint');
         hint.textContent = 'Loading leads…';
         try {
-          const r = await fetch('/admin/leads', { headers: getHeaders() });
+          const r = await fetch(resolveApiUrl('/admin/leads'), { headers: getHeaders() });
           const html = await r.text();
           if (!r.ok) {
             hint.textContent = 'Could not load leads (' + r.status + '). Open /admin/leads in a new tab.';
@@ -1113,13 +1391,18 @@
         p.set('queryType', document.getElementById('auditQueryType').value);
         p.set('package', document.getElementById('auditPackage').value);
         if (document.getElementById('auditInternalMode').checked) p.set('internalMode', '1');
-        const url = document.getElementById('auditUrl').value.trim();
-        if (url) p.set('url', url);
+        const urlRaw = document.getElementById('auditUrl').value.trim();
+        const url = normalizeUrlWithHttps(urlRaw);
+        if (url) {
+          document.getElementById('auditUrl').value = url;
+          p.set('url', url);
+        }
         function setIf(id, key) {
           const v = document.getElementById(id).value.trim();
           if (v) p.set(key, v);
         }
-        setIf('auditIndustry', 'industry');
+        const industry = getVerticalFieldValue('auditIndustry', 'auditIndustryCustom');
+        if (industry) p.set('industry', industry);
         setIf('auditBusinessName', 'businessName');
         setIf('auditCity', 'city');
         setIf('auditState', 'state');
@@ -1135,13 +1418,14 @@
         const btn = document.getElementById('btnSimpleCheck');
         const label = document.getElementById('btnSimpleCheckLabel');
         const raw = document.getElementById('simpleSiteUrl').value.trim();
-        if (!raw) {
+        if (!raw || raw === 'https://' || raw === 'http://') {
           showFlash('Paste a website URL.', false);
           return;
         }
         let fullUrl;
         try {
-          fullUrl = /^https?:\/\//i.test(raw) ? raw : 'https://' + raw;
+          fullUrl = normalizeUrlWithHttps(raw);
+          document.getElementById('simpleSiteUrl').value = fullUrl;
           new URL(fullUrl);
         } catch (e) {
           showFlash('That does not look like a valid URL.', false);
@@ -1297,7 +1581,8 @@
             const url = document.getElementById('auditUrl').value.trim();
             if (url) {
               try {
-                const withProto = /^https?:\/\//i.test(url) ? url : 'https://' + url;
+                const withProto = normalizeUrlWithHttps(url);
+                document.getElementById('auditUrl').value = withProto;
                 const host = new URL(withProto).hostname.toLowerCase().replace(/^www\./, '');
                 if (host) document.getElementById('probeDomain').value = host;
               } catch (e) { /* ignore */ }
@@ -1323,15 +1608,17 @@
       };
 
       document.getElementById('btnCitationFixer').onclick = async function () {
-        const url = document.getElementById('cfUrl').value.trim();
-        if (!url) return showFlash('Citation fixer needs url.', false);
+        let url = normalizeUrlWithHttps(document.getElementById('cfUrl').value);
+        if (!url || url === 'https://' || url === 'http://') return showFlash('Citation fixer needs url.', false);
+        document.getElementById('cfUrl').value = url;
         const p = new URLSearchParams();
         p.set('url', url);
         function opt(id, key) {
           const v = document.getElementById(id).value.trim();
           if (v) p.set(key, v);
         }
-        opt('cfIndustry', 'industry');
+        const cfInd = getVerticalFieldValue('cfIndustry', 'cfIndustryCustom');
+        if (cfInd) p.set('industry', cfInd);
         opt('cfCity', 'city');
         opt('cfState', 'state');
         opt('cfBusinessName', 'businessName');
@@ -1393,16 +1680,161 @@
       let leadGenPollTimer = null;
       let leadGenCurrentRun = null;
 
+      function getLeadGenStateCode() {
+        const el = document.getElementById('leadGenState');
+        return el ? String(el.value || '').trim() : '';
+      }
+
+      function getLeadGenCityValue() {
+        const sel = document.getElementById('leadGenCity');
+        const custom = document.getElementById('leadGenCityCustom');
+        if (!sel) return '';
+        if (sel.value === '__custom__') return custom ? String(custom.value || '').trim() : '';
+        return String(sel.value || '').trim();
+      }
+
+      function applyLeadGenStateTierStyle() {
+        const stateSel = document.getElementById('leadGenState');
+        const hint = document.getElementById('leadGenStateHint');
+        if (!stateSel) return;
+        const opt = stateSel.selectedOptions[0];
+        const tier = opt && opt.getAttribute('data-tier');
+        stateSel.classList.remove('leadgen-state-favorable', 'leadgen-state-caution');
+        if (tier === 'favorable') stateSel.classList.add('leadgen-state-favorable');
+        else if (tier === 'caution') stateSel.classList.add('leadgen-state-caution');
+        if (hint) {
+          if (opt && opt.value) {
+            hint.textContent = opt.getAttribute('title') || '';
+          } else {
+            var src = stateSel.getAttribute('data-tier-source');
+            hint.textContent =
+              src === 'inline'
+                ? 'Embedded state list (API not used for this list). For tier colors + city lists, serve admin from the GeoNeo host or set localStorage geoneo_api_base (e.g. http://127.0.0.1:4173).'
+                : src === 'public'
+                ? 'Public state list (no tier colors). For green/yellow friction tiers use localhost or set geoneo_admin_bearer. Then pick a state to load cities.'
+                : 'Select a state to load Census places as city options. Green/yellow = modeled friction tiers only; TCPA and counsel still apply.';
+          }
+        }
+      }
+
+      async function loadLeadGenCitiesForState() {
+        const stateSel = document.getElementById('leadGenState');
+        const citySel = document.getElementById('leadGenCity');
+        const customInput = document.getElementById('leadGenCityCustom');
+        if (!stateSel || !citySel || !customInput) return;
+        const code = String(stateSel.value || '').trim();
+        customInput.value = '';
+        customInput.style.display = 'none';
+        customInput.setAttribute('aria-hidden', 'true');
+        if (!code) {
+          citySel.disabled = true;
+          citySel.innerHTML = '<option value="">Select a state first</option>';
+          return;
+        }
+        citySel.disabled = true;
+        citySel.innerHTML = '<option value="">Loading cities…</option>';
+        try {
+          let { res, data } = await fetchJson('/api/admin/lead-gen/cities?state=' + encodeURIComponent(code));
+          let cities = data && Array.isArray(data.cities) ? data.cities : [];
+          if (!res.ok || !cities.length) {
+            const pub = await fetchJson('/api/geo/cities?state=' + encodeURIComponent(code));
+            res = pub.res;
+            data = pub.data;
+            cities = data && Array.isArray(data.cities) ? data.cities : [];
+          }
+          if (!res.ok || !cities.length) {
+            citySel.innerHTML =
+              '<option value="">Could not load list — use Other</option>' +
+              '<option value="__custom__">Other (type city)</option>';
+            return;
+          }
+          const opts = [
+            '<option value="">Select city…</option>'
+          ].concat(
+            cities.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`)
+          ).concat(['<option value="__custom__">Other (type city)</option>']);
+          citySel.innerHTML = opts.join('');
+        } catch (e) {
+          citySel.innerHTML =
+            '<option value="">Network error — use Other</option>' +
+            '<option value="__custom__">Other (type city)</option>';
+        } finally {
+          citySel.disabled = false;
+        }
+      }
+
+      async function initLeadGenGeoControls() {
+        const stateSel = document.getElementById('leadGenState');
+        if (!stateSel || stateSel.dataset.geoInitDone === '1') return;
+        try {
+          const { res, data } = await fetchJson('/api/admin/lead-gen/us-states');
+          if (res.ok && data && Array.isArray(data.states) && data.states.length) {
+            const favorable = data.states.filter((s) => s.workflowTier === 'favorable');
+            const caution = data.states.filter((s) => s.workflowTier === 'caution');
+            const mkOpt = (s) =>
+              `<option value="${escapeHtml(s.code)}" data-tier="${escapeHtml(s.workflowTier)}" title="${escapeHtml(s.uiHint)}">${escapeHtml(s.name)} (${escapeHtml(s.code)})</option>`;
+            stateSel.innerHTML =
+              '<option value="">Select state…</option>' +
+              '<optgroup label="Modeled lower friction (green)">' +
+              favorable.map(mkOpt).join('') +
+              '</optgroup>' +
+              '<optgroup label="Modeled higher friction (yellow)">' +
+              caution.map(mkOpt).join('') +
+              '</optgroup>';
+            stateSel.dataset.tierSource = 'admin';
+            applyLeadGenStateTierStyle();
+            return;
+          }
+
+          const pub = await fetchJson('/api/geo/us-states');
+          if (pub.res.ok && pub.data && Array.isArray(pub.data.states) && pub.data.states.length) {
+            const sorted = pub.data.states.slice().sort(function (a, b) {
+              return String(a.name || '').localeCompare(String(b.name || ''));
+            });
+            const pubTitle =
+              'Green/yellow friction tiers need internal API access on this connection. States still work; set GEONEO_INTERNAL_API_SECRET and localStorage key geoneo_admin_bearer, or open admin from localhost.';
+            const mkOpt = function (s) {
+              return '<option value="' + escapeHtml(s.code) + '" data-tier="" title="' + escapeHtml(pubTitle) + '">' +
+                escapeHtml(s.name) + ' (' + escapeHtml(s.code) + ')</option>';
+            };
+            stateSel.innerHTML =
+              '<option value="">Select state…</option>' +
+              '<optgroup label="U.S. states &amp; DC (public list)">' +
+              sorted.map(mkOpt).join('') +
+              '</optgroup>';
+            stateSel.dataset.tierSource = 'public';
+            showFlash(
+              'Loaded states from public API (no auth). Friction-tier colors need localhost or geoneo_admin_bearer + GEONEO_INTERNAL_API_SECRET.',
+              true
+            );
+            applyLeadGenStateTierStyle();
+            return;
+          }
+
+          var detail =
+            res.status === 403
+              ? '403: Not authorized from this network for tiered API. Embedded states still work; for tier colors + city list set GEONEO_INTERNAL_API_SECRET and localStorage geoneo_admin_bearer, or open admin from the GeoNeo host. Set geoneo_api_base if this page is not served from the API host.'
+              : 'Could not reach tiered or public state API. Embedded state list still works. Serve admin from the GeoNeo server, or set localStorage geoneo_api_base to its root (e.g. http://127.0.0.1:4173).';
+          showFlash(detail, false);
+        } catch (e) {
+          showFlash('State API check failed — embedded list still works. ' + (e && e.message ? e.message : 'network error') + ' Try geoneo_api_base if opening admin from file:// or another port.', false);
+        } finally {
+          stateSel.dataset.geoInitDone = '1';
+        }
+      }
+
       function leadGenPayload() {
         const manualCandidates = document.getElementById('leadGenManual').value
           .split(/\n+/)
           .map((line) => line.trim())
           .filter(Boolean)
+          .map((line) => normalizeUrlWithHttps(line))
+          .filter((u) => u && u !== 'https://' && u !== 'http://')
           .map((website) => ({ website, source: 'manual' }));
         return {
-          industry: document.getElementById('leadGenIndustry').value.trim(),
-          city: document.getElementById('leadGenCity').value.trim(),
-          state: document.getElementById('leadGenState').value.trim(),
+          industry: getVerticalFieldValue('leadGenIndustry', 'leadGenIndustryCustom'),
+          city: getLeadGenCityValue(),
+          state: getLeadGenStateCode(),
           quantity: Number(document.getElementById('leadGenQuantity').value || 25),
           useAhrefs: document.getElementById('leadGenUseAhrefs').checked,
           manualCandidates
@@ -1543,9 +1975,27 @@
         }
       }
 
+      var leadGenStateEl = document.getElementById('leadGenState');
+      if (leadGenStateEl) {
+        leadGenStateEl.addEventListener('change', function () {
+          applyLeadGenStateTierStyle();
+          loadLeadGenCitiesForState();
+        });
+      }
+      var leadGenCityEl = document.getElementById('leadGenCity');
+      if (leadGenCityEl) {
+        leadGenCityEl.addEventListener('change', function () {
+          const custom = document.getElementById('leadGenCityCustom');
+          if (!custom) return;
+          const show = this.value === '__custom__';
+          custom.style.display = show ? 'block' : 'none';
+          custom.setAttribute('aria-hidden', show ? 'false' : 'true');
+        });
+      }
+
       document.getElementById('btnLeadGenDiscover').onclick = async function () {
         const body = leadGenPayload();
-        if (!body.industry || !body.city) return showFlash('Enter industry and city.', false);
+        if (!body.industry || !body.state || !body.city) return showFlash('Select a vertical (or custom), state, and city.', false);
         const btn = document.getElementById('btnLeadGenDiscover');
         btn.disabled = true;
         document.getElementById('leadGenStatus').textContent = 'Discovering candidates…';
@@ -1567,7 +2017,7 @@
       document.getElementById('btnLeadGenRun').onclick = async function () {
         const body = leadGenPayload();
         body.candidates = leadGenCandidates;
-        if (!body.industry || !body.city) return showFlash('Enter industry and city.', false);
+        if (!body.industry || !body.state || !body.city) return showFlash('Select a vertical (or custom), state, and city.', false);
         const btn = document.getElementById('btnLeadGenRun');
         btn.disabled = true;
         document.getElementById('leadGenStatus').textContent = 'Starting deep audit batch…';
@@ -1662,6 +2112,278 @@
           showFlash('Could not save lead decision.', false);
         }
       });
+
+      await initProspectVerticalSelects();
+      attachHttpsPrefill(document.getElementById('simpleSiteUrl'));
+      attachHttpsPrefill(document.getElementById('auditUrl'));
+      attachHttpsPrefill(document.getElementById('cfUrl'));
+
+      paintLeadGenStatesInline();
+      initLeadGenGeoControls().catch(function (err) {
+        console.error('[GeoNeo admin] initLeadGenGeoControls failed — Prospect Hunter state/city controls may be unavailable.', err);
+      });
+
+      // ─── Deep Audit panel handlers ─────────────────────────────────────
+      let deepAuditCurrent = null;
+
+      function renderDeepAuditScoreCards(audit) {
+        const grid = document.getElementById('deepAuditScoreCards');
+        grid.innerHTML = '';
+        const cards = [
+          { label: 'Overall', value: audit.overallScore, hint: audit.grade + ' · ' + audit.status },
+          { label: 'Schema', value: audit.sectionScores.schema, hint: (audit.sections.schema?.presentTypes || []).join(', ').slice(0, 60) },
+          { label: 'E-E-A-T', value: audit.sectionScores.eeat, hint: '8 dimensions' },
+          { label: 'GEO / AI-search', value: audit.sectionScores.geo, hint: 'passage citability + crawlers + llms.txt' }
+        ];
+        cards.forEach(c => {
+          const stat = document.createElement('div');
+          stat.className = 'stat';
+          stat.innerHTML = `<div class="label">${c.label}</div><div class="value">${c.value}</div><div class="hint">${escapeHtml(c.hint || '')}</div>`;
+          grid.appendChild(stat);
+        });
+      }
+
+      function renderDeepAuditFindings(audit) {
+        const host = document.getElementById('deepAuditFindings');
+        host.innerHTML = '';
+        const top = (audit.topFiveFindings || []).slice(0, 5);
+        if (!top.length) { host.innerHTML = '<p style="color:var(--admin-muted);">No findings.</p>'; return; }
+        const table = document.createElement('table');
+        table.className = 'mini';
+        table.innerHTML = '<thead><tr><th>#</th><th>Severity</th><th>Title</th><th>Section</th><th>Monthly $$ band</th></tr></thead>';
+        const tbody = document.createElement('tbody');
+        top.forEach((f, i) => {
+          const tr = document.createElement('tr');
+          const dollar = f.dollarImpact?.monthly || { low: 0, high: 0 };
+          tr.innerHTML = `<td>${i + 1}</td><td>${escapeHtml(f.severity || '')}</td><td>${escapeHtml(f.title || '')}</td><td>${escapeHtml(f.section || '')}</td><td>$${dollar.low}-$${dollar.high}</td>`;
+          tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        host.appendChild(table);
+      }
+
+      function renderDeepAuditDollar(audit) {
+        const host = document.getElementById('deepAuditDollar');
+        const m = audit.dollarOpportunity?.monthly || { low: 0, high: 0 };
+        const a = audit.dollarOpportunity?.annual || { low: 0, high: 0 };
+        host.innerHTML = `<p style="font-size:0.95rem;line-height:1.6;">
+          <strong>Estimated monthly opportunity:</strong> $${m.low.toLocaleString()} – $${m.high.toLocaleString()}<br>
+          <strong>Annualized:</strong> $${a.low.toLocaleString()} – $${a.high.toLocaleString()}<br>
+          <span style="color:var(--admin-muted);font-size:0.85rem;">${escapeHtml(audit.dollarOpportunity?.method || '')}</span>
+        </p>`;
+      }
+
+      function renderDeepAuditAssets(audit) {
+        const host = document.getElementById('deepAuditAssets');
+        if (!audit.generatedAssets) {
+          host.innerHTML = '<p>Assets gated for free tier. Switch to silver/gold/admin to see ready-to-paste schemas + llms.txt.</p>';
+          return;
+        }
+        const a = audit.generatedAssets;
+        const items = [];
+        if (a.localBusinessSchema) items.push('LocalBusiness JSON-LD ready (' + (a.localBusinessSchema['@type'] || 'LocalBusiness') + ')');
+        if (a.websiteSchema) items.push('WebSite JSON-LD ready (with SearchAction)');
+        if (a.breadcrumbSchema) items.push('BreadcrumbList JSON-LD ready');
+        if (a.organizationSchema) items.push('Organization JSON-LD ready');
+        if (a.llmsTxt) items.push('llms.txt ready (' + a.llmsTxt.split('\n').length + ' lines)');
+        host.innerHTML = '<ul>' + items.map(i => '<li>' + escapeHtml(i) + '</li>').join('') + '</ul>';
+      }
+
+      document.getElementById('btnRunDeepAudit').onclick = async function () {
+        const url = document.getElementById('deepUrl').value.trim();
+        if (!url) return showFlash('URL required.', false);
+        const btn = document.getElementById('btnRunDeepAudit');
+        btn.disabled = true;
+        document.getElementById('deepAuditStatus').textContent = 'Running deep audit…';
+        try {
+          const params = new URLSearchParams();
+          params.set('url', /^https?:\/\//i.test(url) ? url : 'https://' + url);
+          params.set('industry', document.getElementById('deepIndustry').value.trim());
+          params.set('city', document.getElementById('deepCity').value.trim());
+          params.set('state', document.getElementById('deepState').value.trim());
+          params.set('tier', document.getElementById('deepTier').value);
+          const { res, data } = await fetchJson('/api/audit-deep?' + params.toString());
+          if (!res.ok) {
+            document.getElementById('deepAuditStatus').textContent = 'Deep audit failed: ' + res.status;
+            document.getElementById('deepAuditOut').textContent = JSON.stringify(data, null, 2);
+            return;
+          }
+          deepAuditCurrent = data.audit;
+          document.getElementById('deepAuditOverview').style.display = 'block';
+          renderDeepAuditScoreCards(data.audit);
+          renderDeepAuditFindings(data.audit);
+          renderDeepAuditDollar(data.audit);
+          renderDeepAuditAssets(data.audit);
+          document.getElementById('deepAuditOut').textContent = JSON.stringify(data, null, 2);
+          document.getElementById('deepAuditStatus').textContent = 'Done — ' + data.audit.sectionElapsedMs + 'ms.';
+          document.getElementById('btnExportDeepJson').disabled = false;
+        } catch (err) {
+          document.getElementById('deepAuditStatus').textContent = 'Error: ' + err.message;
+        } finally {
+          btn.disabled = false;
+        }
+      };
+
+      document.getElementById('btnExportDeepJson').onclick = function () {
+        if (!deepAuditCurrent) return;
+        const blob = new Blob([JSON.stringify(deepAuditCurrent, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'deep-audit-' + Date.now() + '.json';
+        a.click();
+      };
+
+      // ─── Closer Sheet panel handlers ───────────────────────────────────
+      let closerSheetCurrent = null;
+
+      function renderCloserSheet(sheet) {
+        const host = document.getElementById('closerSheetRendered');
+        const tier = sheet.recommendedPackage;
+        const roi = tier.roi || {};
+        const top = sheet.topFiveFindings || [];
+        const ms = sheet.microscripts || {};
+        const followUp = sheet.followUpPath || [];
+
+        host.innerHTML = `
+          <div style="background:var(--admin-surface);border:1px solid var(--admin-line);border-radius:12px;padding:1.5rem;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem;margin-bottom:1rem;">
+              <div>
+                <h3 style="margin:0 0 0.25rem;font-size:1.25rem;">${escapeHtml(sheet.prospect.businessName || sheet.prospect.domain || 'Prospect')}</h3>
+                <p style="margin:0;font-size:0.85rem;color:var(--admin-muted);">${escapeHtml(sheet.prospect.industry || '')} · ${escapeHtml(sheet.prospect.city || '')} ${escapeHtml(sheet.prospect.state || '')} · ${escapeHtml(sheet.prospect.contactName || '')}</p>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-size:2rem;font-weight:700;color:var(--admin-accent);">${sheet.hero.overallScore}<span style="font-size:1rem;color:var(--admin-muted);">/100</span></div>
+                <div style="font-size:0.85rem;color:var(--admin-muted);">Grade: ${escapeHtml(sheet.hero.grade)}</div>
+              </div>
+            </div>
+            <p style="font-size:1.05rem;margin:0 0 1rem;line-height:1.5;">${escapeHtml(sheet.hero.headline)}</p>
+
+            <div style="background:rgba(56,189,248,0.08);border-left:3px solid var(--admin-accent);padding:0.75rem 1rem;border-radius:6px;margin-bottom:1rem;">
+              <strong style="color:var(--admin-accent);">Persona:</strong> ${escapeHtml(sheet.prospect.personaLabel || sheet.prospect.persona)}<br>
+              <span style="font-size:0.85rem;color:var(--admin-muted);">${escapeHtml(tier.personaRationale || '')}</span>
+            </div>
+
+            <h4 style="margin:1.25rem 0 0.5rem;font-size:1rem;">Top 5 findings</h4>
+            <table class="mini">
+              <thead><tr><th>#</th><th>Severity</th><th>Issue</th><th>Monthly $$ band</th></tr></thead>
+              <tbody>
+                ${top.map((f, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(f.severity || '')}</td><td>${escapeHtml(f.title || '')}</td><td>$${f.dollarImpact?.monthly?.low || 0}-$${f.dollarImpact?.monthly?.high || 0}</td></tr>`).join('')}
+              </tbody>
+            </table>
+
+            <h4 style="margin:1.25rem 0 0.5rem;font-size:1rem;">Recommended package</h4>
+            <div style="background:rgba(74,222,128,0.08);border-left:3px solid #4ade80;padding:0.75rem 1rem;border-radius:6px;">
+              <strong style="font-size:1.05rem;">${escapeHtml(tier.label)}</strong> — $${tier.monthlyPrice}/mo${tier.oneTimeFee ? ' + $' + tier.oneTimeFee + ' one-time' : ''}<br>
+              <span style="font-size:0.85rem;color:var(--admin-muted);">${escapeHtml(tier.valueLine || '')}</span><br>
+              <strong>ROI:</strong> Net $${roi.monthlyNet?.low || 0} – $${roi.monthlyNet?.high || 0}/mo positive · Annual net $${(roi.annualNet?.low || 0).toLocaleString()} – $${(roi.annualNet?.high || 0).toLocaleString()}${tier.oneTimeFee && roi.monthsToBreakEvenOneTime ? ' · Breakeven on $' + tier.oneTimeFee + ' fee in ' + roi.monthsToBreakEvenOneTime + ' months' : ''}
+            </div>
+
+            <h4 style="margin:1.25rem 0 0.5rem;font-size:1rem;">Microscripts</h4>
+            <details open style="margin-bottom:0.5rem;">
+              <summary style="cursor:pointer;color:var(--admin-accent);font-weight:600;">Opener (${escapeHtml(ms.opener?.duration || '')})</summary>
+              <p style="margin:0.5rem 0;line-height:1.6;">${escapeHtml(ms.opener?.script || '')}</p>
+            </details>
+            <details style="margin-bottom:0.5rem;">
+              <summary style="cursor:pointer;color:var(--admin-accent);font-weight:600;">Pain validation (${escapeHtml(ms.painValidation?.duration || '')})</summary>
+              <p style="margin:0.5rem 0;line-height:1.6;">${escapeHtml(ms.painValidation?.script || '')}</p>
+            </details>
+            <details style="margin-bottom:0.5rem;">
+              <summary style="cursor:pointer;color:var(--admin-accent);font-weight:600;">Solution bridge (${escapeHtml(ms.solutionBridge?.duration || '')})</summary>
+              <p style="margin:0.5rem 0;line-height:1.6;">${escapeHtml(ms.solutionBridge?.script || '')}</p>
+            </details>
+            <details style="margin-bottom:0.5rem;">
+              <summary style="cursor:pointer;color:var(--admin-accent);font-weight:600;">8 objection handlers</summary>
+              ${(ms.objectionHandlers || []).map(o => `<div style="padding:0.5rem 0;border-bottom:1px solid var(--admin-line);"><strong>"${escapeHtml(o.objection)}"</strong><br><span style="font-size:0.9rem;color:var(--admin-muted);line-height:1.5;">${escapeHtml(o.response)}</span></div>`).join('')}
+            </details>
+            <details style="margin-bottom:0.5rem;">
+              <summary style="cursor:pointer;color:var(--admin-accent);font-weight:600;">Close ask</summary>
+              <p style="margin:0.5rem 0;line-height:1.6;">${escapeHtml(ms.closeAsk?.script || '')}</p>
+              <p style="margin:0;color:var(--admin-muted);font-size:0.85rem;">Fallback: ${escapeHtml(ms.closeAsk?.fallback || '')}</p>
+            </details>
+            <details style="margin-bottom:0.5rem;">
+              <summary style="cursor:pointer;color:var(--admin-accent);font-weight:600;">Not-now follow-up (+${ms.notNowFollowUp?.triggerDays || 3} days)</summary>
+              <p style="margin:0.5rem 0;line-height:1.6;">${escapeHtml(ms.notNowFollowUp?.script || '')}</p>
+            </details>
+
+            <h4 style="margin:1.25rem 0 0.5rem;font-size:1rem;">Follow-up sequence</h4>
+            <table class="mini">
+              <thead><tr><th>When</th><th>Action</th></tr></thead>
+              <tbody>${followUp.map(f => `<tr><td>${escapeHtml(f.trigger)}</td><td>${escapeHtml(f.action)}</td></tr>`).join('')}</tbody>
+            </table>
+
+            <p style="margin-top:1rem;font-size:0.75rem;color:var(--admin-muted);">Generated ${escapeHtml(sheet.generatedAt)} · ${escapeHtml(sheet.schemaVersion)}</p>
+          </div>
+        `;
+      }
+
+      document.getElementById('btnBuildCloser').onclick = async function () {
+        const url = document.getElementById('closerUrl').value.trim();
+        if (!url) return showFlash('URL required.', false);
+        const btn = document.getElementById('btnBuildCloser');
+        btn.disabled = true;
+        document.getElementById('closerStatus').textContent = 'Building closer sheet (running deep audit + assembling)…';
+        try {
+          const body = {
+            url: /^https?:\/\//i.test(url) ? url : 'https://' + url,
+            businessName: document.getElementById('closerBiz').value.trim(),
+            industry: document.getElementById('closerIndustry').value.trim(),
+            city: document.getElementById('closerCity').value.trim(),
+            state: document.getElementById('closerState').value.trim(),
+            contactName: document.getElementById('closerContact').value.trim(),
+            phone: document.getElementById('closerPhone').value.trim(),
+            currentMonthlySpend: Number(document.getElementById('closerSpend').value) || 0,
+            currentVendor: document.getElementById('closerVendor').value.trim(),
+            yearsInBusiness: Number(document.getElementById('closerYears').value) || 0,
+            locationCount: Number(document.getElementById('closerLocations').value) || 1
+          };
+          const { res, data } = await postJson('/api/closer-sheet', body);
+          if (!res.ok) {
+            document.getElementById('closerStatus').textContent = 'Failed: ' + res.status;
+            document.getElementById('closerOut').textContent = JSON.stringify(data, null, 2);
+            return;
+          }
+          closerSheetCurrent = data.sheet;
+          document.getElementById('closerSheetRendered').style.display = 'block';
+          renderCloserSheet(data.sheet);
+          document.getElementById('closerOut').textContent = JSON.stringify(data, null, 2);
+          document.getElementById('closerStatus').textContent = 'Done.';
+          document.getElementById('btnPrintCloser').disabled = false;
+          document.getElementById('btnCopyCloser').disabled = false;
+        } catch (err) {
+          document.getElementById('closerStatus').textContent = 'Error: ' + err.message;
+        } finally {
+          btn.disabled = false;
+        }
+      };
+
+      document.getElementById('btnPrintCloser').onclick = function () {
+        if (!closerSheetCurrent) return;
+        const w = window.open('', '_blank');
+        const html = document.getElementById('closerSheetRendered').innerHTML;
+        w.document.write('<html><head><title>Closer Sheet — ' + (closerSheetCurrent.prospect.businessName || closerSheetCurrent.prospect.domain) + '</title><style>body{font-family:system-ui;max-width:900px;margin:2rem auto;padding:0 1.5rem;color:#111;}h3,h4{margin:1rem 0 0.5rem;}table{width:100%;border-collapse:collapse;margin:0.5rem 0;}th,td{text-align:left;padding:6px 10px;border-bottom:1px solid #ddd;font-size:0.9rem;}details{margin:0.5rem 0;}details summary{cursor:pointer;font-weight:600;color:#0369a1;}@media print{body{padding:0;}details{open:true;}}</style></head><body>' + html + '</body></html>');
+        w.document.close();
+        setTimeout(() => w.print(), 500);
+      };
+
+      document.getElementById('btnCopyCloser').onclick = function () {
+        if (!closerSheetCurrent) return;
+        const ms = closerSheetCurrent.microscripts || {};
+        const text = [
+          '— ' + (closerSheetCurrent.prospect.businessName || closerSheetCurrent.prospect.domain),
+          'Headline: ' + (closerSheetCurrent.hero?.headline || ''),
+          'Persona: ' + (closerSheetCurrent.prospect.personaLabel || ''),
+          'Recommended: ' + (closerSheetCurrent.recommendedPackage?.label || ''),
+          '',
+          'OPENER: ' + (ms.opener?.script || ''),
+          '',
+          'PAIN: ' + (ms.painValidation?.script || ''),
+          '',
+          'SOLUTION: ' + (ms.solutionBridge?.script || ''),
+          '',
+          'CLOSE: ' + (ms.closeAsk?.script || '')
+        ].join('\n\n');
+        navigator.clipboard.writeText(text).then(() => showFlash('Script copied.', true));
+      };
 
       refreshSummary();
     })();
