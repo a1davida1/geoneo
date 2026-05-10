@@ -1,5 +1,43 @@
 const DEFAULT_TIMEOUT_MS = 20000;
 
+// In-memory location canonicalization cache. SerpAPI's location
+// database doesn't change hour-to-hour. Saves ~1 API call per unique
+// (city, state) tuple per server lifetime.
+const SERPAPI_LOCATION_CACHE = new Map();
+
+async function canonicalizeSerpApiLocation(rawLocation, apiKey) {
+  if (!rawLocation) return null;
+  const key = String(rawLocation).trim().toLowerCase();
+  if (!key) return null;
+  if (SERPAPI_LOCATION_CACHE.has(key)) return SERPAPI_LOCATION_CACHE.get(key);
+  if (!apiKey) return null;
+  // Build a clean search term: drop "United States" suffix + 2-letter state abbreviations
+  // get expanded to full names later by SerpAPI's matcher.
+  const cleaned = key
+    .replace(/,\s*united\s+states\s*$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 6000);
+    const url = `https://serpapi.com/locations.json?q=${encodeURIComponent(cleaned)}&limit=1&api_key=${encodeURIComponent(apiKey)}`;
+    const r = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(t);
+    if (!r.ok) {
+      // Cache the negative so we don't keep retrying the same broken lookup
+      SERPAPI_LOCATION_CACHE.set(key, null);
+      return null;
+    }
+    const arr = await r.json();
+    const canonical = Array.isArray(arr) && arr[0] && (arr[0].canonical_name || arr[0].name);
+    SERPAPI_LOCATION_CACHE.set(key, canonical || null);
+    return canonical || null;
+  } catch {
+    SERPAPI_LOCATION_CACHE.set(key, null);
+    return null;
+  }
+}
+
 function normalizeText(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
 }
@@ -177,7 +215,11 @@ class SerpApiProvider {
     const endpoint = new URL(this.config.endpoint || 'https://serpapi.com/search.json');
     endpoint.searchParams.set('engine', 'google');
     endpoint.searchParams.set('q', query);
-    endpoint.searchParams.set('location', location || 'United States');
+    // Canonicalize the location via SerpAPI's locations.json API.
+    // SerpAPI rejects free-form locations ("Branson, MO") — only its own
+    // canonical names work. We look up + cache the canonical form.
+    const canonicalLocation = await canonicalizeSerpApiLocation(location, apiKey);
+    if (canonicalLocation) endpoint.searchParams.set('location', canonicalLocation);
     endpoint.searchParams.set('hl', this.config.hl || 'en');
     endpoint.searchParams.set('gl', this.config.gl || 'us');
     endpoint.searchParams.set('num', String(options.num || 10));
@@ -191,7 +233,10 @@ class SerpApiProvider {
       options.timeoutMs || this.config.timeoutMs || DEFAULT_TIMEOUT_MS
     );
     if (!response.ok) {
-      throw new Error(`SerpApi request failed with status ${response.status}`);
+      const body = await response.text().catch(() => '');
+      const err = new Error(`SerpApi request failed with status ${response.status}: ${body.slice(0, 200)}`);
+      err.status = response.status;
+      throw err;
     }
     return response.json();
   }

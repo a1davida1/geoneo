@@ -292,6 +292,9 @@
     .leadgen-grade.C .letter { color: #fde68a; }
     .leadgen-grade.D, .leadgen-grade.F { border-color: #ef4444; background: rgba(239,68,68,0.12); }
     .leadgen-grade.D .letter, .leadgen-grade.F .letter { color: #fecaca; }
+    .leadgen-grade.unscored { border-color: var(--admin-line); background: var(--admin-bg); border-style: dashed; }
+    .leadgen-grade.unscored .letter { color: var(--admin-muted); font-size: 1.6rem; }
+    .leadgen-grade.unscored .num { font-size: 0.55rem; }
     .leadgen-card .quick-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 6px 12px; margin: 6px 0; font-size: 0.78rem; }
     .leadgen-card .quick-stats .k { color: var(--admin-muted); display: block; font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 2px; }
     .leadgen-card .quick-stats .v { font-weight: 600; color: var(--admin-text); }
@@ -1948,7 +1951,7 @@
 
       function leadGradeFor(score) {
         const n = Number(score);
-        if (!Number.isFinite(n)) return { letter: '?', grade: '', num: '—' };
+        if (!Number.isFinite(n) || n <= 0) return { letter: '–', grade: 'unscored', num: 'No audit yet' };
         if (n >= 90) return { letter: 'A', grade: 'A', num: n };
         if (n >= 80) return { letter: 'B+', grade: 'B', num: n };
         if (n >= 70) return { letter: 'B', grade: 'B', num: n };
@@ -2079,6 +2082,49 @@
         if (bulkBtn) bulkBtn.onclick = () => runBulkDeepAudit(visible);
         const saveAllBtn = document.getElementById('btnLeadGenSaveAll');
         if (saveAllBtn) saveAllBtn.onclick = () => saveAllKeptCandidates(visible);
+      }
+
+      async function autoAuditCandidates(candidates) {
+        const total = candidates.length;
+        let done = 0, failed = 0;
+        const status = document.getElementById('leadGenStatus');
+        const queue = candidates.slice();
+        async function worker() {
+          while (queue.length) {
+            const c = queue.shift();
+            if (!c) continue;
+            const url = c.website || ('https://' + (c.domain || ''));
+            const card = document.querySelector('.leadgen-card[data-domain="' + (c.domain || '') + '"]');
+            if (card) card.classList.add('status-running');
+            try {
+              const params = new URLSearchParams();
+              params.set('url', url);
+              params.set('tier', 'admin');
+              if (document.getElementById('leadGenIndustry')?.value) params.set('industry', document.getElementById('leadGenIndustry').value);
+              if (document.getElementById('leadGenCity')?.value) params.set('city', document.getElementById('leadGenCity').value);
+              if (document.getElementById('leadGenState')?.value) params.set('state', document.getElementById('leadGenState').value);
+              const { res, data } = await fetchJson('/api/audit-deep?' + params.toString());
+              if (res.ok && data.audit && card) {
+                done++;
+                c.scores = c.scores || {};
+                c.scores.overall = data.audit.overallScore;
+                c.status = 'complete';
+                const g = leadGradeFor(data.audit.overallScore);
+                const gradeEl = card.querySelector('.leadgen-grade');
+                if (gradeEl) {
+                  gradeEl.className = 'leadgen-grade ' + g.grade;
+                  gradeEl.querySelector('.letter').textContent = g.letter;
+                  gradeEl.querySelector('.num').textContent = g.num;
+                }
+                card.classList.remove('status-pending', 'status-running');
+                card.classList.add('status-complete');
+              } else { failed++; if (card) { card.classList.remove('status-running'); card.classList.add('status-failed'); } }
+            } catch { failed++; if (card) { card.classList.remove('status-running'); card.classList.add('status-failed'); } }
+            status.textContent = `Auto-auditing… ${done + failed}/${total}` + (failed ? ` (${failed} failed)` : '');
+          }
+        }
+        await Promise.all([worker(), worker(), worker(), worker()]);
+        status.textContent = `Auto-audit done: ${done}/${total} graded` + (failed ? ` · ${failed} failed` : '');
       }
 
       async function runBulkDeepAudit(candidates) {
@@ -2255,6 +2301,10 @@
             return;
           }
           leadGenCandidates = data.candidates || [];
+          // Mark each candidate as 'pending' for the card render so cards know
+          // they have no audit yet (shows '–' grade with dashed border)
+          leadGenCandidates.forEach(c => { c.status = c.status || 'pending'; });
+
           if (leadGenCandidates.length === 0) {
             const sourceConf = data?.market?.overview?.sourceConfidence;
             const isNoSerpKey = sourceConf === 'low' || /Google fallback/i.test(data?.market?.sourceNote || '');
@@ -2269,8 +2319,11 @@
             renderLeadGenTable([], { raw: data });
             return;
           }
-          document.getElementById('leadGenStatus').textContent = `Found ${leadGenCandidates.length} candidate(s). Review/edit, then run deep audits.`;
+          document.getElementById('leadGenStatus').textContent = `Found ${leadGenCandidates.length} candidate(s). Auto-running quick audits…`;
           renderLeadGenTable(leadGenCandidates, { raw: data });
+          // Immediately kick off a quick deep audit on each candidate so cards
+          // populate with real grades (4-way concurrency, ~2s per audit)
+          autoAuditCandidates(leadGenCandidates);
         } finally {
           btn.disabled = false;
         }
