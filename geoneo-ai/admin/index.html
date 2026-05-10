@@ -1893,7 +1893,7 @@
           const score = c.scores && c.scores.overall != null ? c.scores.overall : (c.visibilityScore && c.visibilityScore.overall != null ? c.visibilityScore.overall : '—');
           const report = c.reportPath ? `<a href="${escapeHtml(c.reportPath)}" target="_blank" rel="noopener" style="color:var(--admin-accent);">Report</a>` : '—';
           return `<tr data-domain="${escapeHtml(c.domain || '')}">
-            <td><input type="checkbox" class="leadgen-keep" ${decision.keep ? 'checked' : ''}></td>
+              <td><input type="checkbox" class="leadgen-keep" ${decision.keep ? 'checked' : ''}></td>
             <td>
               <strong>${escapeHtml(c.businessName || c.domain || '')}</strong><br>
               <a href="${escapeHtml(c.website || '')}" target="_blank" rel="noopener" style="color:var(--admin-accent);">${escapeHtml(c.domain || c.website || '')}</a><br>
@@ -1910,12 +1910,30 @@
               ${contact.score != null ? `${escapeHtml(contact.score)}/100` : '—'}<br>
               <span style="color:var(--admin-muted);">${escapeHtml(contact.bestChannel || 'research_needed')}</span>
               ${(contact.emails || []).slice(0, 1).map((x) => `<div>${escapeHtml(x)}</div>`).join('')}
-              ${(contact.phones || []).slice(0, 1).map((x) => `<div>${escapeHtml(x)}</div>`).join('')}
+            </td>
+            <td>
+              ${(contact.phones || []).slice(0, 1).map((x) => `<div>${escapeHtml(x)}</div>`).join('') || '—'}
             </td>
             <td>
               <strong>${escapeHtml(seo.classification || 'unknown')}</strong><br>
               <span style="color:var(--admin-muted);">${escapeHtml(seo.confidence || 'low')}</span>
               ${(seo.evidence || []).slice(0, 2).map((e) => `<div style="color:var(--admin-muted);font-size:0.72rem;">${escapeHtml(e)}</div>`).join('')}
+            </td>
+            <td>
+              ${advanced.seoQuality ? `<strong>${escapeHtml(advanced.seoQuality.classification || '—')}</strong><br>` : '—<br>'}
+              <span style="color:var(--admin-muted);">${advanced.seoQuality ? `Q${advanced.seoQuality.overallQuality || 0}` : ''}</span>
+            </td>
+            <td>
+              ${advanced.estimatedSeoBudget ? `<strong>${advanced.estimatedSeoBudget.estimatedMonthlyHigh > 0 ? '$' + advanced.estimatedSeoBudget.estimatedMonthlyLow + '-' + advanced.estimatedSeoBudget.estimatedMonthlyHigh + '/mo' : 'No budget'}</strong><br>` : '—<br>'}
+              <span style="color:var(--admin-muted);">${advanced.estimatedSeoBudget ? escapeHtml(advanced.estimatedSeoBudget.confidence || '') : ''}</span>
+            </td>
+            <td>
+              ${ahrefs.organicKeywords != null ? `<strong>${escapeHtml(ahrefs.organicKeywords)} org</strong>` : '—'}<br>
+              <span style="color:var(--admin-muted);">${ahrefs.paidKeywords != null ? `${escapeHtml(ahrefs.paidKeywords)} paid` : ''}</span>
+            </td>
+            <td>
+              ${ahrefs.domainRating != null ? `<strong>DR ${escapeHtml(ahrefs.domainRating)}</strong>` : (ahrefs.skipped ? 'Skipped' : '—')}<br>
+              <span style="color:var(--admin-muted);">${ahrefs.refdomains != null ? `${escapeHtml(ahrefs.refdomains)} rd` : ''}</span>
             </td>
             <td>
               <strong>${escapeHtml(outreach.callReadiness || '—')}</strong><br>
@@ -1929,13 +1947,9 @@
               ${value.high ? `$${escapeHtml(value.low)}-$${escapeHtml(value.high)}` : '—'}<br>
               <span style="color:var(--admin-muted);">${escapeHtml(advanced.pipelineStage || '')}</span>
             </td>
-            <td>
-              ${ahrefs.domainRating != null ? `DR ${escapeHtml(ahrefs.domainRating)}` : (ahrefs.skipped ? 'Skipped' : '—')}<br>
-              <span style="color:var(--admin-muted);">${ahrefs.refdomains != null ? `${escapeHtml(ahrefs.refdomains)} refs` : ''}${ahrefs.backlinks != null ? ` · ${escapeHtml(ahrefs.backlinks)} links` : ''}</span>
-              ${ahrefs.partial ? '<div style="color:#fde68a;font-size:0.72rem;">partial</div>' : ''}
-            </td>
             <td><input class="leadgen-small-input leadgen-owner" value="${escapeHtml(decision.ownerName || '')}" placeholder="Owner"></td>
             <td><input class="leadgen-small-input leadgen-years" value="${escapeHtml(decision.yearsInBusiness || '')}" placeholder="Years"></td>
+            <td><input class="leadgen-small-input leadgen-phone" value="${escapeHtml(decision.phone || '')}" placeholder="Phone"></td>
             <td><input class="leadgen-small-input leadgen-tags" value="${escapeHtml((decision.tags || []).join(', '))}" placeholder="keeper, call"></td>
             <td>
               <select class="leadgen-small-input leadgen-seo-override">
@@ -1947,8 +1961,8 @@
           </tr>`;
         }).join('');
         host.innerHTML = `<div class="leadgen-table-wrap"><table class="leadgen-table">
-          <thead><tr><th>Keep</th><th>Business</th><th>Status</th><th>Lead</th><th>Audit</th><th>Contact</th><th>SEO owner</th><th>Next action</th><th>AI call law</th><th>Value</th><th>Ahrefs</th><th>Owner</th><th>Years</th><th>Tags</th><th>Override</th><th>Notes</th><th>Actions</th></tr></thead>
-          <tbody>${rows || '<tr><td colspan="17">No rows match this filter.</td></tr>'}</tbody>
+          <thead><tr><th>Keep</th><th>Business</th><th>Status</th><th>Lead</th><th>Audit</th><th>Contact</th><th>Phone</th><th>SEO owner</th><th>Quality</th><th>Budget</th><th>Keywords</th><th>DR</th><th>Next action</th><th>AI call law</th><th>Value</th><th>Owner</th><th>Years</th><th>Tags</th><th>Override</th><th>Notes</th><th>Actions</th></tr></thead>
+          <tbody>${rows || '<tr><td colspan="21">No rows match this filter.</td></tr>'}</tbody>
         </table></div>`;
         if (opts && opts.raw) {
           document.getElementById('leadGenOut').textContent = JSON.stringify(opts.raw, null, 2);
@@ -2007,6 +2021,20 @@
             return;
           }
           leadGenCandidates = data.candidates || [];
+          if (leadGenCandidates.length === 0) {
+            const sourceConf = data?.market?.overview?.sourceConfidence;
+            const isNoSerpKey = sourceConf === 'low' || /Google fallback/i.test(data?.market?.sourceNote || '');
+            const status = document.getElementById('leadGenStatus');
+            if (isNoSerpKey) {
+              status.innerHTML = '<strong style="color:#dc2626;">⚠ 0 candidates — no SERP API key configured.</strong> Lead-gen needs Brave Search (free 2,000/mo) or SerpAPI to find businesses. ' +
+                '<a href="https://brave.com/search/api/" target="_blank" rel="noopener" style="color:var(--admin-accent);">Get a free Brave key</a> ' +
+                '→ add <code>BRAVE_SEARCH_API_KEY=xxx</code> to <code>geoneo-ai/.env</code> → restart server.';
+            } else {
+              status.innerHTML = `0 candidates returned. Try a broader query, larger city, or different vertical. <span style="color:var(--admin-muted);">SERP source: ${escapeHtml(sourceConf || 'unknown')}.</span>`;
+            }
+            renderLeadGenTable([], { raw: data });
+            return;
+          }
           document.getElementById('leadGenStatus').textContent = `Found ${leadGenCandidates.length} candidate(s). Review/edit, then run deep audits.`;
           renderLeadGenTable(leadGenCandidates, { raw: data });
         } finally {
@@ -2057,25 +2085,32 @@
       };
       document.getElementById('btnLeadGenExport').onclick = function () {
         const rows = visibleLeadGenCandidates((leadGenCurrentRun && leadGenCurrentRun.candidates) || leadGenCandidates);
-        const headers = ['businessName', 'domain', 'website', 'status', 'leadScore', 'leadTier', 'auditScore', 'contactScore', 'bestChannel', 'seoOwner', 'callReadiness', 'emailSubject', 'emailOpening', 'aiCallRisk', 'recordingConsent', 'estimatedHighValue', 'pipelineStage', 'ahrefsDomainRating', 'ahrefsRefdomains', 'ahrefsBacklinks', 'keep', 'tags', 'ownerName', 'yearsInBusiness', 'notes', 'reportPath'];
+        const headers = ['businessName', 'domain', 'website', 'status', 'leadScore', 'leadTier', 'auditScore', 'contactScore', 'bestChannel', 'phone', 'seoOwner', 'seoQuality', 'seoQualityScore', 'estimatedSeoBudgetLow', 'estimatedSeoBudgetHigh', 'organicKeywords', 'paidKeywords', 'domainRating', 'refdomains', 'callReadiness', 'emailSubject', 'emailOpening', 'aiCallRisk', 'recordingConsent', 'estimatedHighValue', 'pipelineStage', 'keep', 'tags', 'ownerName', 'yearsInBusiness', 'notes', 'reportPath'];
         const csv = [headers.join(',')].concat(rows.map((c) => {
           const d = c.decision || {};
+          const adv = c.advancedInsights || {};
           const vals = [
             c.businessName, c.domain, c.website, c.status,
             c.leadScore && c.leadScore.score, c.leadScore && c.leadScore.tier,
             c.scores && c.scores.overall,
             c.contactInfo && c.contactInfo.score, c.contactInfo && c.contactInfo.bestChannel,
+            d.phone || (c.contactInfo && c.contactInfo.phones && c.contactInfo.phones[0]) || '',
             c.seoProvider && c.seoProvider.classification,
+            adv.seoQuality && adv.seoQuality.classification,
+            adv.seoQuality && adv.seoQuality.overallQuality,
+            adv.estimatedSeoBudget && adv.estimatedSeoBudget.estimatedMonthlyLow,
+            adv.estimatedSeoBudget && adv.estimatedSeoBudget.estimatedMonthlyHigh,
+            c.ahrefs && c.ahrefs.organicKeywords,
+            c.ahrefs && c.ahrefs.paidKeywords,
+            c.ahrefs && c.ahrefs.domainRating,
+            c.ahrefs && c.ahrefs.refdomains,
             c.outreachPlan && c.outreachPlan.callReadiness,
             c.outreachPlan && c.outreachPlan.emailSubject,
             c.outreachPlan && c.outreachPlan.emailOpening,
-            c.advancedInsights && c.advancedInsights.aiCallCompliance && c.advancedInsights.aiCallCompliance.aiCallRisk,
-            c.advancedInsights && c.advancedInsights.aiCallCompliance && c.advancedInsights.aiCallCompliance.recordingConsent,
-            c.advancedInsights && c.advancedInsights.estimatedOpportunity && c.advancedInsights.estimatedOpportunity.high,
-            c.advancedInsights && c.advancedInsights.pipelineStage,
-            c.ahrefs && c.ahrefs.domainRating,
-            c.ahrefs && c.ahrefs.refdomains,
-            c.ahrefs && c.ahrefs.backlinks,
+            adv.aiCallCompliance && adv.aiCallCompliance.aiCallRisk,
+            adv.aiCallCompliance && adv.aiCallCompliance.recordingConsent,
+            adv.estimatedOpportunity && adv.estimatedOpportunity.high,
+            adv.pipelineStage,
             d.keep, (d.tags || []).join('|'), d.ownerName, d.yearsInBusiness, d.notes, c.reportPath
           ];
           return vals.map((value) => `"${String(value == null ? '' : value).replace(/"/g, '""')}"`).join(',');
@@ -2101,6 +2136,7 @@
           notes: row.querySelector('.leadgen-notes').value,
           ownerName: row.querySelector('.leadgen-owner').value,
           yearsInBusiness: row.querySelector('.leadgen-years').value,
+          phone: row.querySelector('.leadgen-phone')?.value || '',
           seoProviderOverride: row.querySelector('.leadgen-seo-override').value
         };
         const { res, data } = await postJson('/api/admin/lead-gen/runs/' + encodeURIComponent(leadGenRunId) + '/decision', body);
