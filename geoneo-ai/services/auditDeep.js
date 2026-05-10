@@ -15,6 +15,9 @@
 const { analyzeSchemas, generateSchemaForType } = require('./schemaAnalyzer');
 const { analyzeEeat } = require('./eeatAnalyzer');
 const { analyzeGeo, generateLlmsTxt } = require('./geoAnalyzer');
+const { analyzeSitemap } = require('./sitemapValidator');
+const { analyzeNap } = require('./napChecker');
+const { analyzeImages } = require('./imageAuditor');
 const { estimateForFinding, estimateSpecificLoss } = require('./dollarLiftEngine');
 
 const SECTION_TIMEOUT_MS = 8000;
@@ -41,14 +44,18 @@ async function runDeepAudit(input = {}) {
     city = '',
     state = '',
     businessFacts = {},
-    serpContext = null
+    serpContext = null,
+    sitemapXml = null
   } = input;
 
   const sectionStart = Date.now();
-  const [schemaResult, eeatResult, geoResult] = await Promise.all([
+  const [schemaResult, eeatResult, geoResult, sitemapResult, napResult, imagesResult] = await Promise.all([
     withTimeout(Promise.resolve(analyzeSchemas({ html, industry, businessFacts })), SECTION_TIMEOUT_MS, 'schema'),
     withTimeout(Promise.resolve(analyzeEeat({ html, finalUrl, businessFacts })), SECTION_TIMEOUT_MS, 'eeat'),
-    withTimeout(Promise.resolve(analyzeGeo({ html, robotsTxt, llmsTxtContent, llmsFullTxtContent, businessFacts })), SECTION_TIMEOUT_MS, 'geo')
+    withTimeout(Promise.resolve(analyzeGeo({ html, robotsTxt, llmsTxtContent, llmsFullTxtContent, businessFacts })), SECTION_TIMEOUT_MS, 'geo'),
+    withTimeout(Promise.resolve(analyzeSitemap({ sitemapXml, sitemapUrl: businessFacts.sitemapUrl, robotsTxt })), SECTION_TIMEOUT_MS, 'sitemap'),
+    withTimeout(Promise.resolve(analyzeNap({ html, expectedBusinessName: businessFacts.businessName, expectedPhone: businessFacts.phone, expectedAddress: businessFacts.address })), SECTION_TIMEOUT_MS, 'nap'),
+    withTimeout(Promise.resolve(analyzeImages({ html })), SECTION_TIMEOUT_MS, 'images')
   ]);
 
   const sectionMs = Date.now() - sectionStart;
@@ -61,8 +68,8 @@ async function runDeepAudit(input = {}) {
 
   // Stamp $$ onto every finding from each section
   const allFindings = [];
-  ['schema', 'eeat', 'geo'].forEach(sectionName => {
-    const result = sectionName === 'schema' ? schemaResult : sectionName === 'eeat' ? eeatResult : geoResult;
+  const sectionMap = { schema: schemaResult, eeat: eeatResult, geo: geoResult, sitemap: sitemapResult, nap: napResult, images: imagesResult };
+  Object.entries(sectionMap).forEach(([sectionName, result]) => {
     if (!result || result.status === 'error') return;
     const fixes = result.fixes || [];
     fixes.forEach(fix => {
@@ -83,17 +90,22 @@ async function runDeepAudit(input = {}) {
     });
   });
 
-  // Compute weighted overall score across pillars (equal weight for now;
-  // can be tuned per business type)
+  // Compute weighted overall score across 6 pillars (tunable per business type)
   const sectionScores = {
     schema: schemaResult?.overallScore || 0,
     eeat: eeatResult?.overallScore || 0,
-    geo: geoResult?.overallScore || 0
+    geo: geoResult?.overallScore || 0,
+    sitemap: sitemapResult?.overallScore || 0,
+    nap: napResult?.overallScore || 0,
+    images: imagesResult?.overallScore || 0
   };
   const overallScore = Math.round(
-    (sectionScores.schema * 0.30) +
-    (sectionScores.eeat * 0.40) +
-    (sectionScores.geo * 0.30)
+    (sectionScores.eeat * 0.28) +
+    (sectionScores.schema * 0.20) +
+    (sectionScores.geo * 0.20) +
+    (sectionScores.nap * 0.16) +
+    (sectionScores.sitemap * 0.08) +
+    (sectionScores.images * 0.08)
   );
 
   // Total dollar opportunity (top 5 cap × 80% to avoid additive overstatement)
@@ -121,7 +133,10 @@ async function runDeepAudit(input = {}) {
     sections: {
       schema: schemaResult,
       eeat: eeatResult,
-      geo: geoResult
+      geo: geoResult,
+      sitemap: sitemapResult,
+      nap: napResult,
+      images: imagesResult
     },
 
     sectionScores,

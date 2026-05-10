@@ -6059,16 +6059,17 @@ async function runLeadGenBatch(runId) {
         seoProvider,
         leadScore
       });
+      const latestRun = await getLeadGenRun(runId);
+      const ahrefs = await enrichDomainWithAhrefs(domain, {
+        enabled: Boolean(latestRun && latestRun.useAhrefs)
+      });
       const advancedInsights = buildAdvancedLeadInsights({
         candidate,
         scores: result.scores || {},
         contactInfo,
         seoProvider,
-        leadScore
-      });
-      const latestRun = await getLeadGenRun(runId);
-      const ahrefs = await enrichDomainWithAhrefs(domain, {
-        enabled: Boolean(latestRun && latestRun.useAhrefs)
+        leadScore,
+        ahrefs
       });
       await updateCandidateResult(runId, domain, {
         status: 'complete',
@@ -6639,12 +6640,14 @@ async function requestHandler(req, res) {
         return;
       }
       const origin = `${target.protocol}//${target.host}`;
-      const [pageHtml, robotsTxt, llmsTxtContent] = await Promise.all([
+      const [pageHtml, robotsTxtRaw, llmsTxtContent, sitemapXml] = await Promise.all([
         fetchHtmlWithTimeout(target.href, 12000),
         fetchHtmlWithTimeout(`${origin}/robots.txt`, 5000),
-        fetchHtmlWithTimeout(`${origin}/llms.txt`, 5000)
+        fetchHtmlWithTimeout(`${origin}/llms.txt`, 5000),
+        fetchHtmlWithTimeout(`${origin}/sitemap.xml`, 5000)
       ]);
       const html = pageHtml || '';
+      const robotsTxt = robotsTxtRaw || '';
       const finalUrl = target.href;
 
       const businessFacts = {
@@ -6655,13 +6658,14 @@ async function requestHandler(req, res) {
           hostname: target.hostname
         }),
         url: finalUrl,
+        sitemapUrl: `${origin}/sitemap.xml`,
         city, state,
         description: textBetween(html, '<meta name="description" content="', '">') ||
                      textBetween(html, '<meta property="og:description" content="', '">') || ''
       };
 
       const deepResult = await runDeepAudit({
-        html, finalUrl, robotsTxt, llmsTxtContent,
+        html, finalUrl, robotsTxt, llmsTxtContent, sitemapXml,
         industry, city, state,
         businessFacts
       });
@@ -6693,15 +6697,17 @@ async function requestHandler(req, res) {
         }
         const target = safeUrl(url);
         const origin = `${target.protocol}//${target.host}`;
-        const [pageHtml, robotsRaw, llmsRaw] = await Promise.all([
+        const [pageHtml, robotsRaw, llmsRaw, sitemapRaw] = await Promise.all([
           fetchHtmlWithTimeout(target.href, 12000),
           fetchHtmlWithTimeout(`${origin}/robots.txt`, 5000),
-          fetchHtmlWithTimeout(`${origin}/llms.txt`, 5000)
+          fetchHtmlWithTimeout(`${origin}/llms.txt`, 5000),
+          fetchHtmlWithTimeout(`${origin}/sitemap.xml`, 5000)
         ]);
         const html = pageHtml || '';
         const finalUrl = target.href;
         const robotsTxt = robotsRaw || '';
         const llmsTxtContent = llmsRaw || null;
+        const sitemapXml = sitemapRaw || null;
 
         const prospect = {
           businessName: body.businessName || '',
@@ -6726,9 +6732,9 @@ async function requestHandler(req, res) {
         };
 
         const deep = await runDeepAudit({
-          html, finalUrl, robotsTxt, llmsTxtContent,
+          html, finalUrl, robotsTxt, llmsTxtContent, sitemapXml,
           industry: prospect.industry, city: prospect.city, state: prospect.state,
-          businessFacts
+          businessFacts: { ...businessFacts, sitemapUrl: `${origin}/sitemap.xml` }
         });
 
         const sheet = buildCloserSheet({
