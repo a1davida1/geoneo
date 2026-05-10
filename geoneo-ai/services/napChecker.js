@@ -24,19 +24,19 @@ function extractNapFromHtml(html = '') {
     } catch { /* ignore parse errors */ }
   }
 
-  // Phone numbers in tel: links
+  // Phone numbers in tel: links — normalize to E.164 like text path
   const telRe = /href=["']tel:([^"']+)["']/gi;
   while ((m = telRe.exec(html)) !== null) {
-    const cleaned = m[1].replace(/[^\d+]/g, '');
-    if (cleaned.length >= 7) { found.phones.add(cleaned); found.sources.push({ type: 'tel-link', value: cleaned }); }
+    const e164 = toE164UsPhone(m[1]);
+    if (e164) { found.phones.add(e164); found.sources.push({ type: 'tel-link', value: e164 }); }
   }
 
   // Phone numbers in text (US format)
   const phoneTextRe = /\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}/g;
   const textMatches = html.match(phoneTextRe) || [];
   textMatches.forEach(p => {
-    const cleaned = p.replace(/[^\d]/g, '');
-    if (cleaned.length === 10) { found.phones.add('+1' + cleaned); }
+    const e164 = toE164UsPhone(p);
+    if (e164) { found.phones.add(e164); }
   });
 
   // US street address pattern
@@ -70,15 +70,44 @@ function walkSchema(node, found, source) {
   }
 }
 
+// Convert raw phone (tel: link, text, anything) to canonical E.164 US form.
+// Returns null if not a recognizable US-shaped number.
+function toE164UsPhone(raw) {
+  if (!raw) return null;
+  const s = String(raw).trim();
+  // Already E.164
+  if (/^\+\d{8,15}$/.test(s.replace(/[\s().\-]/g, ''))) {
+    const cleaned = s.replace(/[\s().\-]/g, '');
+    if (cleaned.length >= 8) return cleaned;
+  }
+  const digits = s.replace(/[^\d]/g, '');
+  if (digits.length === 10) return '+1' + digits;
+  if (digits.length === 11 && digits.startsWith('1')) return '+' + digits;
+  if (digits.length >= 7 && digits.length <= 15) return '+' + digits;
+  return null;
+}
+
 function normalizePhone(phone) {
   return String(phone || '').replace(/[^\d]/g, '').replace(/^1/, '');
 }
 
 function normalizeAddress(addr) {
   return String(addr || '').toLowerCase()
+    // Street type abbreviations (word-boundary anchored)
     .replace(/\bstreet\b/g, 'st').replace(/\bavenue\b/g, 'ave')
     .replace(/\broad\b/g, 'rd').replace(/\bboulevard\b/g, 'blvd')
     .replace(/\bdrive\b/g, 'dr').replace(/\blane\b/g, 'ln')
+    .replace(/\bhighway\b/g, 'hwy').replace(/\bplace\b/g, 'pl')
+    .replace(/\bcourt\b/g, 'ct').replace(/\bparkway\b/g, 'pkwy')
+    .replace(/\bterrace\b/g, 'ter').replace(/\bcircle\b/g, 'cir')
+    .replace(/\btrail\b/g, 'trl')
+    // Unit / suite designators
+    .replace(/\bsuite\b/g, 'ste').replace(/\bapartment\b/g, 'apt')
+    .replace(/\bbuilding\b/g, 'bldg').replace(/\bfloor\b/g, 'fl')
+    .replace(/\bunit\b/g, 'u')
+    // Directional words
+    .replace(/\bnorth\b/g, 'n').replace(/\bsouth\b/g, 's')
+    .replace(/\beast\b/g, 'e').replace(/\bwest\b/g, 'w')
     .replace(/[.,]/g, '').replace(/\s+/g, ' ').trim();
 }
 

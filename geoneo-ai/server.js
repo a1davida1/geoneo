@@ -4611,7 +4611,9 @@ function hasLocationPageSignal(url, locationTokens) {
   return locationTokens.some((token) => normalizedUrl.includes(`/${token}`) || normalizedUrl.includes(`-${token}`));
 }
 
-async function fetchHtmlWithTimeout(url, timeoutMs) {
+const MAX_SITEMAP_BYTES = 512 * 1024;
+
+async function fetchHtmlWithTimeout(url, timeoutMs, maxBytes) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -4624,6 +4626,24 @@ async function fetchHtmlWithTimeout(url, timeoutMs) {
     });
     if (!response.ok) {
       return null;
+    }
+    if (maxBytes != null && response.body) {
+      const reader = response.body.getReader();
+      let received = 0;
+      const chunks = [];
+      const decoder = new TextDecoder();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        received += value.length;
+        if (received > maxBytes) {
+          controller.abort();
+          return null;
+        }
+        chunks.push(decoder.decode(value, { stream: true }));
+      }
+      chunks.push(decoder.decode());
+      return chunks.join('');
     }
     return await response.text();
   } catch {
@@ -6059,10 +6079,16 @@ async function runLeadGenBatch(runId) {
         seoProvider,
         leadScore
       });
-      const latestRun = await getLeadGenRun(runId);
-      const ahrefs = await enrichDomainWithAhrefs(domain, {
-        enabled: Boolean(latestRun && latestRun.useAhrefs)
-      });
+      let ahrefs;
+      try {
+        const latestRun = await getLeadGenRun(runId);
+        ahrefs = await enrichDomainWithAhrefs(domain, {
+          enabled: Boolean(latestRun && latestRun.useAhrefs)
+        });
+      } catch (ahrefErr) {
+        console.warn('[lead-gen] Ahrefs enrichment skipped (non-fatal):', ahrefErr && ahrefErr.message ? ahrefErr.message : ahrefErr);
+        ahrefs = null;
+      }
       const advancedInsights = buildAdvancedLeadInsights({
         candidate,
         scores: result.scores || {},
@@ -6644,7 +6670,7 @@ async function requestHandler(req, res) {
         fetchHtmlWithTimeout(target.href, 12000),
         fetchHtmlWithTimeout(`${origin}/robots.txt`, 5000),
         fetchHtmlWithTimeout(`${origin}/llms.txt`, 5000),
-        fetchHtmlWithTimeout(`${origin}/sitemap.xml`, 5000)
+        fetchHtmlWithTimeout(`${origin}/sitemap.xml`, 5000, MAX_SITEMAP_BYTES)
       ]);
       const html = pageHtml || '';
       const robotsTxt = robotsTxtRaw || '';
@@ -6698,10 +6724,10 @@ async function requestHandler(req, res) {
         const target = safeUrl(url);
         const origin = `${target.protocol}//${target.host}`;
         const [pageHtml, robotsRaw, llmsRaw, sitemapRaw] = await Promise.all([
-          fetchHtmlWithTimeout(target.href, 12000),
-          fetchHtmlWithTimeout(`${origin}/robots.txt`, 5000),
-          fetchHtmlWithTimeout(`${origin}/llms.txt`, 5000),
-          fetchHtmlWithTimeout(`${origin}/sitemap.xml`, 5000)
+          fetchHtmlWithTimeout(target.href, 12000, 2 * 1024 * 1024),
+          fetchHtmlWithTimeout(`${origin}/robots.txt`, 5000, 64 * 1024),
+          fetchHtmlWithTimeout(`${origin}/llms.txt`, 5000, 256 * 1024),
+          fetchHtmlWithTimeout(`${origin}/sitemap.xml`, 5000, MAX_SITEMAP_BYTES)
         ]);
         const html = pageHtml || '';
         const finalUrl = target.href;

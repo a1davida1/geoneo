@@ -25,9 +25,11 @@ function extractImages(html = '') {
 }
 
 function attrAt(attrs, name) {
-  const re = new RegExp(name + `\\s*=\\s*["']([^"']*)["']`, 'i');
+  // Accept double-quoted, single-quoted, or unquoted attribute values
+  const re = new RegExp(name + `\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'>]+))`, 'i');
   const m = attrs.match(re);
-  return m ? m[1] : null;
+  if (!m) return null;
+  return m[1] !== undefined ? m[1] : (m[2] !== undefined ? m[2] : (m[3] !== undefined ? m[3] : null));
 }
 
 function isModernFormat(src) {

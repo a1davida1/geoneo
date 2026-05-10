@@ -63,7 +63,7 @@ function validateSitemapUrls(urls = []) {
     }
   });
 
-  return { invalidCount, duplicateCount, staleCount, httpCount, totalUnique: seenLocs.size };
+  return { invalidCount, duplicateCount, staleCount, httpCount, totalUnique: seenLocs.size, issues };
 }
 
 function analyzeSitemap({ sitemapXml, sitemapUrl, robotsTxt = '' }) {
