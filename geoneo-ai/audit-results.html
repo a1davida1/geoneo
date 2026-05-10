@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Your Visibility Audit | GeoNeo AI</title>
+  <meta name="description" content="Deep AI-search and SEO audit for your business — exact dollar amount you're losing each month and how to fix it." />
+  <link rel="canonical" href="https://geoneo.ai/audit-results.html" />
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    body { background: #f8fafc; color: #0f172a; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; line-height: 1.55; }
+    .audit-shell { max-width: 920px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+    .audit-hero {
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      color: #f1f5f9; padding: 2.5rem 2rem; border-radius: 16px; margin-bottom: 2rem;
+      display: grid; grid-template-columns: 1fr auto; gap: 1.5rem; align-items: center;
+    }
+    @media (max-width: 640px) { .audit-hero { grid-template-columns: 1fr; text-align: center; } }
+    .audit-hero h1 { margin: 0 0 0.5rem; font-size: 1.75rem; line-height: 1.25; }
+    .audit-hero .biz { font-size: 0.9rem; color: #94a3b8; margin: 0 0 1rem; }
+    .audit-hero .headline { font-size: 1.05rem; margin: 0; color: #cbd5e1; }
+    .score-circle {
+      width: 130px; height: 130px; border-radius: 50%;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: radial-gradient(circle at center, rgba(56,189,248,0.15) 0%, transparent 70%);
+      border: 4px solid #38bdf8;
+    }
+    .score-circle .num { font-size: 2.75rem; font-weight: 800; color: #f1f5f9; line-height: 1; }
+    .score-circle .grade { font-size: 0.85rem; color: #94a3b8; margin-top: 4px; }
+
+    .pillar-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem;
+      margin-bottom: 2rem;
+    }
+    .pillar-card {
+      background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1rem;
+    }
+    .pillar-card .label { font-size: 0.75rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
+    .pillar-card .value { font-size: 1.75rem; font-weight: 700; margin-top: 4px; }
+    .pillar-card .hint { font-size: 0.78rem; color: #64748b; margin-top: 4px; line-height: 1.4; }
+    .pillar-card.pass { border-left: 4px solid #16a34a; }
+    .pillar-card.warn { border-left: 4px solid #f59e0b; }
+    .pillar-card.fail { border-left: 4px solid #dc2626; }
+
+    .dollar-banner {
+      background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+      border: 1px solid #f59e0b; border-radius: 12px;
+      padding: 1.5rem; margin-bottom: 2rem; text-align: center;
+    }
+    .dollar-banner .num { font-size: 2.25rem; font-weight: 800; color: #92400e; margin: 0.25rem 0; }
+    .dollar-banner .sub { font-size: 0.95rem; color: #78350f; }
+    .dollar-banner .annual { font-size: 0.85rem; color: #92400e; margin-top: 0.5rem; opacity: 0.85; }
+
+    .findings-section { margin-bottom: 2rem; }
+    .findings-section h2 { font-size: 1.35rem; margin: 0 0 1rem; }
+    .finding-card {
+      background: white; border: 1px solid #e2e8f0; border-radius: 10px;
+      padding: 1rem 1.25rem; margin-bottom: 0.75rem;
+    }
+    .finding-card .head { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; }
+    .finding-card .title { font-weight: 600; margin: 0; font-size: 1.02rem; }
+    .finding-card .impact { font-size: 0.85rem; color: #b45309; font-weight: 700; white-space: nowrap; }
+    .finding-card .detail { color: #475569; margin: 0.5rem 0 0; font-size: 0.9rem; }
+    .finding-card .badge {
+      display: inline-block; font-size: 0.7rem; padding: 2px 8px; border-radius: 999px;
+      font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; margin-right: 8px;
+    }
+    .badge-high { background: #fee2e2; color: #991b1b; }
+    .badge-medium { background: #fef3c7; color: #92400e; }
+    .badge-low { background: #f1f5f9; color: #475569; }
+
+    .upgrade-cta {
+      background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+      color: white; padding: 2rem; border-radius: 16px; margin: 2rem 0;
+    }
+    .upgrade-cta h2 { margin: 0 0 0.75rem; font-size: 1.5rem; }
+    .upgrade-cta p { margin: 0 0 1rem; font-size: 1rem; }
+    .upgrade-cta ul { margin: 0 0 1.5rem; padding-left: 1.25rem; }
+    .upgrade-cta li { margin: 0.25rem 0; }
+    .upgrade-cta .price { font-size: 2rem; font-weight: 800; }
+    .upgrade-cta .price-note { font-size: 0.85rem; opacity: 0.85; margin-top: 4px; }
+    .upgrade-cta .btn-primary {
+      display: inline-block; background: white; color: #0369a1;
+      padding: 12px 28px; border-radius: 999px; font-weight: 700; text-decoration: none;
+      margin-top: 1rem; transition: transform 0.15s;
+    }
+    .upgrade-cta .btn-primary:hover { transform: translateY(-1px); }
+
+    .section-detail { background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.25rem 1.5rem; margin-bottom: 1rem; }
+    .section-detail summary { font-weight: 600; cursor: pointer; font-size: 1.05rem; }
+    .section-detail summary::marker { color: #38bdf8; }
+    .section-detail[open] summary { margin-bottom: 0.75rem; }
+    .section-detail .meta { color: #64748b; font-size: 0.85rem; margin-bottom: 0.5rem; }
+
+    .audit-form {
+      background: white; border: 1px solid #e2e8f0; border-radius: 16px; padding: 2rem;
+      margin: 0 auto 2rem; max-width: 540px;
+    }
+    .audit-form label { display: block; margin-bottom: 0.85rem; }
+    .audit-form label span { display: block; font-size: 0.85rem; color: #475569; margin-bottom: 4px; }
+    .audit-form input, .audit-form select {
+      width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px;
+      font-size: 0.95rem; box-sizing: border-box;
+    }
+    .audit-form .field-row { display: grid; grid-template-columns: 1fr 1fr 100px; gap: 0.75rem; }
+    .audit-form button {
+      width: 100%; padding: 14px; background: #0369a1; color: white; border: none;
+      border-radius: 8px; font-size: 1rem; font-weight: 700; cursor: pointer; margin-top: 0.5rem;
+    }
+    .audit-form button:hover { background: #075985; }
+    .audit-form button:disabled { opacity: 0.6; cursor: wait; }
+
+    .loading { text-align: center; padding: 3rem; color: #64748b; }
+    .loading .spinner {
+      width: 40px; height: 40px; border: 4px solid #e2e8f0; border-top-color: #38bdf8;
+      border-radius: 50%; margin: 0 auto 1rem; animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .footer-note {
+      text-align: center; color: #94a3b8; font-size: 0.85rem; margin-top: 2rem;
+      padding: 1rem; line-height: 1.6;
+    }
+    .footer-note a { color: #38bdf8; }
+
+    @media print {
+      body { background: white; }
+      .upgrade-cta { background: white !important; color: #0369a1; border: 2px solid #0369a1; }
+      .audit-hero { background: white !important; color: #0f172a; border: 2px solid #0f172a; }
+      .upgrade-cta .btn-primary { display: none; }
+      details { open: true; }
+    }
+  </style>
+</head>
+<body>
+  <div class="audit-shell">
+
+    <!-- Form (shown when no audit loaded) -->
+    <section id="formCard" class="audit-form">
+      <h1 style="margin: 0 0 0.5rem; font-size: 1.5rem;">Run a deep audit</h1>
+      <p style="margin: 0 0 1.5rem; color: #64748b; font-size: 0.95rem;">
+        Get the same depth our paying customers see — including the exact dollar amount you're losing each month.
+        Free, no signup required.
+      </p>
+      <form id="auditForm">
+        <label>
+          <span>Website URL</span>
+          <input id="formUrl" type="text" placeholder="https://example.com" required />
+        </label>
+        <label>
+          <span>Industry</span>
+          <input id="formIndustry" type="text" placeholder="plumbing, hvac, roofing, restaurant, hotel..." />
+        </label>
+        <div class="field-row">
+          <label><span>City</span><input id="formCity" type="text" placeholder="Branson" /></label>
+          <label><span>State</span><input id="formState" type="text" placeholder="MO" /></label>
+          <label><span>ZIP</span><input id="formZip" type="text" placeholder="65616" /></label>
+        </div>
+        <button type="submit">Run my deep audit</button>
+      </form>
+    </section>
+
+    <!-- Loading state -->
+    <div id="loadingState" class="loading" style="display:none;">
+      <div class="spinner"></div>
+      <p>Running deep audit…<br><span style="font-size: 0.85rem;">Schema validation · E-E-A-T · AI-search citability · dollar math</span></p>
+    </div>
+
+    <!-- Results (hidden until audit runs) -->
+    <section id="resultsCard" style="display:none;">
+      <div class="audit-hero">
+        <div>
+          <h1 id="resBiz">Your Audit</h1>
+          <p class="biz" id="resBizDetail"></p>
+          <p class="headline" id="resHeadline"></p>
+        </div>
+        <div class="score-circle">
+          <div class="num" id="resScore">--</div>
+          <div class="grade" id="resGrade">grade</div>
+        </div>
+      </div>
+
+      <div class="pillar-grid" id="resPillars"></div>
+
+      <div class="dollar-banner">
+        <div class="sub">You're missing approximately</div>
+        <div class="num" id="resDollarMonthly">$--</div>
+        <div class="sub">per month in unconverted local search demand</div>
+        <div class="annual" id="resDollarAnnual"></div>
+      </div>
+
+      <div class="findings-section">
+        <h2>Top 5 issues, ranked by dollar impact</h2>
+        <div id="resFindings"></div>
+      </div>
+
+      <div class="upgrade-cta" id="resUpgradeCta">
+        <h2>Get the implementation plan: $199 Fix Plan</h2>
+        <p>You see what's wrong above. The Fix Plan ships you exactly what to paste, in priority order, with the math on what each fix returns.</p>
+        <ul id="resCtaIncludes"></ul>
+        <div class="price">$199</div>
+        <div class="price-note">One-time + 2 months free Maintenance ($158 value), then $79/mo (cancel anytime)</div>
+        <a class="btn-primary" href="/pricing.html">See pricing →</a>
+      </div>
+
+      <details class="section-detail" open>
+        <summary>Schema audit detail</summary>
+        <div class="meta" id="resSchemaMeta"></div>
+        <div id="resSchemaBody"></div>
+      </details>
+
+      <details class="section-detail">
+        <summary>E-E-A-T detail (8 dimensions)</summary>
+        <div class="meta" id="resEeatMeta"></div>
+        <div id="resEeatBody"></div>
+      </details>
+
+      <details class="section-detail">
+        <summary>AI-search readiness (GEO) detail</summary>
+        <div class="meta" id="resGeoMeta"></div>
+        <div id="resGeoBody"></div>
+      </details>
+
+      <p class="footer-note">
+        Audit produced deterministically. No LLM-generated copy in any finding. The dollar estimates use
+        published industry CPL benchmarks × CTR position curves × your real audit data. Every number is
+        traceable to its inputs.<br>
+        <a href="/audit-results.html">Run another audit</a>
+      </p>
+    </section>
+  </div>
+
+  <script>
+    function escapeHtml(s) {
+      return String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+    }
+    function $(id) { return document.getElementById(id); }
+    function pillarStatus(score) { return score >= 75 ? 'pass' : score >= 50 ? 'warn' : 'fail'; }
+
+    function renderResults(audit, prospect) {
+      $('formCard').style.display = 'none';
+      $('loadingState').style.display = 'none';
+      $('resultsCard').style.display = 'block';
+
+      $('resBiz').textContent = prospect.businessName || prospect.url || 'Your business';
+      $('resBizDetail').textContent = [prospect.industry, prospect.city, prospect.state].filter(Boolean).join(' · ');
+
+      $('resScore').textContent = audit.overallScore;
+      $('resGrade').textContent = 'Grade: ' + audit.grade;
+
+      const monthly = audit.dollarOpportunity?.monthly || { low: 0, high: 0 };
+      const annual = audit.dollarOpportunity?.annual || { low: 0, high: 0 };
+      $('resDollarMonthly').textContent = '$' + monthly.low.toLocaleString() + ' – $' + monthly.high.toLocaleString();
+      $('resDollarAnnual').textContent = 'Annualized: $' + annual.low.toLocaleString() + ' – $' + annual.high.toLocaleString();
+
+      // Headline
+      const biz = prospect.businessName || prospect.url || 'this business';
+      const city = prospect.city || 'your area';
+      $('resHeadline').textContent =
+        monthly.high >= 1500 ? `${biz} is leaving $${monthly.low}-$${monthly.high}/mo on the table — score ${audit.overallScore}/100.` :
+        monthly.high >= 400 ? `${biz} scores ${audit.overallScore}/100 in ${city} — costing roughly $${monthly.low}-$${monthly.high}/mo.` :
+        `${biz}'s search visibility is ${audit.overallScore}/100. Closing the top 5 gaps captures $${monthly.low}-$${monthly.high}/mo.`;
+
+      // Pillars
+      const pillars = $('resPillars');
+      pillars.innerHTML = '';
+      const sections = [
+        { key: 'schema', label: 'Schema', score: audit.sectionScores.schema, hint: 'Schema.org JSON-LD validation' },
+        { key: 'eeat', label: 'E-E-A-T', score: audit.sectionScores.eeat, hint: 'Experience · Expertise · Authority · Trust' },
+        { key: 'geo', label: 'AI-Search (GEO)', score: audit.sectionScores.geo, hint: 'ChatGPT · Claude · Perplexity · Google AI' }
+      ];
+      sections.forEach(s => {
+        const card = document.createElement('div');
+        card.className = 'pillar-card ' + pillarStatus(s.score);
+        card.innerHTML = `<div class="label">${escapeHtml(s.label)}</div><div class="value">${s.score}</div><div class="hint">${escapeHtml(s.hint)}</div>`;
+        pillars.appendChild(card);
+      });
+
+      // Top 5 findings
+      const findings = $('resFindings');
+      findings.innerHTML = '';
+      const top = audit.topFiveFindings || [];
+      if (!top.length) {
+        findings.innerHTML = '<p style="color:#475569;">No critical findings detected.</p>';
+      } else {
+        top.forEach((f, i) => {
+          const card = document.createElement('div');
+          card.className = 'finding-card';
+          const dollar = f.dollarImpact?.monthly || { low: 0, high: 0 };
+          card.innerHTML = `
+            <div class="head">
+              <h3 class="title"><span class="badge badge-${escapeHtml(f.severity || 'low')}">${escapeHtml(f.severity || 'low')}</span>${i + 1}. ${escapeHtml(f.title || '')}</h3>
+              <span class="impact">$${dollar.low}–$${dollar.high}/mo</span>
+            </div>
+            <p class="detail">${escapeHtml(f.detail || f.oneLineImpact || '')}</p>
+            ${f.dollarImpact?.headlineText ? '<p class="detail" style="font-size:0.78rem;color:#64748b;">' + escapeHtml(f.dollarImpact.headlineText) + '</p>' : ''}
+          `;
+          findings.appendChild(card);
+        });
+      }
+
+      // Upgrade CTA includes (from filtered audit's upgradeCta)
+      const cta = audit.upgradeCta;
+      if (cta && cta.includes) {
+        $('resCtaIncludes').innerHTML = cta.includes.map(i => '<li>' + escapeHtml(i) + '</li>').join('');
+      } else {
+        $('resCtaIncludes').innerHTML = '<li>Exact copy-paste fix code</li><li>Generated JSON-LD ready to ship</li><li>Generated llms.txt ready to ship</li><li>Implementation roadmap by week</li><li>2 months free Maintenance ($158 value)</li>';
+      }
+
+      // Section details
+      const schema = audit.sections?.schema;
+      if (schema) {
+        $('resSchemaMeta').textContent = `Score: ${schema.overallScore} · ${schema.blockCount} JSON-LD block(s) found · ${(schema.presentTypes || []).length} type(s) present · ${(schema.missingTypes || []).length} type(s) missing`;
+        $('resSchemaBody').innerHTML = `
+          <p style="margin:0.5rem 0;"><strong>Detected:</strong> ${(schema.presentTypes || []).map(escapeHtml).join(', ') || 'none'}</p>
+          <p style="margin:0.5rem 0;"><strong>Recommended for your vertical:</strong> ${(schema.recommendedTypes || []).map(escapeHtml).join(', ')}</p>
+          <p style="margin:0.5rem 0;"><strong>Missing:</strong> ${(schema.missingTypes || []).map(escapeHtml).join(', ') || 'none'}</p>
+          ${schema.openGraph?.ogPresent ? '<p style="margin:0.5rem 0;color:#16a34a;">✓ Open Graph tags detected</p>' : '<p style="margin:0.5rem 0;color:#dc2626;">✗ No Open Graph tags found</p>'}
+        `;
+      }
+      const eeat = audit.sections?.eeat;
+      if (eeat) {
+        $('resEeatMeta').textContent = `Score: ${eeat.overallScore} · 8 weighted dimensions`;
+        const dims = eeat.dimensions || {};
+        $('resEeatBody').innerHTML = '<table style="width:100%;border-collapse:collapse;"><tbody>' +
+          Object.entries(dims).map(([k, v]) =>
+            `<tr><td style="padding:6px 0;border-bottom:1px solid #e2e8f0;">${escapeHtml(k.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase()))}</td><td style="text-align:right;font-weight:600;border-bottom:1px solid #e2e8f0;">${v.score}</td></tr>`
+          ).join('') + '</tbody></table>';
+      }
+      const geo = audit.sections?.geo;
+      if (geo) {
+        $('resGeoMeta').textContent = `Score: ${geo.overallScore} · llms.txt: ${geo.llmsTxt?.present ? 'present' : 'missing'} · blocked AI crawlers: ${(geo.blockedCrawlers || []).length}`;
+        const passage = geo.passageCitability?.blocks || {};
+        $('resGeoBody').innerHTML = '<p><strong>Passage citability blocks:</strong></p><table style="width:100%;border-collapse:collapse;"><tbody>' +
+          Object.entries(passage).map(([k, v]) =>
+            `<tr><td style="padding:6px 0;border-bottom:1px solid #e2e8f0;">${escapeHtml(k.replace(/_/g, ' '))}</td><td style="text-align:right;border-bottom:1px solid #e2e8f0;">${v.passed ? '✓' : '✗'}</td></tr>`
+          ).join('') + '</tbody></table>' +
+          (geo.blockedCrawlers?.length ? `<p style="margin-top:0.75rem;color:#dc2626;"><strong>Blocked AI crawlers:</strong> ${geo.blockedCrawlers.map(escapeHtml).join(', ')} — these can't cite your site.</p>` : '');
+      }
+    }
+
+    // Auto-run if URL params present
+    function readParams() {
+      const p = new URLSearchParams(location.search);
+      return {
+        url: p.get('url') || '',
+        industry: p.get('industry') || '',
+        city: p.get('city') || '',
+        state: p.get('state') || '',
+        businessName: p.get('businessName') || ''
+      };
+    }
+
+    async function runAudit(input) {
+      $('formCard').style.display = 'none';
+      $('loadingState').style.display = 'block';
+      $('resultsCard').style.display = 'none';
+      try {
+        const params = new URLSearchParams();
+        params.set('url', /^https?:\/\//i.test(input.url) ? input.url : 'https://' + input.url);
+        if (input.industry) params.set('industry', input.industry);
+        if (input.city) params.set('city', input.city);
+        if (input.state) params.set('state', input.state);
+        params.set('tier', 'free');
+        const res = await fetch('/api/audit-deep?' + params.toString());
+        const data = await res.json();
+        if (!res.ok || !data.audit) throw new Error(data.error || 'audit failed');
+        renderResults(data.audit, input);
+      } catch (err) {
+        $('loadingState').style.display = 'none';
+        $('formCard').style.display = 'block';
+        alert('Audit failed: ' + (err.message || 'unknown'));
+      }
+    }
+
+    document.getElementById('auditForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      runAudit({
+        url: $('formUrl').value.trim(),
+        industry: $('formIndustry').value.trim(),
+        city: $('formCity').value.trim(),
+        state: $('formState').value.trim()
+      });
+    });
+
+    // Auto-run if params provided
+    const initial = readParams();
+    if (initial.url) runAudit(initial);
+  </script>
+</body>
+</html>
