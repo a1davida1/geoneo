@@ -69,8 +69,9 @@
           <input name="url" type="text" inputmode="url" placeholder="https://example.com or www.example.com" required />
         </label>
         <label>
-          Industry
-          <input name="industry" type="text" placeholder="Plumbing, HVAC, Roofing, Electrical, etc." />
+          Industry / vertical
+          <select id="websiteIndustry"></select>
+          <input id="websiteIndustryCustom" type="text" placeholder="Custom vertical (e.g. epoxy flooring)" style="display:none;margin-top:0.5rem;" />
         </label>
 
         <!-- Lead Capture (required for free scan persistence) -->
@@ -101,7 +102,10 @@
         <div class="field-row">
           <label>
             City (optional)
-            <input name="city" type="text" placeholder="Dallas" />
+            <select id="websiteCityPreset" class="city-preset" aria-label="Choose a city from list (optional)">
+              <option value="">Select a state first…</option>
+            </select>
+            <input id="websiteCity" name="city" type="text" placeholder="Or type any city" />
           </label>
           <label>
             State (optional)

@@ -70,8 +70,9 @@
           <input name="url" type="text" inputmode="url" placeholder="https://example.com or www.example.com" required />
         </label>
         <label>
-          Industry <span style="color:#ef4444;">(required)</span>
-          <input name="industry" type="text" placeholder="Plumbing, HVAC, Roofing, Electrical, etc." required />
+          Industry / vertical <span style="color:#ef4444;">(required)</span>
+          <select id="bothIndustry" required></select>
+          <input id="bothIndustryCustom" type="text" placeholder="Custom vertical" style="display:none;margin-top:0.5rem;" />
         </label>
 
         <!-- Lead Capture (required for free scan persistence and follow-up) -->
@@ -102,7 +103,10 @@
         <div class="field-row">
           <label>
             City
-            <input name="city" type="text" placeholder="Branson" />
+            <select id="bothCityPreset" class="city-preset" aria-label="Choose a city from list (optional)">
+              <option value="">Select a state first…</option>
+            </select>
+            <input id="bothCity" name="city" type="text" placeholder="Or type any city" />
           </label>
           <label>
             State
@@ -375,8 +379,11 @@
         if (zip) form.querySelector('[name="zip"]').value = zip;
         if (state) {
           var sel = form.querySelector('[name="state"]');
-          // Wait for state options to populate then set
-          setTimeout(function() { sel.value = state; }, 100);
+          // Wait for state options to populate (script.js), then set value and notify listeners (city dropdown load).
+          setTimeout(function() {
+            sel.value = state;
+            sel.dispatchEvent(new Event('change', { bubbles: true }));
+          }, 120);
         }
       }
 

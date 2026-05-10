@@ -62,6 +62,7 @@ const {
 const { runLimitedSiteCrawl } = require('./services/siteCrawl');
 const { fetchCitiesForStatePostal } = require('./services/censusPlaces');
 const { loadProspectVerticals } = require('./services/prospectVerticals');
+const { generateLocationServicePage } = require('./services/pageGenerator');
 
 const PORT = process.env.PORT || 4173;
 const HOST = process.env.HOST || '127.0.0.1';
@@ -8096,6 +8097,31 @@ async function requestHandler(req, res) {
       sendJson(res, 200, { ok: true, leadId: newLead.id });
     } catch (e) {
       sendJson(res, 500, { error: 'Failed to save lead' });
+    }
+    return;
+  }
+
+  // Internal programmatic page generator (for future batch use)
+  if (reqUrl.pathname === '/api/internal/generate-page' && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) {
+      sendApiForbidden(res);
+      return;
+    }
+    try {
+      const body = await readJsonRequestBody(req);
+      const page = generateLocationServicePage({
+        businessName: body.businessName,
+        city: body.city,
+        state: body.state,
+        service: body.service,
+        industry: body.industry,
+        phone: body.phone,
+        address: body.address,
+        yearsInBusiness: body.yearsInBusiness
+      });
+      sendJson(res, 200, { ok: true, page });
+    } catch (e) {
+      sendJson(res, 500, { error: e.message || 'Page generation failed' });
     }
     return;
   }

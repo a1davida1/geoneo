@@ -45,8 +45,8 @@ test('analyzeEeat: bare page scores poorly with multiple fixes', () => {
 test('analyzeEeat: HTTPS detection works', () => {
   const r1 = analyzeEeat({ html: BARE_PAGE, finalUrl: 'https://example.com' });
   const r2 = analyzeEeat({ html: BARE_PAGE, finalUrl: 'http://example.com' });
-  // HTTPS adds to trust dimension
-  assert.ok(r1.dimensions.trust.score >= r2.dimensions.trust.score);
+  assert.ok(r1.dimensions.trust.score > r2.dimensions.trust.score);
+  assert.ok(r1.dimensions.trust.score > 0);
 });
 
 test('analyzeEeat: tel: link detection works', () => {

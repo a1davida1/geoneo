@@ -145,6 +145,12 @@ test('generateSchemaForType: FAQPage works when real FAQs supplied', () => {
   assert.equal(schema.mainEntity[0].name, 'Do you offer 24/7 service?');
 });
 
+test('generateSchemaForType: FAQPage returns null when all FAQ rows lack Q or A', () => {
+  const faqs = [{ question: '', answer: '   ' }, { question: '  ', answer: '' }];
+  const schema = generateSchemaForType('FAQPage', 'plumbing', { faqs });
+  assert.equal(schema, null);
+});
+
 test('analyzeSchemas: detects microdata types alongside JSON-LD', () => {
   const html = '<div itemscope itemtype="https://schema.org/LocalBusiness"><span itemprop="name">A</span></div>';
   const r = analyzeSchemas({ html, industry: 'plumbing' });

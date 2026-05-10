@@ -664,6 +664,10 @@ body[data-audit-mode="website"] #fixesPanel {
   color: var(--ink);
 }
 
+.audit-form select.city-preset {
+  margin-bottom: 0.35rem;
+}
+
 /* Lead capture section (Step 3 - required for free scan persistence) */
 .lead-capture-section {
   background: rgba(0, 229, 160, 0.03);

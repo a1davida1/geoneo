@@ -69,13 +69,17 @@
           <input id="marketBusinessName" name="businessName" type="text" placeholder="Acme Towing" />
         </label>
         <label>
-          Industry
-          <input id="marketIndustry" name="industry" type="text" placeholder="Towing" required />
+          Industry / vertical <span style="color:#ef4444;">*</span>
+          <select id="marketIndustry" required></select>
+          <input id="marketIndustryCustom" type="text" placeholder="Custom vertical" style="display:none;margin-top:0.5rem;" />
         </label>
         <div class="field-row">
           <label>
             City
-            <input id="marketCity" name="city" type="text" placeholder="Branson" />
+            <select id="marketCityPreset" class="city-preset" aria-label="Choose a city from list (optional)">
+              <option value="">Select a state first…</option>
+            </select>
+            <input id="marketCity" name="city" type="text" placeholder="Or type any city" />
           </label>
           <label>
             State

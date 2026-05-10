@@ -1,0 +1,17 @@
+# Local Postgres for development (GeoNeo still uses JSON stores unless you wire DATABASE_URL in app code).
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: geoneo-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: geoneo
+      POSTGRES_PASSWORD: geoneo_local
+      POSTGRES_DB: geoneo
+    ports:
+      - "5432:5432"
+    volumes:
+      - geoneo_pg_data:/var/lib/postgresql/data
+
+volumes:
+  geoneo_pg_data:

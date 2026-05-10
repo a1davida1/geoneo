@@ -46,12 +46,46 @@ test('extractLeadGenCandidates dedupes market rows and limits to requested quant
   assert.equal(candidates[0].state, 'MO');
 });
 
+test('extractLeadGenCandidates filters out unknown and non-business resultTypes', () => {
+  const { extractLeadGenCandidates } = require('../services/leadGenBatch');
+  const marketModel = {
+    industryAnalysis: {
+      overview: {
+        orderedResults: [
+          { companyName: 'Good Business', domain: 'good.com', rank: 1, resultType: 'local_business', category: 'business' },
+          { companyName: 'Unknown Type', domain: 'unknown.com', rank: 2, resultType: 'unknown', category: 'business' },
+          { companyName: 'Directory Site', domain: 'dir.com', rank: 3, resultType: 'directory', category: 'directory' },
+          { companyName: 'Organic Business', domain: 'organic.com', rank: 4, resultType: 'organic_business', category: 'business' },
+          { companyName: 'Website Type', domain: 'website.com', rank: 5, resultType: 'website', category: 'business' }
+        ]
+      }
+    }
+  };
+
+  const candidates = extractLeadGenCandidates(marketModel, { quantity: 10 });
+  // Should only include: local_business, organic_business, website
+  // Should exclude: unknown (bug caused this to return 0 candidates), directory
+  assert.equal(candidates.length, 3);
+  assert.deepEqual(candidates.map((c) => c.domain), ['good.com', 'organic.com', 'website.com']);
+});
+
 test('assessSeoProvider classifies agency, pro, diy, and unknown from evidence', () => {
   const { assessSeoProvider } = require('../services/leadGenBatch');
 
   assert.equal(assessSeoProvider({ html: 'Website by BrightLocal Agency', pageTitle: 'Home' }).classification, 'agency');
   assert.equal(assessSeoProvider({ html: '<meta name="generator" content="Yoast SEO">', pageTitle: 'Local Plumber' }).classification, 'pro');
+  assert.equal(
+    assessSeoProvider({ html: '<script src="https://x.com/wp-content/themes/t/foo.js"></script>', pageTitle: 'Local Shop', visibleText: 'We fix roofs' }).classification,
+    'pro',
+    'HTML-only stack signals (e.g. wp-content) must match when raw HTML is supplied'
+  );
   assert.equal(assessSeoProvider({ html: '<title>Home</title><h1>Welcome</h1>', pageTitle: 'Home' }).classification, 'diy_local');
+  assert.equal(
+    assessSeoProvider({ visibleText: 'Serving the Ozarks since 1999', pageTitle: 'Home' }).classification,
+    'diy_local',
+    'visibleText + pageTitle without raw HTML — generic Home title still classifies as DIY'
+  );
+  assert.equal(assessSeoProvider({ visibleText: 'Family owned repair shop', pageTitle: 'Welcome' }).classification, 'diy_local');
   assert.equal(assessSeoProvider({ html: '', pageTitle: '' }).classification, 'unknown');
 });
 
@@ -120,6 +154,56 @@ test('extractContactInfo summarizes contact readiness from audit signals and tex
   assert.equal(info.emails[0], 'owner@example.com');
 });
 
+test('estimateSeoBudget calculates spend range based on authority, keywords, and provider signals', () => {
+  const { estimateSeoBudget } = require('../services/leadGenBatch');
+
+  // Sophisticated program
+  const high = estimateSeoBudget(
+    { domainRating: 75, organicKeywords: 1500, paidKeywords: 80, refdomains: 600 },
+    { classification: 'agency' }
+  );
+  assert.ok(high.estimatedMonthlyHigh >= 10000, 'High DR + many keywords + agency = enterprise budget');
+  assert.equal(high.hasActiveProgram, true);
+  assert.equal(high.isMeasurable, true);
+
+  // No program
+  const none = estimateSeoBudget(
+    { domainRating: 0, organicKeywords: 0, paidKeywords: 0, refdomains: 0 },
+    { classification: 'unknown' }
+  );
+  assert.equal(none.estimatedMonthlyHigh, 0);
+  assert.equal(none.hasActiveProgram, false);
+
+  // Basic DIY
+  const basic = estimateSeoBudget(
+    { domainRating: 25, organicKeywords: 150, paidKeywords: 0, refdomains: 30 },
+    { classification: 'diy_local' }
+  );
+  assert.ok(basic.estimatedMonthlyHigh >= 500 && basic.estimatedMonthlyHigh <= 2000);
+  assert.equal(basic.hasActiveProgram, basic.estimatedMonthlyHigh >= 500);
+});
+
+test('predictSeoQuality classifies SEO maturity from measurable signals', () => {
+  const { predictSeoQuality } = require('../services/leadGenBatch');
+
+  const sophisticated = predictSeoQuality(
+    { domainRating: 80, organicKeywords: 2000, refdomains: 800, organicTraffic: 50000 },
+    { googleGrades: { seo: 90 }, siteProfile: { seoSignals: { canonical: true, sitemap: true } } }
+  );
+  assert.equal(sophisticated.classification, 'sophisticated');
+  assert.ok(sophisticated.overallQuality >= 75);
+  assert.equal(sophisticated.isMeasurable, true);
+  assert.equal(sophisticated.isActivelyManaged, true);
+  assert.equal(sophisticated.hasRoomForImprovement, false);
+
+  const none = predictSeoQuality(
+    { domainRating: 0, organicKeywords: 0, refdomains: 0 },
+    {}
+  );
+  assert.equal(none.classification, 'none');
+  assert.equal(none.isMeasurable, false);
+});
+
 test('scoreLeadOpportunity prioritizes weak sites with contact path and no obvious agency', () => {
   const { scoreLeadOpportunity } = require('../services/leadGenBatch');
 
@@ -168,6 +252,22 @@ test('getAiCallComplianceForState surfaces consent and AI-call risk', () => {
   assert.equal(ca.aiCallRisk, 'high');
   assert.equal(mo.recordingConsent, 'one_party');
   assert.ok(mo.requirements.some((item) => item.includes('TCPA')));
+});
+
+test('listUsStatesForLeadGenUi tiers align with getAiCallComplianceForState', () => {
+  const { listUsStatesForLeadGenUi, getAiCallComplianceForState } = require('../services/leadGenBatch');
+
+  const rows = listUsStatesForLeadGenUi();
+  assert.equal(rows.length, 51);
+  const mo = rows.find((r) => r.code === 'MO');
+  const ca = rows.find((r) => r.code === 'CA');
+  assert.ok(mo);
+  assert.ok(ca);
+  assert.equal(mo.workflowTier, 'favorable');
+  assert.equal(ca.workflowTier, 'caution');
+  assert.equal(getAiCallComplianceForState('MO').aiCallRisk, 'medium');
+  assert.equal(getAiCallComplianceForState('CA').aiCallRisk, 'high');
+  assert.ok(rows.every((r) => r.workflowTier === (getAiCallComplianceForState(r.code).aiCallRisk === 'high' ? 'caution' : 'favorable')));
 });
 
 test('buildAdvancedLeadInsights adds compliance, value, and routing ideas', () => {

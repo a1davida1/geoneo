@@ -32,6 +32,7 @@ const {
   buildAuditReportHtml,
   buildPrioritizedActionPlan,
   buildCompetitorsFromAudit,
+  resolveWebsiteDashboardDataQuality,
   isNeoClubMember,
   buildNeoClubPayload,
   runAudit,
@@ -139,6 +140,34 @@ test('safeUrl rejects non-http protocols', () => {
     () => safeUrl('javascript:alert(1)'),
     /(Only http and https URLs are allowed\.|Invalid URL)/
   );
+});
+
+test('resolveWebsiteDashboardDataQuality: real when SERP ok even if PageSpeed is estimated', () => {
+  const serpOnly = resolveWebsiteDashboardDataQuality({
+    googleGradesSource: 'estimated_fallback',
+    localSearchVisibility: { status: 'ok' }
+  });
+  assert.equal(serpOnly.dataQuality, 'real');
+  assert.match(serpOnly.sourceNote, /SERP/i);
+});
+
+test('resolveWebsiteDashboardDataQuality: estimated when PageSpeed live but SERP unavailable', () => {
+  const psiOnly = resolveWebsiteDashboardDataQuality({
+    googleGradesSource: 'live_pagespeed',
+    localSearchVisibility: { status: 'unavailable' }
+  });
+  assert.equal(psiOnly.dataQuality, 'estimated');
+  assert.match(psiOnly.sourceNote, /PageSpeed/i);
+  assert.match(psiOnly.sourceNote, /SERP|modeled|incomplete/i);
+});
+
+test('resolveWebsiteDashboardDataQuality: estimated when SERP partial and no live PageSpeed', () => {
+  const partial = resolveWebsiteDashboardDataQuality({
+    googleGradesSource: 'estimated_fallback',
+    localSearchVisibility: { status: 'partial' }
+  });
+  assert.equal(partial.dataQuality, 'estimated');
+  assert.match(partial.sourceNote, /Partial SERP/i);
 });
 
 test('htmlToText strips tags/scripts/styles and normalizes whitespace', () => {
@@ -1098,6 +1127,34 @@ test('buildAuditRecord returns normalized shape with key fields', () => {
   assert.ok(record.fullAuditResult && typeof record.fullAuditResult === 'object');
 });
 
+test('buildAuditRecord strips landingPageHtml from persisted fullAuditResult', () => {
+  const record = buildAuditRecord({
+    contactName: '',
+    businessName: 'Test Co',
+    businessEmail: '',
+    phone: '',
+    industry: 'plumber',
+    streetAddress: '',
+    city: 'Springfield',
+    state: 'MO',
+    competitorsInput: '',
+    bestContactTime: '',
+    followupConsent: false,
+    website: 'https://test.example',
+    market: '',
+    auditResult: {
+      finalUrl: 'https://test.example/',
+      scores: { overall: 60, seo: 60, ai: 60, geo: 60 },
+      summary: 'ok',
+      landingPageHtml: '<html><script src="/wp-content/x.js"></script></html>'
+    },
+    purchasedPackage: 'admin',
+    amountPaid: 0
+  });
+  assert.equal(record.fullAuditResult && record.fullAuditResult.landingPageHtml, undefined);
+  assert.equal(record.fullAuditResult && Object.prototype.hasOwnProperty.call(record.fullAuditResult, 'landingPageHtml'), false);
+});
+
 test('normalizePackageLevel maps known values and defaults to free', () => {
   assert.equal(normalizePackageLevel('free'), 'free');
   assert.equal(normalizePackageLevel('silver'), 'silver');
@@ -1175,7 +1232,8 @@ test('filterAuditResultByPackage enforces free/silver/gold/admin visibility', ()
     fullDiagnosis: [{ key: 'h1', diagnosis: 'issue' }],
     issueSolutions: [{ key: 'h1', solution: 'fix' }],
     implementationRoadmap: [{ step: 1, title: 'Do thing' }],
-    prioritizedActionPlan: [{ priority: 1, action: 'Do thing' }]
+    prioritizedActionPlan: [{ priority: 1, action: 'Do thing' }],
+    landingPageHtml: '<html>must not leak to API views</html>'
   };
 
   const free = filterAuditResultByPackage(full, 'free');
@@ -1200,6 +1258,7 @@ test('filterAuditResultByPackage enforces free/silver/gold/admin visibility', ()
   assert.equal(admin.packageLevel, 'admin');
   assert.equal(Array.isArray(admin.checks), true);
   assert.equal(Array.isArray(admin.implementationRoadmap), true);
+  assert.equal(Object.prototype.hasOwnProperty.call(admin, 'landingPageHtml'), false);
 });
 
 test('runAudit supports quick URL-only flow and returns auto-detected site profile', async () => {
@@ -1271,6 +1330,7 @@ test('runAudit supports quick URL-only flow and returns auto-detected site profi
     assert.equal(result.siteProfile.contactSignals.email, true);
     assert.ok(Array.isArray(result.siteProfile.visibleServiceKeywords));
     assert.ok(result.siteProfile.visibleServiceKeywords.includes('roofing'));
+    assert.ok(result.landingPageHtml && /<title>acme roofing/i.test(result.landingPageHtml), 'runAudit exposes sampled raw HTML for downstream classifiers');
   } finally {
     global.fetch = originalFetch;
   }
@@ -1738,4 +1798,140 @@ test('buildCompetitorsFromAudit adds tier classification', () => {
   const comps = buildCompetitorsFromAudit(fakeResult, { city: 'Springfield', state: 'MO', industry: 'plumbing' });
   assert.ok(comps.length > 0);
   assert.ok(comps.some(c => c.tier === 'local' || c.tier === 'regional' || c.tier === 'national'));
+});
+
+test('public /api/geo/us-states returns state list without auth', async () => {
+  const req = new Readable({ read() {} });
+  req.url = '/api/geo/us-states';
+  req.method = 'GET';
+  req.headers = {};
+
+  let body = '';
+  const res = new Writable({
+    write(chunk, enc, cb) {
+      body += chunk.toString();
+      cb();
+    }
+  });
+  res.writeHead = function (statusCode, headers) {
+    this.statusCode = statusCode;
+    this.headers = headers;
+  };
+  const completed = new Promise((resolve) => {
+    res.end = function (chunk) {
+      if (chunk) body += chunk.toString();
+      resolve({ statusCode: this.statusCode, body });
+    };
+  });
+
+  await requestHandler(req, res);
+  const response = await completed;
+  const parsed = JSON.parse(response.body);
+  assert.equal(response.statusCode, 200);
+  assert.equal(parsed.ok, true);
+  assert.ok(Array.isArray(parsed.states));
+  assert.ok(parsed.states.length >= 51);
+  assert.ok(parsed.states.some((s) => s.code === 'MO' && s.name));
+});
+
+test('public /api/geo/prospect-verticals returns groups from JSON', async () => {
+  const req = new Readable({ read() {} });
+  req.url = '/api/geo/prospect-verticals';
+  req.method = 'GET';
+  req.headers = {};
+
+  let body = '';
+  const res = new Writable({
+    write(chunk, enc, cb) {
+      body += chunk.toString();
+      cb();
+    }
+  });
+  res.writeHead = function (statusCode, headers) {
+    this.statusCode = statusCode;
+    this.headers = headers;
+  };
+  const completed = new Promise((resolve) => {
+    res.end = function (chunk) {
+      if (chunk) body += chunk.toString();
+      resolve({ statusCode: this.statusCode, body });
+    };
+  });
+
+  await requestHandler(req, res);
+  const response = await completed;
+  const parsed = JSON.parse(response.body);
+  assert.equal(response.statusCode, 200);
+  assert.equal(parsed.ok, true);
+  assert.equal(typeof parsed.version, 'number');
+  assert.ok(Array.isArray(parsed.groups));
+  assert.ok(parsed.groups.length >= 1);
+  assert.ok(typeof parsed.groups[0].label === 'string');
+  assert.ok(Array.isArray(parsed.groups[0].items));
+  assert.ok(parsed.groups[0].items.length >= 1);
+  assert.ok(typeof parsed.groups[0].items[0].value === 'string');
+  assert.ok(typeof parsed.groups[0].items[0].label === 'string');
+});
+
+test('public /api/geo/cities returns 400 for unknown state', async () => {
+  const req = new Readable({ read() {} });
+  req.url = '/api/geo/cities?state=ZZ';
+  req.method = 'GET';
+  req.headers = {};
+
+  let body = '';
+  const res = new Writable({
+    write(chunk, enc, cb) {
+      body += chunk.toString();
+      cb();
+    }
+  });
+  res.writeHead = function (statusCode, headers) {
+    this.statusCode = statusCode;
+    this.headers = headers;
+  };
+  const completed = new Promise((resolve) => {
+    res.end = function (chunk) {
+      if (chunk) body += chunk.toString();
+      resolve({ statusCode: this.statusCode, body });
+    };
+  });
+
+  await requestHandler(req, res);
+  const response = await completed;
+  const parsed = JSON.parse(response.body);
+  assert.equal(response.statusCode, 400);
+  assert.equal(parsed.ok, false);
+});
+
+test('public /api/geo/cities returns 400 invalid_state when state is not two letters', async () => {
+  const req = new Readable({ read() {} });
+  req.url = '/api/geo/cities?state=MOO';
+  req.method = 'GET';
+  req.headers = {};
+
+  let body = '';
+  const res = new Writable({
+    write(chunk, enc, cb) {
+      body += chunk.toString();
+      cb();
+    }
+  });
+  res.writeHead = function (statusCode, headers) {
+    this.statusCode = statusCode;
+    this.headers = headers;
+  };
+  const completed = new Promise((resolve) => {
+    res.end = function (chunk) {
+      if (chunk) body += chunk.toString();
+      resolve({ statusCode: this.statusCode, body });
+    };
+  });
+
+  await requestHandler(req, res);
+  const response = await completed;
+  const parsed = JSON.parse(response.body);
+  assert.equal(response.statusCode, 400);
+  assert.equal(parsed.ok, false);
+  assert.equal(parsed.error, 'invalid_state');
 });

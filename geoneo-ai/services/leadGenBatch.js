@@ -100,12 +100,22 @@ function extractLeadGenCandidates(marketModel, opts = {}) {
 }
 
 function assessSeoProvider(input = {}) {
-  const html = normalizeString(input.html || input.visibleText || input.auditText).toLowerCase();
+  const htmlLower = normalizeString(input.html).toLowerCase();
+  const textLower = normalizeString(input.visibleText || input.auditText).toLowerCase();
   const title = normalizeString(input.pageTitle || input.title).toLowerCase();
   const audit = input.auditResult || {};
   const seoSignals = audit?.siteProfile?.seoSignals || {};
   const googleSeo = Number(audit?.googleGrades?.seo);
   const signals = [];
+
+  /** Raw HTML (when present) + visible excerpt + title so CMS/stack regexes match while plain-text cues still apply. */
+  function matchesOnPage(pattern) {
+    return (
+      (htmlLower && pattern.test(htmlLower)) ||
+      (textLower && pattern.test(textLower)) ||
+      (title && pattern.test(title))
+    );
+  }
 
   const agencyPatterns = [
     /website (?:by|design(?:ed)? by|powered by) [a-z0-9 .,&-]*(agency|marketing|media|seo|web)/i,
@@ -119,17 +129,18 @@ function assessSeoProvider(input = {}) {
   ];
   const diyPatterns = [
     /<title>\s*(home|welcome)\s*<\/title>/i,
+    /^\s*(home|welcome)\s*$/i,
     /(wixsite|godaddysites|weebly|sites\.google\.com)/i
   ];
 
   for (const pattern of agencyPatterns) {
-    if (pattern.test(html) || pattern.test(title)) signals.push({ type: 'agency', evidence: pattern.toString() });
+    if (matchesOnPage(pattern)) signals.push({ type: 'agency', evidence: pattern.toString() });
   }
   for (const pattern of proPatterns) {
-    if (pattern.test(html) || pattern.test(title)) signals.push({ type: 'pro', evidence: pattern.toString() });
+    if (matchesOnPage(pattern)) signals.push({ type: 'pro', evidence: pattern.toString() });
   }
   for (const pattern of diyPatterns) {
-    if (pattern.test(html) || pattern.test(title)) signals.push({ type: 'diy', evidence: pattern.toString() });
+    if (matchesOnPage(pattern)) signals.push({ type: 'diy', evidence: pattern.toString() });
   }
   if (Number(seoSignals.schemaCount || 0) > 0 && (seoSignals.canonical || seoSignals.robotsMeta || seoSignals.sitemap)) {
     signals.push({ type: 'pro', evidence: 'Structured data plus canonical/robots/sitemap signals present.' });
@@ -150,7 +161,7 @@ function assessSeoProvider(input = {}) {
   if (signals.some((s) => s.type === 'diy')) {
     return { classification: 'diy_local', confidence: 'medium', evidence: signals.filter((s) => s.type === 'diy').map((s) => s.evidence).slice(0, 4) };
   }
-  if (!html && !title) {
+  if (!htmlLower && !textLower && !title) {
     return { classification: 'unknown', confidence: 'low', evidence: ['No page HTML/title available for attribution.'] };
   }
   return { classification: 'unknown', confidence: 'low', evidence: ['No clear SEO provider footprint detected.'] };
@@ -323,6 +334,88 @@ function getAiCallComplianceForState(stateInput) {
   };
 }
 
+/** All USPS state codes + DC for admin Prospect Hunter dropdowns. */
+const US_STATES_AND_DC = [
+  ['AL', 'Alabama'],
+  ['AK', 'Alaska'],
+  ['AZ', 'Arizona'],
+  ['AR', 'Arkansas'],
+  ['CA', 'California'],
+  ['CO', 'Colorado'],
+  ['CT', 'Connecticut'],
+  ['DE', 'Delaware'],
+  ['DC', 'District of Columbia'],
+  ['FL', 'Florida'],
+  ['GA', 'Georgia'],
+  ['HI', 'Hawaii'],
+  ['ID', 'Idaho'],
+  ['IL', 'Illinois'],
+  ['IN', 'Indiana'],
+  ['IA', 'Iowa'],
+  ['KS', 'Kansas'],
+  ['KY', 'Kentucky'],
+  ['LA', 'Louisiana'],
+  ['ME', 'Maine'],
+  ['MD', 'Maryland'],
+  ['MA', 'Massachusetts'],
+  ['MI', 'Michigan'],
+  ['MN', 'Minnesota'],
+  ['MS', 'Mississippi'],
+  ['MO', 'Missouri'],
+  ['MT', 'Montana'],
+  ['NE', 'Nebraska'],
+  ['NV', 'Nevada'],
+  ['NH', 'New Hampshire'],
+  ['NJ', 'New Jersey'],
+  ['NM', 'New Mexico'],
+  ['NY', 'New York'],
+  ['NC', 'North Carolina'],
+  ['ND', 'North Dakota'],
+  ['OH', 'Ohio'],
+  ['OK', 'Oklahoma'],
+  ['OR', 'Oregon'],
+  ['PA', 'Pennsylvania'],
+  ['RI', 'Rhode Island'],
+  ['SC', 'South Carolina'],
+  ['SD', 'South Dakota'],
+  ['TN', 'Tennessee'],
+  ['TX', 'Texas'],
+  ['UT', 'Utah'],
+  ['VT', 'Vermont'],
+  ['VA', 'Virginia'],
+  ['WA', 'Washington'],
+  ['WV', 'West Virginia'],
+  ['WI', 'Wisconsin'],
+  ['WY', 'Wyoming']
+];
+
+/**
+ * Prospect Hunter UI: per-state tiering for modeled AI-assisted sales-call friction
+ * (mirrors aiCallRisk — not a claim that outreach is "legal" without TCPA consent).
+ * favorable = aiCallRisk medium; caution = high (all-party recording and/or AI-disclosure flag set).
+ */
+function listUsStatesForLeadGenUi() {
+  return US_STATES_AND_DC.map(([code, name]) => {
+    const compliance = getAiCallComplianceForState(code);
+    const workflowTier = compliance.aiCallRisk === 'high' ? 'caution' : 'favorable';
+    return {
+      code,
+      name,
+      workflowTier,
+      aiCallRisk: compliance.aiCallRisk,
+      recordingConsent: compliance.recordingConsent,
+      needsAiDisclosure: compliance.needsAiDisclosure,
+      uiHint:
+        workflowTier === 'favorable'
+          ? 'Modeled lower state friction (one-party recording; no extra GeoNeo AI-disclosure flag). Federal TCPA/consent and DNC rules still apply.'
+          : 'Modeled higher friction (all-party recording and/or extra AI-disclosure flag). Plan recording/transcript consent and counsel review.'
+    };
+  }).sort((a, b) => {
+    if (a.workflowTier !== b.workflowTier) return a.workflowTier === 'favorable' ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+}
+
 const INDUSTRY_VALUE = {
   attorney: 180,
   lawyer: 180,
@@ -355,26 +448,218 @@ function getAhrefsIntegrationStatus(env = process.env) {
   return ahrefsStatus(env);
 }
 
-function buildAdvancedLeadInsights({ candidate = {}, scores = {}, leadScore = {}, contactInfo = {}, seoProvider = {} } = {}) {
+/**
+ * Estimate monthly SEO budget based on signals:
+ * - Domain Rating (authority investment)
+ * - Organic keyword count (SEO program scale)
+ * - Paid keyword count (PPC + SEO correlation)
+ * - Backlink profile (link building investment)
+ * - Referring domains (outreach effort)
+ */
+function estimateSeoBudget(ahrefs = {}, seoProvider = {}, audit = {}) {
+  const dr = Number(ahrefs.domainRating) || 0;
+  const organicKws = Number(ahrefs.organicKeywords) || 0;
+  const paidKws = Number(ahrefs.paidKeywords) || 0;
+  const refDomains = Number(ahrefs.refdomains) || 0;
+  const backlinks = Number(ahrefs.backlinks) || 0;
+  const traffic = Number(ahrefs.organicTraffic) || 0;
+  
+  // Base indicators of SEO investment
+  let signals = [];
+  let score = 0;
+  
+  // Domain Rating tiers (suggests historical link building)
+  if (dr >= 70) { score += 40; signals.push('High DR (70+) indicates significant authority building'); }
+  else if (dr >= 50) { score += 25; signals.push('Medium-High DR (50-69) suggests consistent SEO'); }
+  else if (dr >= 30) { score += 15; signals.push('Moderate DR (30-49) shows some link effort'); }
+  else if (dr > 0) { score += 5; signals.push('Low DR indicates minimal authority work'); }
+  
+  // Organic keyword portfolio size
+  if (organicKws >= 1000) { score += 35; signals.push('Large organic portfolio (1000+ keywords)'); }
+  else if (organicKws >= 500) { score += 25; signals.push('Medium organic portfolio (500-999 keywords)'); }
+  else if (organicKws >= 100) { score += 15; signals.push('Small organic portfolio (100-499 keywords)'); }
+  else if (organicKws > 0) { score += 5; signals.push('Minimal organic presence (<100 keywords)'); }
+  
+  // Paid keywords correlation (businesses running PPC often invest in SEO)
+  if (paidKws >= 50) { score += 20; signals.push('Active paid search program (50+ keywords)'); }
+  else if (paidKws >= 20) { score += 12; signals.push('Moderate PPC presence (20-49 keywords)'); }
+  else if (paidKws > 0) { score += 5; signals.push('Small PPC presence (<20 keywords)'); }
+  
+  // Referring domains (active link building)
+  if (refDomains >= 500) { score += 25; signals.push('Strong backlink profile (500+ domains)'); }
+  else if (refDomains >= 100) { score += 15; signals.push('Good backlink profile (100-499 domains)'); }
+  else if (refDomains >= 50) { score += 8; signals.push('Growing backlink profile (50-99 domains)'); }
+  else if (refDomains > 0) { score += 3; signals.push('Basic backlink profile (<50 domains)'); }
+  
+  // Content/technical signals from audit
+  const seoGrade = Number(audit?.googleGrades?.seo) || 0;
+  const schemaCount = Number(audit?.siteProfile?.seoSignals?.schemaCount) || 0;
+  const hasCanonical = Boolean(audit?.siteProfile?.seoSignals?.canonical);
+  const hasSitemap = Boolean(audit?.siteProfile?.seoSignals?.sitemap);
+  
+  if (seoGrade >= 80) { score += 15; signals.push('Strong technical SEO foundation'); }
+  else if (seoGrade >= 60) { score += 8; signals.push('Decent technical SEO'); }
+  
+  if (schemaCount > 0) { score += 5; signals.push('Structured data implementation'); }
+  if (hasCanonical && hasSitemap) { score += 5; signals.push('Technical SEO basics in place'); }
+  
+  // Provider classification adjustment
+  const providerTier = seoProvider.classification || 'unknown';
+  if (providerTier === 'agency') { score += 15; signals.push('Agency footprint detected (managed program)'); }
+  else if (providerTier === 'pro') { score += 10; signals.push('Pro tools detected (active optimization)'); }
+  else if (providerTier === 'diy_local') { score += 2; signals.push('DIY signals (minimal professional investment)'); }
+  
+  // Calculate estimated budget range
+  // Score 0-20: $0-500 (minimal/no SEO)
+  // Score 21-50: $500-2000 (basic DIY or low-end agency)
+  // Score 51-80: $2000-5000 (professional program)
+  // Score 81-120: $5000-10000 (aggressive program)
+  // Score 120+: $10000+ (enterprise level)
+  
+  let estimatedMonthlyLow, estimatedMonthlyHigh, confidence;
+  
+  if (score >= 120) {
+    estimatedMonthlyLow = 10000; estimatedMonthlyHigh = 25000; confidence = 'high';
+  } else if (score >= 80) {
+    estimatedMonthlyLow = 5000; estimatedMonthlyHigh = 10000; confidence = 'high';
+  } else if (score >= 50) {
+    estimatedMonthlyLow = 2000; estimatedMonthlyHigh = 5000; confidence = 'medium';
+  } else if (score >= 20) {
+    estimatedMonthlyLow = 500; estimatedMonthlyHigh = 2000; confidence = 'medium';
+  } else {
+    estimatedMonthlyLow = 0; estimatedMonthlyHigh = 500; confidence = 'low';
+  }
+  
+  // Override if we have strong contradictory signals
+  if (dr === 0 && organicKws === 0 && providerTier === 'unknown') {
+    estimatedMonthlyLow = 0; estimatedMonthlyHigh = 0; confidence = 'none';
+    signals.push('No measurable SEO signals detected');
+  }
+  
+  return {
+    estimatedMonthlyLow,
+    estimatedMonthlyHigh,
+    confidence,
+    score,
+    signals: signals.slice(0, 6),
+    hasActiveProgram: estimatedMonthlyLow >= 500,
+    isMeasurable: dr > 0 || organicKws > 0 || refDomains > 0
+  };
+}
+
+/**
+ * Predict SEO quality/maturity based on measurable signals
+ * Returns a quality score and classification
+ */
+function predictSeoQuality(ahrefs = {}, audit = {}, seoProvider = {}) {
+  const dr = Number(ahrefs.domainRating) || 0;
+  const organicKws = Number(ahrefs.organicKeywords) || 0;
+  const paidKws = Number(ahrefs.paidKeywords) || 0;
+  const refDomains = Number(ahrefs.refdomains) || 0;
+  const traffic = Number(ahrefs.organicTraffic) || 0;
+  const seoGrade = Number(audit?.googleGrades?.seo) || 0;
+  
+  // Quality dimensions
+  const authorityScore = Math.min(100, dr * 1.5); // DR 0-100 scaled
+  const visibilityScore = Math.min(100, organicKws / 10); // 1000 keywords = 100 score
+  const technicalScore = seoGrade || (audit?.siteProfile?.seoSignals?.canonical ? 60 : 30);
+  const backlinkScore = Math.min(100, refDomains / 5); // 500 domains = 100 score
+  
+  // Overall quality score (weighted)
+  const overallQuality = Math.round(
+    (authorityScore * 0.25) +
+    (visibilityScore * 0.30) +
+    (technicalScore * 0.20) +
+    (backlinkScore * 0.25)
+  );
+  
+  // Classification
+  let classification, description;
+  if (overallQuality >= 75) {
+    classification = 'sophisticated';
+    description = 'Mature SEO program with strong authority and visibility';
+  } else if (overallQuality >= 55) {
+    classification = 'competent';
+    description = 'Active SEO program with decent fundamentals';
+  } else if (overallQuality >= 35) {
+    classification = 'basic';
+    description = 'Basic SEO presence, room for significant improvement';
+  } else if (overallQuality >= 15) {
+    classification = 'minimal';
+    description = 'Minimal SEO effort detected';
+  } else {
+    classification = 'none';
+    description = 'No measurable SEO program';
+  }
+  
+  // Is the SEO measurable/trackable?
+  const isMeasurable = dr > 0 || organicKws > 0 || traffic > 0;
+  const isActivelyManaged = seoProvider.classification === 'agency' || seoProvider.classification === 'pro' || organicKws > 200;
+  const hasRoomForImprovement = overallQuality < 70;
+  
+  return {
+    overallQuality,
+    classification,
+    description,
+    isMeasurable,
+    isActivelyManaged,
+    hasRoomForImprovement,
+    dimensions: {
+      authority: Math.round(authorityScore),
+      visibility: Math.round(visibilityScore),
+      technical: Math.round(technicalScore),
+      backlinks: Math.round(backlinkScore)
+    },
+    metrics: {
+      domainRating: dr,
+      organicKeywords: organicKws,
+      paidKeywords: paidKws,
+      referringDomains: refDomains,
+      organicTraffic: traffic
+    }
+  };
+}
+
+function buildAdvancedLeadInsights({ candidate = {}, scores = {}, leadScore = {}, contactInfo = {}, seoProvider = {}, ahrefs = {} } = {}) {
   const aiCallCompliance = getAiCallComplianceForState(candidate.state);
   const estimatedOpportunity = estimateOpportunityValue(candidate.industry, leadScore);
+  const estimatedSeoBudget = estimateSeoBudget(ahrefs, seoProvider, { googleGrades: scores, siteProfile: candidate.siteProfile });
+  const seoQuality = predictSeoQuality(ahrefs, { googleGrades: scores, siteProfile: candidate.siteProfile }, seoProvider);
   const canEmail = Boolean(contactInfo.hasEmail);
   const canCall = Boolean(contactInfo.hasPhone);
   const pipelineStage = leadScore.tier === 'hot' && canEmail && canCall
     ? 'email_then_ai_call_candidate'
     : (canEmail ? 'email_nurture' : (canCall ? 'manual_phone_research' : 'research_contact_info'));
-  const ideas = [
-    'Prioritize hot leads with weak audit scores, visible rankings, and no agency footprint.',
+  
+  // Generate contextual ideas based on SEO quality
+  const ideas = [];
+  if (seoQuality.classification === 'none' || seoQuality.classification === 'minimal') {
+    ideas.push('No active SEO detected - emphasize first-mover advantage in local search.');
+  } else if (seoQuality.classification === 'basic') {
+    ideas.push('Basic SEO present - highlight gaps in their current strategy.');
+  } else if (seoQuality.classification === 'competent') {
+    ideas.push('Active SEO program - focus on AI visibility and advanced optimizations they may be missing.');
+  } else {
+    ideas.push('Sophisticated SEO - focus on AI search and next-gen visibility gaps.');
+  }
+  
+  if (estimatedSeoBudget.hasActiveProgram) {
+    ideas.push(`Estimated ${estimatedSeoBudget.estimatedMonthlyLow > 0 ? '$' + estimatedSeoBudget.estimatedMonthlyLow + '/mo' : 'minimal'} SEO spend - use ROI framing.`);
+  } else {
+    ideas.push('No measurable SEO investment - emphasize opportunity cost.');
+  }
+  
+  ideas.push(
     'Send a short audit-result email first; only route replies/opt-ins to AI appointment-setting calls.',
-    'Use contact readiness to split email-first, call-ready, and research-needed queues.',
-    'Suppress agency-managed sites unless the audit score is weak enough to justify a replacement pitch.',
-    'Export hot/ready rows to your outbound platform and keep cold rows for retargeting.',
     'Use owner name and years-in-business fields to personalize first-line copy.',
     'Review all-party consent states before AI calls or recording/transcription.'
-  ];
+  );
+  
   return {
     aiCallCompliance,
     estimatedOpportunity,
+    estimatedSeoBudget,
+    seoQuality,
     pipelineStage,
     ideas,
     ahrefs: getAhrefsIntegrationStatus(),
@@ -382,7 +667,9 @@ function buildAdvancedLeadInsights({ candidate = {}, scores = {}, leadScore = {}
       aiCallCompliance.aiCallRisk === 'high' ? 'High call compliance risk: require explicit consent and disclosure.' : '',
       seoProvider.classification === 'agency' ? 'Agency footprint detected: harder close.' : '',
       !canEmail && !canCall ? 'No direct contact path found.' : '',
-      Number(scores.overall || 0) > 80 ? 'Strong audit score: lower pain angle.' : ''
+      Number(scores.overall || 0) > 80 ? 'Strong audit score: lower pain angle.' : '',
+      seoQuality.isActivelyManaged && seoQuality.overallQuality > 70 ? 'Well-managed SEO: needs sophisticated pitch angle.' : '',
+      !seoQuality.isMeasurable ? 'No measurable SEO data: focus on opportunity framing.' : ''
     ].filter(Boolean)
   };
 }
@@ -407,6 +694,18 @@ async function saveStore(store) {
   await fs.rename(tmp, file);
 }
 
+let storeWriteChain = Promise.resolve();
+
+/** Serialize lead-gen JSON mutations so concurrent API handlers cannot interleave read-modify-write. */
+function withStoreLock(fn) {
+  const next = storeWriteChain.then(() => fn());
+  storeWriteChain = next.then(
+    () => undefined,
+    () => undefined
+  );
+  return next;
+}
+
 function normalizeCandidate(candidate, context) {
   const domain = candidateKey(candidate);
   return {
@@ -426,6 +725,7 @@ function normalizeCandidate(candidate, context) {
       notes: '',
       ownerName: '',
       yearsInBusiness: '',
+      phone: '',
       seoProviderOverride: ''
     }
   };
@@ -464,11 +764,13 @@ async function createLeadGenRun(input = {}) {
       kept: 0
     }
   };
-  const store = await loadStore();
-  store.runs.unshift(run);
-  store.runs = store.runs.slice(0, 100);
-  await saveStore(store);
-  return run;
+  return withStoreLock(async () => {
+    const store = await loadStore();
+    store.runs.unshift(run);
+    store.runs = store.runs.slice(0, 100);
+    await saveStore(store);
+    return run;
+  });
 }
 
 async function getLeadGenRun(runId) {
@@ -477,15 +779,17 @@ async function getLeadGenRun(runId) {
 }
 
 async function updateLeadGenRun(runId, updater) {
-  const store = await loadStore();
-  const index = store.runs.findIndex((run) => run.id === runId);
-  if (index === -1) return null;
-  const next = updater({ ...store.runs[index] });
-  next.updatedAt = new Date().toISOString();
-  next.summary = summarizeRun(next);
-  store.runs[index] = next;
-  await saveStore(store);
-  return next;
+  return withStoreLock(async () => {
+    const store = await loadStore();
+    const index = store.runs.findIndex((run) => run.id === runId);
+    if (index === -1) return null;
+    const next = updater({ ...store.runs[index] });
+    next.updatedAt = new Date().toISOString();
+    next.summary = summarizeRun(next);
+    store.runs[index] = next;
+    await saveStore(store);
+    return next;
+  });
 }
 
 function summarizeRun(run) {
@@ -525,6 +829,7 @@ async function saveLeadGenDecision(runId, domain, decision = {}) {
         notes: normalizeString(decision.notes).slice(0, 5000),
         ownerName: normalizeString(decision.ownerName).slice(0, 200),
         yearsInBusiness: normalizeString(decision.yearsInBusiness).slice(0, 40),
+        phone: normalizeString(decision.phone).slice(0, 30),
         seoProviderOverride: normalizeString(decision.seoProviderOverride).slice(0, 80),
         updatedAt: new Date().toISOString()
       };
@@ -546,8 +851,11 @@ module.exports = {
   scoreLeadOpportunity,
   buildOutreachPlan,
   getAiCallComplianceForState,
+  listUsStatesForLeadGenUi,
   buildAdvancedLeadInsights,
   getAhrefsIntegrationStatus,
+  estimateSeoBudget,
+  predictSeoQuality,
   createLeadGenRun,
   getLeadGenRun,
   updateLeadGenRun,

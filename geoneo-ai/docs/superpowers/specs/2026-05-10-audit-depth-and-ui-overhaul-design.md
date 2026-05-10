@@ -137,14 +137,14 @@ Each panel becomes a structured layout instead of a wall of forms:
 
 `services/auditDeep.js` exposes one function:
 
-```
+```js
 runDeepAudit({ url, industry, city, state, useAhrefs = false, llmMatrix = false })
   → returns { sections: { technical, eeat, schema, images, sitemap, hreflang, geo, local, backlinks }, scores, fixes, fixCount, generatedAt }
 ```
 
 It fans out parallel `Promise.allSettled` calls to each sub-analyzer with per-section timeouts (8s default, configurable). Each sub-analyzer returns:
 
-```
+```js
 { score, status: 'pass' | 'warn' | 'fail', findings: [...], fixes: [...], evidence: [...] }
 ```
 

@@ -521,14 +521,16 @@ function generateSchemaForType(type, industry, facts = {}) {
       // mined from competitors, or we return null and the fix becomes
       // "extract these competitor FAQ topics and answer them in your voice."
       if (!Array.isArray(f.faqs) || !f.faqs.length) return null;
+      const mainEntity = f.faqs.map(faq => ({
+        '@type': 'Question',
+        name: String(faq.question || '').trim(),
+        acceptedAnswer: { '@type': 'Answer', text: String(faq.answer || '').trim() }
+      })).filter(q => q.name && q.acceptedAnswer.text);
+      if (!mainEntity.length) return null;
       return {
         '@context': 'https://schema.org',
         '@type': 'FAQPage',
-        mainEntity: f.faqs.map(faq => ({
-          '@type': 'Question',
-          name: String(faq.question || '').trim(),
-          acceptedAnswer: { '@type': 'Answer', text: String(faq.answer || '').trim() }
-        })).filter(q => q.name && q.acceptedAnswer.text)
+        mainEntity
       };
     }
     case 'Service':
@@ -590,7 +592,7 @@ function industryTypeFor(industry) {
     ['physician', 'Physician'], ['doctor', 'Physician'],
     ['chiropractor', 'Chiropractor'],
     ['optometrist', 'Optician'],
-    ['veterinarian', 'VeterinaryCare'], ['vet ', 'VeterinaryCare'],
+    ['veterinarian', 'VeterinaryCare'],
     ['pharmacy', 'Pharmacy'],
     // Food + hospitality
     ['restaurant', 'Restaurant'],
@@ -631,6 +633,7 @@ function industryTypeFor(industry) {
     ['attraction', 'TouristAttraction'],
     ['museum', 'Museum']
   ];
+  if (/\bvet\b/.test(ind) && !ind.includes('veteran')) return 'VeterinaryCare';
   for (const [k, v] of map) {
     if (ind.includes(k)) return v;
   }

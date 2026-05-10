@@ -851,7 +851,7 @@
         </div>
         <p id="leadGenStatus" style="color:var(--admin-accent);font-size:0.85rem;min-height:1.25rem;"></p>
         <div id="leadGenStats" class="grid"></div>
-        <pre id="leadGenOut" class="out" style="max-height:220px;">Discover candidates to begin.</pre>
+        <pre id="leadGenOut" class="out" style="max-height:220px;display:none;"></pre>
         <div id="leadGenResults"></div>
       </section>
 
@@ -1981,7 +1981,16 @@
         renderLeadGenStats(opts && opts.run ? opts.run : null, candidates || []);
         const visible = visibleLeadGenCandidates(candidates || []);
         if (!candidates || !candidates.length) {
-          host.innerHTML = '<p style="color:var(--admin-muted);">No candidates yet. Hit Discover to populate.</p>';
+          host.innerHTML = `
+            <div style="background:var(--admin-surface);border:1px solid var(--admin-line);border-radius:16px;padding:2.5rem 2rem;text-align:center;max-width:520px;margin:1.5rem auto;">
+              <div style="font-size:2.1rem;margin-bottom:0.6rem;">🔍</div>
+              <div style="font-weight:700;font-size:1.15rem;margin-bottom:0.35rem;">No candidates yet</div>
+              <p style="color:var(--admin-muted);font-size:0.93rem;line-height:1.5;margin-bottom:1.1rem;">
+                Select a vertical + state + city above, then click <strong>Discover candidates</strong>.<br>
+                You can also paste manual URLs in the optional box.
+              </p>
+              <div style="font-size:0.78rem;color:var(--admin-muted);">Results will render as clean cards with lead score, DR, keywords, and one-click actions.</div>
+            </div>`;
           return;
         }
         return renderLeadGenCards(visible, opts);
@@ -2334,7 +2343,9 @@
         body.candidates = leadGenCandidates;
         if (!body.industry || !body.state || !body.city) return showFlash('Select a vertical (or custom), state, and city.', false);
         const btn = document.getElementById('btnLeadGenRun');
+        const originalText = btn.textContent;
         btn.disabled = true;
+        btn.textContent = 'Starting…';
         document.getElementById('leadGenStatus').textContent = 'Starting deep audit batch…';
         try {
           const { res, data } = await postJson('/api/admin/lead-gen/runs', body);
@@ -2348,6 +2359,7 @@
           await pollLeadGenRun();
         } finally {
           btn.disabled = false;
+          btn.textContent = originalText;
         }
       };
 

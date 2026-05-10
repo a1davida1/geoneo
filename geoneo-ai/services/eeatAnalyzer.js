@@ -115,13 +115,13 @@ function analyzeEeat({ html, visibleText, finalUrl, businessFacts = {} }) {
   const trustPatterns = TRUST_PATTERNS.map(p => ({ ...p, score: p.name === 'https_present' ? () => isHttps ? 6 : 0 : p.score }));
 
   const dims = {
-    experience: evalPatternBlock(text, safeHtml, EXPERIENCE_PATTERNS),
-    expertise: evalPatternBlock(text, safeHtml, EXPERTISE_PATTERNS),
-    authoritativeness: evalPatternBlock(text, safeHtml, AUTHORITY_PATTERNS),
-    trust: evalPatternBlock(text, safeHtml, trustPatterns),
-    freshness: evalPatternBlock(text, safeHtml, FRESHNESS_PATTERNS),
-    attribution: evalPatternBlock(text, safeHtml, ATTRIBUTION_PATTERNS),
-    identity: evalPatternBlock(text, safeHtml, IDENTITY_PATTERNS),
+    experience: evalPatternBlock(text, safeHtml, EXPERIENCE_PATTERNS, ctx),
+    expertise: evalPatternBlock(text, safeHtml, EXPERTISE_PATTERNS, ctx),
+    authoritativeness: evalPatternBlock(text, safeHtml, AUTHORITY_PATTERNS, ctx),
+    trust: evalPatternBlock(text, safeHtml, trustPatterns, ctx),
+    freshness: evalPatternBlock(text, safeHtml, FRESHNESS_PATTERNS, ctx),
+    attribution: evalPatternBlock(text, safeHtml, ATTRIBUTION_PATTERNS, ctx),
+    identity: evalPatternBlock(text, safeHtml, IDENTITY_PATTERNS, ctx),
     contactAccessibility: scoreContactAccessibility(safeHtml, text)
   };
 
@@ -172,13 +172,19 @@ function buildEeatFixes(dims, facts) {
 
   if (dims.trust.score < 60) {
     if (!dims.trust.hits.includes('phone_visible')) {
+      const rawPhone = facts.phone != null ? String(facts.phone).trim() : '';
+      const hasPhone = Boolean(rawPhone);
       fixes.push({
         key: 'eeat-trust-add-phone',
         severity: 'high',
         title: 'Display a clickable phone number prominently',
-        detail: `Visitors who can\u2019t see a phone number above the fold often leave. Wrap the number in <a href="tel:..."> so mobile callers tap once.`,
-        copyPasteReady: true,
-        snippet: `<a href="tel:+1${(facts.phone || '4175550100').replace(/\D/g, '')}" class="phone-cta">Call ${facts.phone || '(417) 555-0100'}</a>`,
+        detail: hasPhone
+          ? 'Visitors who can\u2019t see a phone number above the fold often leave. Wrap the number in <a href="tel:..."> so mobile callers tap once.'
+          : 'Visitors who can\u2019t see a phone number above the fold often leave. Wrap your real business number in <a href="tel:..."> so mobile callers tap once. Replace YOUR_PHONE_NUMBER placeholders in the snippet with your actual digits before publishing.',
+        copyPasteReady: hasPhone,
+        snippet: hasPhone
+          ? `<a href="tel:+1${rawPhone.replace(/\D/g, '')}" class="phone-cta">Call ${rawPhone}</a>`
+          : '<a href="tel:+1YOUR_PHONE_NUMBER" class="phone-cta">Call YOUR_PHONE_NUMBER</a>',
         effortMinutes: 5
       });
     }
@@ -291,5 +297,7 @@ module.exports = {
   EXPERTISE_PATTERNS,
   AUTHORITY_PATTERNS,
   TRUST_PATTERNS,
-  FRESHNESS_PATTERNS
+  FRESHNESS_PATTERNS,
+  ATTRIBUTION_PATTERNS,
+  IDENTITY_PATTERNS
 };

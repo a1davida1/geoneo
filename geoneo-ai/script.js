@@ -87,6 +87,7 @@
 
   const marketBusinessName = document.getElementById('marketBusinessName');
   const marketIndustry = document.getElementById('marketIndustry');
+  const marketIndustryCustom = document.getElementById('marketIndustryCustom');
   const marketCity = document.getElementById('marketCity');
   const marketState = document.getElementById('marketState');
   const marketZip = document.getElementById('marketZip');
@@ -252,6 +253,66 @@
     selectEl.value = existing;
   }
 
+  /**
+   * Loads Census-backed city names for audit forms (depends on /api/geo/cities).
+   * Does not clear the text input; re-selects a matching preset option after load.
+   */
+  async function loadPublicCitiesForPreset(stateCode, cityPresetSelect, cityTextInput) {
+    if (!cityPresetSelect) return;
+    const code = String(stateCode || '').trim().toUpperCase();
+    const savedTyped = cityTextInput ? String(cityTextInput.value || '').trim() : '';
+    if (!code) {
+      cityPresetSelect.disabled = true;
+      cityPresetSelect.innerHTML = '<option value="">Select a state first…</option>';
+      return;
+    }
+    cityPresetSelect.disabled = false;
+    cityPresetSelect.innerHTML = '<option value="">Loading cities…</option>';
+    try {
+      const res = await fetch(`/api/geo/cities?state=${encodeURIComponent(code)}`);
+      let data = {};
+      try {
+        data = await res.json();
+      } catch {
+        data = {};
+      }
+      if (!res.ok || !data || !Array.isArray(data.cities) || !data.cities.length) {
+        cityPresetSelect.innerHTML =
+          '<option value="">List unavailable — type your city below</option>';
+        return;
+      }
+      const opts = [
+        '<option value="">Select city or type below…</option>',
+        ...data.cities.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`)
+      ];
+      cityPresetSelect.innerHTML = opts.join('');
+      if (savedTyped) {
+        const match = Array.from(cityPresetSelect.options).some((o) => o.value === savedTyped);
+        if (match) cityPresetSelect.value = savedTyped;
+      }
+    } catch {
+      cityPresetSelect.innerHTML =
+        '<option value="">Could not load — type your city below</option>';
+    }
+  }
+
+  function wireStateToCityPreset(stateSelect, cityPresetSelect, cityTextInput) {
+    if (!stateSelect || !cityPresetSelect || !cityTextInput) return;
+    cityPresetSelect.addEventListener('change', () => {
+      const v = String(cityPresetSelect.value || '').trim();
+      if (v) cityTextInput.value = v;
+    });
+    stateSelect.addEventListener('change', () => {
+      void loadPublicCitiesForPreset(stateSelect.value, cityPresetSelect, cityTextInput);
+    });
+    if (String(stateSelect.value || '').trim()) {
+      void loadPublicCitiesForPreset(stateSelect.value, cityPresetSelect, cityTextInput);
+    } else {
+      cityPresetSelect.disabled = true;
+      cityPresetSelect.innerHTML = '<option value="">Select a state first…</option>';
+    }
+  }
+
   function onScroll() {
     if (!header) return;
     header.classList.toggle('scrolled', window.scrollY > 10);
@@ -340,6 +401,113 @@
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
+  }
+
+  /** Prospect verticals: data/prospect-verticals.json via /api/geo/prospect-verticals */
+  async function fetchProspectVerticalGroupsPublic() {
+    try {
+      const res = await fetch('/api/geo/prospect-verticals');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data || !Array.isArray(data.groups)) return [];
+      return data.groups;
+    } catch {
+      return [];
+    }
+  }
+
+  function buildProspectVerticalSelectHtml(groups, mode) {
+    let html = '';
+    if (mode === 'optional') {
+      html += '<option value="">Optional — vertical</option>';
+    } else {
+      html += '<option value="" disabled selected>Select vertical…</option>';
+    }
+    (groups || []).forEach((g) => {
+      html += `<optgroup label="${escapeHtml(g.label)}">`;
+      (g.items || []).forEach((item) => {
+        html += `<option value="${escapeHtml(item.value)}">${escapeHtml(item.label)}</option>`;
+      });
+      html += '</optgroup>';
+    });
+    html += '<option value="__custom__">Custom (type below)…</option>';
+    return html;
+  }
+
+  function wireVerticalSelectPair(selectEl, customEl) {
+    if (!selectEl) return;
+    function sync() {
+      const show = selectEl.value === '__custom__';
+      if (customEl) {
+        customEl.style.display = show ? 'block' : 'none';
+        customEl.hidden = !show;
+        if (!show) customEl.value = '';
+      }
+    }
+    selectEl.addEventListener('change', sync);
+    sync();
+  }
+
+  function readVerticalSelectValue(selectEl, customEl) {
+    if (!selectEl) return '';
+    if (selectEl.value === '__custom__') {
+      return customEl ? String(customEl.value || '').trim() : '';
+    }
+    return String(selectEl.value || '').trim();
+  }
+
+  function applyVerticalRawToSelect(selectEl, customEl, raw) {
+    const t = String(raw || '').trim();
+    if (!t || !selectEl) return;
+    const opts = Array.from(selectEl.options);
+    const exact = opts.find((o) => o.value === t);
+    if (exact && exact.value !== '__custom__') {
+      selectEl.value = t;
+      if (customEl) customEl.value = '';
+    } else {
+      selectEl.value = '__custom__';
+      if (customEl) customEl.value = t;
+    }
+    if (customEl) {
+      const show = selectEl.value === '__custom__';
+      customEl.style.display = show ? 'block' : 'none';
+      customEl.hidden = !show;
+    }
+  }
+
+  async function initProspectVerticalDropdowns() {
+    const groups = await fetchProspectVerticalGroupsPublic();
+    const map = [
+      ['websiteIndustry', 'websiteIndustryCustom', 'optional'],
+      ['marketIndustry', 'marketIndustryCustom', 'required'],
+      ['bothIndustry', 'bothIndustryCustom', 'required']
+    ];
+    map.forEach(([sid, cid, mode]) => {
+      const s = document.getElementById(sid);
+      const c = document.getElementById(cid);
+      if (s && s.tagName === 'SELECT') {
+        s.innerHTML = buildProspectVerticalSelectHtml(groups, mode);
+        wireVerticalSelectPair(s, c);
+      }
+    });
+    const scanS = document.getElementById('scanIndustrySelect');
+    const scanC = document.getElementById('scanIndustryCustom');
+    if (scanS && scanS.tagName === 'SELECT') {
+      scanS.innerHTML = buildProspectVerticalSelectHtml(groups, 'optional');
+      wireVerticalSelectPair(scanS, scanC);
+    }
+  }
+
+  function attachHttpsPrefillToUrlInputs() {
+    document.querySelectorAll('input[name="url"]').forEach((inputEl) => {
+      inputEl.addEventListener('focus', function () {
+        if (!String(inputEl.value || '').trim()) {
+          inputEl.value = 'https://';
+          try {
+            inputEl.setSelectionRange(8, 8);
+          } catch (e) { /* ignore */ }
+        }
+      });
+    });
   }
 
   /** Allow only http(s) URLs for href to avoid javascript: and other schemes. */
@@ -1864,9 +2032,17 @@
         alert('Please provide your name, business name, and business email. These are required for free scans.');
         return;
       }
+      const siteUrl = normalizeWebsiteInput(String(formData.get('url') || ''));
+      if (!siteUrl || siteUrl === 'https://' || siteUrl === 'http://') {
+        alert('Please enter a valid website URL.');
+        return;
+      }
       await runQuery('website', {
-        url: String(formData.get('url') || '').trim(),
-        industry: String(formData.get('industry') || '').trim(),
+        url: siteUrl,
+        industry: readVerticalSelectValue(
+          document.getElementById('websiteIndustry'),
+          document.getElementById('websiteIndustryCustom')
+        ),
         city: String(formData.get('city') || '').trim(),
         state: String(formData.get('state') || '').trim(),
         zip: String(formData.get('zip') || '').trim(),
@@ -1881,9 +2057,14 @@
   if (marketForm) {
     marketForm.addEventListener('submit', async (event) => {
       event.preventDefault();
+      const industryVal = readVerticalSelectValue(marketIndustry, marketIndustryCustom);
+      if (!industryVal) {
+        alert('Please select an industry / vertical (or choose Custom and type one).');
+        return;
+      }
       await runQuery('market', {
         businessName: String(marketBusinessName?.value || '').trim(),
-        industry: String(marketIndustry?.value || '').trim(),
+        industry: industryVal,
         city: String(marketCity?.value || '').trim(),
         state: String(marketState?.value || '').trim(),
         zip: String(marketZip?.value || '').trim()
@@ -1904,9 +2085,22 @@
         alert('Please provide your name, business name, and business email to run the free scan. These are required so we can save your results and follow up.');
         return;
       }
+      const bothUrl = normalizeWebsiteInput(String(fd.get('url') || ''));
+      if (!bothUrl || bothUrl === 'https://' || bothUrl === 'http://') {
+        alert('Please enter a valid website URL.');
+        return;
+      }
+      const industryBoth = readVerticalSelectValue(
+        document.getElementById('bothIndustry'),
+        document.getElementById('bothIndustryCustom')
+      );
+      if (!industryBoth) {
+        alert('Please select an industry / vertical (or choose Custom and type one).');
+        return;
+      }
       await runQuery('website', {
-        url: String(fd.get('url') || '').trim(),
-        industry: String(fd.get('industry') || '').trim(),
+        url: bothUrl,
+        industry: industryBoth,
         city: String(fd.get('city') || '').trim(),
         state: String(fd.get('state') || '').trim(),
         zip: String(fd.get('zip') || '').trim(),
@@ -1922,15 +2116,13 @@
     finalCtaForm.addEventListener('submit', async (event) => {
       event.preventDefault();
       if (state.activeMode === 'market') {
-        const industryField = marketIndustry;
         const target = String(finalUrl?.value || '').trim();
-        if (industryField) {
-          industryField.value = target;
-        }
+        applyVerticalRawToSelect(marketIndustry, marketIndustryCustom, target);
         setMode('market');
+        const industryAfter = readVerticalSelectValue(marketIndustry, marketIndustryCustom);
         await runQuery('market', {
           businessName: String(marketBusinessName?.value || '').trim(),
-          industry: target,
+          industry: industryAfter,
           city: String(marketCity?.value || '').trim(),
           state: String(marketState?.value || '').trim(),
           zip: String(marketZip?.value || '').trim()
@@ -2016,11 +2208,49 @@
     });
   }
 
-  populateStateSelect(websiteState);
-  populateStateSelect(marketState);
-  const bothState = document.getElementById('bothState');
-  populateStateSelect(bothState);
-  setMode('website');
-  onScroll();
-  window.addEventListener('scroll', onScroll, { passive: true });
+  void (async function geoNeoBootstrap() {
+    await initProspectVerticalDropdowns();
+    attachHttpsPrefillToUrlInputs();
+
+    const scanFormEl = document.getElementById('scanForm');
+    if (scanFormEl) {
+      scanFormEl.addEventListener('submit', () => {
+        const hid = document.getElementById('scanIndustryHidden');
+        const sel = document.getElementById('scanIndustrySelect');
+        const cust = document.getElementById('scanIndustryCustom');
+        if (hid && sel) {
+          hid.value = readVerticalSelectValue(sel, cust);
+        }
+      });
+    }
+
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const indQ = (params.get('industry') || '').trim();
+      if (indQ) {
+        const bfi = document.getElementById('bothIndustry');
+        const bfc = document.getElementById('bothIndustryCustom');
+        if (bfi) {
+          applyVerticalRawToSelect(bfi, bfc, indQ);
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+
+    populateStateSelect(websiteState);
+    populateStateSelect(marketState);
+    const bothStateEl = document.getElementById('bothState');
+    populateStateSelect(bothStateEl);
+
+    const websiteCityPreset = document.getElementById('websiteCityPreset');
+    const websiteCityInput = document.getElementById('websiteCity');
+    wireStateToCityPreset(websiteState, websiteCityPreset, websiteCityInput);
+    wireStateToCityPreset(marketState, document.getElementById('marketCityPreset'), marketCity);
+    wireStateToCityPreset(bothStateEl, document.getElementById('bothCityPreset'), document.getElementById('bothCity'));
+
+    setMode('website');
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+  })();
 })();
