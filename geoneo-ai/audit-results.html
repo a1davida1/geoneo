@@ -123,6 +123,17 @@
     }
     .footer-note a { color: #38bdf8; }
 
+    .makeover-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 0; }
+    @media (max-width: 720px) { .makeover-grid { grid-template-columns: 1fr; } }
+    .makeover-side { display: flex; flex-direction: column; }
+    .makeover-label { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em; color: #64748b; text-transform: uppercase; margin-bottom: 0.5rem; }
+    .makeover-frame {
+      position: relative; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 12px;
+      overflow: hidden; aspect-ratio: 16 / 10;
+    }
+    .makeover-frame img, .makeover-frame svg { width: 100%; height: 100%; display: block; object-fit: cover; }
+    .makeover-frame .annotation-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+
     @media print {
       body { background: white; }
       .upgrade-cta { background: white !important; color: #0369a1; border: 2px solid #0369a1; }
@@ -187,6 +198,24 @@
         <div class="num" id="resDollarMonthly">$--</div>
         <div class="sub">per month in unconverted local search demand</div>
         <div class="annual" id="resDollarAnnual"></div>
+      </div>
+
+      <div class="findings-section" id="makeoverSection" style="display:none;">
+        <h2>Instant Makeover — your site vs. what good looks like</h2>
+        <p style="color:#475569;margin:0 0 1rem;font-size:0.95rem;">Your actual homepage (left) with audit-flagged issues marked, and a clean industry reference design (right) showing the structural moves that drive conversion + AI citation.</p>
+        <div class="makeover-grid">
+          <div class="makeover-side">
+            <div class="makeover-label">YOUR SITE NOW</div>
+            <div class="makeover-frame" id="makeoverBefore">
+              <div class="loading" style="padding:2rem;"><div class="spinner"></div><p style="margin:0;font-size:0.85rem;">Capturing your site…</p></div>
+            </div>
+          </div>
+          <div class="makeover-side">
+            <div class="makeover-label">REFERENCE DESIGN</div>
+            <div class="makeover-frame" id="makeoverAfter"></div>
+          </div>
+        </div>
+        <p id="makeoverNote" style="font-size:0.78rem;color:#64748b;margin-top:0.5rem;text-align:center;"></p>
       </div>
 
       <div class="findings-section">
@@ -307,6 +336,9 @@
         $('resCtaIncludes').innerHTML = '<li>Exact copy-paste fix code</li><li>Generated JSON-LD ready to ship</li><li>Generated llms.txt ready to ship</li><li>Implementation roadmap by week</li><li>2 months free Maintenance ($158 value)</li>';
       }
 
+      // Instant Makeover (async — kicks off after main render)
+      runInstantMakeover(prospect);
+
       // Section details
       const schema = audit.sections?.schema;
       if (schema) {
@@ -370,6 +402,36 @@
         $('loadingState').style.display = 'none';
         $('formCard').style.display = 'block';
         alert('Audit failed: ' + (err.message || 'unknown'));
+      }
+    }
+
+    async function runInstantMakeover(prospect) {
+      const section = $('makeoverSection');
+      section.style.display = 'block';
+      try {
+        const params = new URLSearchParams();
+        params.set('url', /^https?:\/\//i.test(prospect.url) ? prospect.url : 'https://' + prospect.url);
+        if (prospect.industry) params.set('industry', prospect.industry);
+        const r = await fetch('/api/instant-makeover?' + params.toString());
+        const data = await r.json();
+        if (!r.ok || !data.makeover) { $('makeoverBefore').innerHTML = '<div style="padding:2rem;text-align:center;color:#64748b;">Site capture unavailable.</div>'; return; }
+        const m = data.makeover;
+        const beforeImg = m.before?.desktop?.dataUrl;
+        const beforeFrame = $('makeoverBefore');
+        if (beforeImg) {
+          beforeFrame.innerHTML = '<img src="' + beforeImg + '" alt="Your site" />' +
+            '<div class="annotation-overlay">' + m.overlaySvgDesktop + '</div>';
+        } else {
+          beforeFrame.innerHTML = '<div style="padding:2rem;text-align:center;color:#64748b;">Could not capture your site (it may be blocking automated access).</div>';
+        }
+        const afterFrame = $('makeoverAfter');
+        afterFrame.innerHTML = m.referenceSvg;
+        const note = $('makeoverNote');
+        note.textContent = m.aiMockupAvailable
+          ? 'A personalized AI-generated mockup of YOUR business is available with the $199 Fix Plan.'
+          : 'Reference design is industry-tailored. Personalized mockup of your specific business available with paid plans.';
+      } catch (err) {
+        $('makeoverBefore').innerHTML = '<div style="padding:2rem;text-align:center;color:#64748b;">Makeover unavailable: ' + escapeHtml(err.message || '') + '</div>';
       }
     }
 

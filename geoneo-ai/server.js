@@ -40,6 +40,7 @@ const { authorizeInternalApi, authorizeInternalOrMember } = require('./services/
 const { loadAdminSummary } = require('./services/adminSummary');
 const { runDeepAudit, filterDeepAuditByTier } = require('./services/auditDeep');
 const { buildCloserSheet } = require('./services/closerSheet');
+const { buildInstantMakeover } = require('./services/instantMakeover');
 const { enrichDomainWithAhrefs } = require('./services/ahrefsClient');
 const {
   normalizeLeadGenQuantity,
@@ -2701,6 +2702,7 @@ async function runMarketOnlyAudit(input, { provider: injectedProvider } = {}) {
       localPresence: Number(item.localPresence || 0),
       conversionUx: Number(item.conversionUx || 0),
       aiVisibility: Number(item.aiVisibility || 0),
+      resultType: item.resultType || 'local_business',
       strengthScore
     };
   });
@@ -6740,6 +6742,43 @@ async function requestHandler(req, res) {
         sendJson(res, 500, { error: e.message || 'closer sheet failed' });
       }
     });
+    return;
+  }
+
+  // Instant Makeover — captures the prospect's homepage screenshot at desktop
+  // + mobile, returns annotated overlay (driven by audit findings) + the
+  // industry reference template SVG. AI mockup gated to OPENROUTER_API_KEY.
+  if (reqUrl.pathname === '/api/instant-makeover' && req.method === 'GET') {
+    try {
+      const url = (reqUrl.searchParams.get('url') || '').trim();
+      if (!url) { sendJson(res, 400, { error: 'url required' }); return; }
+      const target = safeUrl(url);
+      if (!target) { sendJson(res, 400, { error: 'invalid url' }); return; }
+      const industry = (reqUrl.searchParams.get('industry') || '').trim();
+
+      // Pull findings: either from passed audit_id or run a quick deep audit
+      let findings = [];
+      const auditId = reqUrl.searchParams.get('auditId');
+      if (auditId) {
+        const rec = await getAuditRecordById(auditId).catch(() => null);
+        findings = rec?.fullAuditResult?.findings || rec?.checks || [];
+      } else {
+        // Run a quick deep audit to drive annotations (uses cached page if recent)
+        const pageHtml = await fetchHtmlWithTimeout(target.href, 10000);
+        if (pageHtml) {
+          const deep = await runDeepAudit({
+            html: pageHtml, finalUrl: target.href, robotsTxt: '', llmsTxtContent: null,
+            industry, city: '', state: '', businessFacts: { url: target.href }
+          }).catch(() => null);
+          findings = deep?.findings || [];
+        }
+      }
+
+      const makeover = await buildInstantMakeover({ url: target.href, industry, findings });
+      sendJson(res, 200, { ok: true, makeover });
+    } catch (e) {
+      sendJson(res, 500, { error: e.message || 'instant makeover failed' });
+    }
     return;
   }
 
