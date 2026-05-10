@@ -154,13 +154,92 @@ function getPrimaryType(node) {
   return t;
 }
 
+// Per Schema.org spec: nested object fields must contain meaningful sub-fields,
+// not just be present. PostalAddress without addressLocality is useless.
+const NESTED_FIELD_REQUIREMENTS = {
+  address: ['streetAddress', 'addressLocality', 'addressRegion'],
+  geo: ['latitude', 'longitude'],
+  contactPoint: ['telephone'],
+  aggregateRating: ['ratingValue', 'reviewCount'],
+  review: ['author', 'reviewRating'],
+  offers: ['price', 'priceCurrency'],
+  brand: ['name'],
+  publisher: ['name'],
+  author: ['name'],
+  itemReviewed: ['name'],
+  reviewRating: ['ratingValue']
+};
+
 function fieldPresent(node, fieldName) {
   if (!node) return false;
   const v = node[fieldName];
   if (v === undefined || v === null || v === '') return false;
-  if (Array.isArray(v) && v.length === 0) return false;
-  if (typeof v === 'object' && Object.keys(v).length === 0) return false;
-  return true;
+  if (Array.isArray(v)) {
+    if (v.length === 0) return false;
+    // Array of objects: at least one must be substantive
+    if (typeof v[0] === 'object') return v.some(item => isSubstantiveObject(item, fieldName));
+    return true;
+  }
+  if (typeof v === 'object') {
+    if (Object.keys(v).length === 0) return false;
+    return isSubstantiveObject(v, fieldName);
+  }
+  // Scalar — also validate format for known fields
+  return isValidScalar(fieldName, v);
+}
+
+function isSubstantiveObject(obj, fieldName) {
+  if (!obj || typeof obj !== 'object') return false;
+  const required = NESTED_FIELD_REQUIREMENTS[fieldName];
+  if (!required) return Object.keys(obj).length > 1; // at minimum @type + something
+  return required.every(req => {
+    const val = obj[req];
+    if (val === undefined || val === null || val === '') return false;
+    // Recursively validate scalars within nested object (lat/lng range, etc.)
+    if (typeof val !== 'object') return isValidScalar(req, val);
+    return true;
+  });
+}
+
+function isValidScalar(fieldName, value) {
+  const str = String(value).trim();
+  if (!str) return false;
+  switch (fieldName) {
+    case 'telephone':
+      // E.164 or common US formats; reject obvious placeholders
+      return /[\d]/.test(str) && !/^(?:asdf|test|xxx|none|n\/a|tbd)/i.test(str) && (str.match(/\d/g) || []).length >= 7;
+    case 'url':
+    case 'image':
+    case 'logo':
+      try { new URL(str); return true; } catch { return false; }
+    case 'email':
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(str);
+    case 'latitude':
+    case 'longitude': {
+      const n = Number(str);
+      if (!Number.isFinite(n)) return false;
+      if (fieldName === 'latitude') return n >= -90 && n <= 90;
+      return n >= -180 && n <= 180;
+    }
+    case 'ratingValue': {
+      const n = Number(str);
+      return Number.isFinite(n) && n >= 0 && n <= 5;
+    }
+    case 'reviewCount': {
+      const n = Number(str);
+      return Number.isFinite(n) && n >= 0 && Number.isInteger(n);
+    }
+    case 'priceRange':
+      return /^[$£€¥₹]{1,4}$/.test(str) || /^\d+\s*[-–]\s*\d+/.test(str);
+    case 'datePublished':
+    case 'dateModified':
+    case 'startDate':
+    case 'endDate':
+    case 'foundingDate':
+      return !isNaN(Date.parse(str));
+    default:
+      return true;
+  }
 }
 
 /**
@@ -198,6 +277,43 @@ function validateNode(node) {
 }
 
 /**
+ * Detect microdata (itemscope itemtype="...") presence and types.
+ * Doesn't fully parse — just enumerates types found.
+ */
+function detectMicrodataTypes(html = '') {
+  const types = new Set();
+  const re = /itemtype=["']https?:\/\/schema\.org\/([A-Za-z]+)["']/g;
+  let m;
+  while ((m = re.exec(html)) !== null) types.add(m[1]);
+  return Array.from(types);
+}
+
+/**
+ * Detect RDFa schema typeof attributes.
+ */
+function detectRdfaTypes(html = '') {
+  const types = new Set();
+  const re = /typeof=["'](?:schema:)?([A-Za-z]+)["']/g;
+  let m;
+  while ((m = re.exec(html)) !== null) types.add(m[1]);
+  return Array.from(types);
+}
+
+/**
+ * Detect Open Graph + Twitter Card meta — schema-adjacent signals.
+ */
+function detectOpenGraph(html = '') {
+  const og = {};
+  const tw = {};
+  const ogRe = /<meta[^>]+property=["']og:([\w:]+)["'][^>]+content=["']([^"']*)["']/gi;
+  const twRe = /<meta[^>]+name=["']twitter:([\w:]+)["'][^>]+content=["']([^"']*)["']/gi;
+  let m;
+  while ((m = ogRe.exec(html)) !== null) og[m[1]] = m[2];
+  while ((m = twRe.exec(html)) !== null) tw[m[1]] = m[2];
+  return { og, twitter: tw, ogPresent: Object.keys(og).length > 0, twitterPresent: Object.keys(tw).length > 0 };
+}
+
+/**
  * Top-level analyzer. Extracts, flattens, validates every schema block.
  * Returns the consolidated schema audit for a page.
  */
@@ -207,6 +323,10 @@ function analyzeSchemas({ html, industry, businessFacts = {} }) {
   const allNodes = blocks
     .filter(b => b.parsed)
     .flatMap(b => flattenSchemaNodes(b.parsed));
+
+  const microdataTypes = detectMicrodataTypes(html || '');
+  const rdfaTypes = detectRdfaTypes(html || '');
+  const openGraph = detectOpenGraph(html || '');
 
   const validated = allNodes.map(validateNode);
   const presentTypes = new Set(validated.map(v => v.canonicalType).filter(Boolean));
@@ -248,6 +368,9 @@ function analyzeSchemas({ html, industry, businessFacts = {} }) {
     recommendedTypes,
     missingTypes,
     avgDepthScore: avgDepth,
+    microdataTypes,
+    rdfaTypes,
+    openGraph,
     fixes,
     evidence: blocks.slice(0, 6).map(b => ({ snippet: (b.raw || '').slice(0, 240), parsedOk: !b.parseError }))
   };
@@ -323,9 +446,11 @@ function buildSchemaFixes({ validated, missingTypes, parseErrors, industry, busi
  */
 function generateSchemaForType(type, industry, facts = {}) {
   const f = facts || {};
+  // FAQPage and BreadcrumbList have their own data sources (faqs / breadcrumbs).
+  // WebSite needs a URL but not full business basics.
+  const typesNotNeedingBusinessBasics = new Set(['BreadcrumbList', 'WebSite', 'FAQPage']);
   const hasBasics = f.businessName && (f.url || f.address || f.phone);
-  if (!hasBasics && type !== 'BreadcrumbList' && type !== 'WebSite') {
-    // Cannot generate without enough facts
+  if (!hasBasics && !typesNotNeedingBusinessBasics.has(type)) {
     return null;
   }
   switch (type) {
@@ -391,15 +516,19 @@ function generateSchemaForType(type, industry, facts = {}) {
         ]
       };
     case 'FAQPage': {
-      const faqs = Array.isArray(f.faqs) && f.faqs.length ? f.faqs : defaultFaqsForIndustry(industry, f);
+      // Refuse to generate junk. Real FAQ schema requires REAL Q&A content,
+      // not Mad Libs. Either we have extracted FAQ blocks from the page or
+      // mined from competitors, or we return null and the fix becomes
+      // "extract these competitor FAQ topics and answer them in your voice."
+      if (!Array.isArray(f.faqs) || !f.faqs.length) return null;
       return {
         '@context': 'https://schema.org',
         '@type': 'FAQPage',
-        mainEntity: faqs.map(faq => ({
+        mainEntity: f.faqs.map(faq => ({
           '@type': 'Question',
-          name: faq.question,
-          acceptedAnswer: { '@type': 'Answer', text: faq.answer }
-        }))
+          name: String(faq.question || '').trim(),
+          acceptedAnswer: { '@type': 'Answer', text: String(faq.answer || '').trim() }
+        })).filter(q => q.name && q.acceptedAnswer.text)
       };
     }
     case 'Service':
@@ -432,49 +561,85 @@ function generateSchemaForType(type, industry, facts = {}) {
 
 function industryTypeFor(industry) {
   const ind = String(industry || '').toLowerCase();
-  const map = {
-    plumber: 'Plumber', plumbing: 'Plumber',
-    electrician: 'Electrician', electrical: 'Electrician',
-    hvac: 'HVACBusiness', heating: 'HVACBusiness', cooling: 'HVACBusiness',
-    roofing: 'RoofingContractor', roofer: 'RoofingContractor',
-    contractor: 'GeneralContractor', construction: 'GeneralContractor', remodeling: 'GeneralContractor',
-    'pest control': 'PestControlBusiness', exterminator: 'PestControlBusiness',
-    attorney: 'Attorney', lawyer: 'Attorney',
-    dentist: 'Dentist', dental: 'Dentist',
-    physician: 'Physician', doctor: 'Physician',
-    restaurant: 'Restaurant',
-    hotel: 'Hotel', lodging: 'Hotel',
-    'real estate': 'RealEstateAgent', realtor: 'RealEstateAgent',
-    'tree service': 'LocalBusiness', arborist: 'LocalBusiness',
-    'garage door': 'LocalBusiness',
-    'auto body': 'AutoBodyShop', automotive: 'AutoRepair',
-    towing: 'LocalBusiness'
-  };
-  for (const [k, v] of Object.entries(map)) {
+  // Ordered: more specific keywords FIRST so "auto body" wins over "auto"
+  const map = [
+    // Home services
+    ['plumber', 'Plumber'], ['plumbing', 'Plumber'],
+    ['electrician', 'Electrician'], ['electrical', 'Electrician'],
+    ['hvac', 'HVACBusiness'], ['heating', 'HVACBusiness'], ['cooling', 'HVACBusiness'], ['air conditioning', 'HVACBusiness'],
+    ['roofing', 'RoofingContractor'], ['roofer', 'RoofingContractor'],
+    ['general contractor', 'GeneralContractor'], ['contractor', 'GeneralContractor'], ['construction', 'GeneralContractor'], ['remodeling', 'GeneralContractor'], ['remodeler', 'GeneralContractor'],
+    ['pest control', 'PestControlBusiness'], ['exterminator', 'PestControlBusiness'],
+    ['painting', 'HousePainter'], ['painter', 'HousePainter'],
+    ['locksmith', 'Locksmith'],
+    ['moving company', 'MovingCompany'], ['movers', 'MovingCompany'],
+    // Auto
+    ['auto body', 'AutoBodyShop'],
+    ['auto parts', 'AutoPartsStore'],
+    ['auto repair', 'AutoRepair'], ['mechanic', 'AutoRepair'],
+    ['gas station', 'GasStation'],
+    ['car wash', 'AutoWash'],
+    // Professional services
+    ['attorney', 'Attorney'], ['lawyer', 'Attorney'], ['legal', 'LegalService'],
+    ['accountant', 'AccountingService'], ['cpa', 'AccountingService'], ['bookkeeping', 'AccountingService'],
+    ['real estate agent', 'RealEstateAgent'], ['realtor', 'RealEstateAgent'], ['real estate', 'RealEstateAgent'],
+    ['insurance', 'InsuranceAgency'],
+    ['financial', 'FinancialService'],
+    // Medical
+    ['dentist', 'Dentist'], ['dental', 'Dentist'],
+    ['physician', 'Physician'], ['doctor', 'Physician'],
+    ['chiropractor', 'Chiropractor'],
+    ['optometrist', 'Optician'],
+    ['veterinarian', 'VeterinaryCare'], ['vet ', 'VeterinaryCare'],
+    ['pharmacy', 'Pharmacy'],
+    // Food + hospitality
+    ['restaurant', 'Restaurant'],
+    ['bar', 'BarOrPub'], ['pub', 'BarOrPub'],
+    ['cafe', 'CafeOrCoffeeShop'], ['coffee', 'CafeOrCoffeeShop'],
+    ['bakery', 'Bakery'],
+    ['hotel', 'Hotel'], ['lodging', 'Hotel'], ['inn ', 'Hotel'], ['motel', 'Motel'], ['resort', 'Resort'],
+    ['bed and breakfast', 'BedAndBreakfast'],
+    // Outdoor + recreation
+    ['tree service', 'LocalBusiness'], ['arborist', 'LocalBusiness'],
+    ['landscaping', 'LandscapingBusiness'], ['lawn', 'LandscapingBusiness'],
+    ['fishing guide', 'TouristAttraction'], ['fishing', 'TouristAttraction'],
+    ['hunting', 'TouristAttraction'],
+    ['marina', 'TouristAttraction'],
+    // Personal services
+    ['salon', 'BeautySalon'], ['barber', 'BarberShop'], ['spa', 'DaySpa'], ['nail salon', 'NailSalon'],
+    ['gym', 'ExerciseGym'], ['fitness', 'ExerciseGym'], ['yoga', 'ExerciseGym'],
+    ['daycare', 'ChildCare'], ['child care', 'ChildCare'], ['preschool', 'Preschool'],
+    ['cleaning', 'HomeAndConstructionBusiness'], ['janitorial', 'HomeAndConstructionBusiness'],
+    ['dry cleaner', 'DryCleaningOrLaundry'], ['laundromat', 'DryCleaningOrLaundry'],
+    // Retail
+    ['grocery', 'GroceryStore'],
+    ['hardware store', 'HardwareStore'],
+    ['furniture store', 'FurnitureStore'],
+    ['jewelry store', 'JewelryStore'],
+    ['clothing store', 'ClothingStore'],
+    ['shoe store', 'ShoeStore'],
+    ['bike shop', 'BikeStore'],
+    ['liquor store', 'LiquorStore'],
+    // Garage door / specialty home
+    ['garage door', 'HomeAndConstructionBusiness'],
+    ['restoration', 'HomeAndConstructionBusiness'], ['water damage', 'HomeAndConstructionBusiness'], ['mold remediation', 'HomeAndConstructionBusiness'],
+    // Towing / emergency
+    ['towing', 'AutomotiveBusiness'], ['recovery', 'AutomotiveBusiness'],
+    ['emergency service', 'EmergencyService'],
+    // Entertainment
+    ['theater', 'PerformingArtsTheater'], ['theatre', 'PerformingArtsTheater'],
+    ['attraction', 'TouristAttraction'],
+    ['museum', 'Museum']
+  ];
+  for (const [k, v] of map) {
     if (ind.includes(k)) return v;
   }
   return 'LocalBusiness';
 }
 
-function defaultFaqsForIndustry(industry, facts) {
-  const biz = facts.businessName || 'Our team';
-  const city = facts.city || 'your area';
-  const ind = String(industry || 'local services').toLowerCase();
-  return [
-    {
-      question: `What ${ind} services does ${biz} offer in ${city}?`,
-      answer: `${biz} offers ${ind} services to homes and businesses throughout ${city} and the surrounding area. Contact us for a free estimate and to discuss your specific project.`
-    },
-    {
-      question: `How quickly can ${biz} respond to ${ind} requests in ${city}?`,
-      answer: `${biz} responds to most ${ind} requests in ${city} within one business day. Same-day or emergency service is available for urgent situations — call directly to confirm availability.`
-    },
-    {
-      question: `Is ${biz} licensed and insured for ${ind} work?`,
-      answer: `Yes — ${biz} carries the licensing and insurance required for ${ind} work in our service area. Documentation is available on request.`
-    }
-  ];
-}
+// FAQ defaults removed. Real FAQ schema requires real Q&A content from the
+// page or mined from competitor FAQ blocks. Generic Mad Libs FAQs hurt the
+// brand and pattern-match as AI-generated to both readers and AI engines.
 
 function pruneUndefined(obj) {
   if (Array.isArray(obj)) return obj.map(pruneUndefined).filter(v => v !== undefined);

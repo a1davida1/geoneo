@@ -27,11 +27,19 @@ const EXPERTISE_PATTERNS = [
 ];
 
 const AUTHORITY_PATTERNS = [
-  { name: 'press_mentions', re: /\b(?:as\s+seen\s+on|featured\s+in|press|media|news\s+coverage)\b/i, weight: 8 },
-  { name: 'awards', re: /\b(?:award[- ]winning|best\s+of\s+(?:branson|springfield|joplin|fayetteville|the\s+ozarks)|top\s+rated|angie\s*'?s?\s+list\s+super\s+service|home\s*advisor\s+(?:elite|screened)|nextdoor\s+favorite)\b/i, weight: 12 },
-  { name: 'bbb_accredited', re: /\b(?:BBB|Better\s+Business\s+Bureau)[\s\S]{0,40}(?:accredited|A\+|A\s+rating)/i, weight: 10 },
-  { name: 'industry_membership', re: /\b(?:member\s+of|affiliated\s+with|partnered\s+with)\s+(?:the\s+)?[A-Z][A-Z\s&]+/i, weight: 6 },
-  { name: 'review_count', re: /(\d{2,5})\+?\s*(?:five[- ]star\s+)?(?:reviews?|ratings?|testimonials?)/i, weight: 8 }
+  { name: 'press_mentions', re: /\b(?:as\s+seen\s+(?:on|in)|featured\s+in|press(?:\s+coverage)?|media(?:\s+coverage)?|news\s+coverage|local\s+news|interviewed\s+(?:by|on))\b/i, weight: 8 },
+  // Generic award patterns — covers most legitimate local awards across industries
+  { name: 'awards_generic', re: /\b(?:award[- ]winning|award\s+winner|top[\s-]?rated|highest[\s-]rated|best[\s-]of[\s-]\w+|reader[\'\u2019]?s?\s+choice|critic[\'\u2019]?s?\s+choice|consumer[\'\u2019]?s?\s+choice|people[\'\u2019]?s?\s+choice|(?:gold|silver|bronze|platinum)\s+(?:medal|award)|(?:#1|number\s+one)\s+(?:rated|in)|(?:nominated|finalist|winner)\s+for|hall\s+of\s+fame)\b/i, weight: 10 },
+  // Platform-specific awards (Angie's, HomeAdvisor, Yelp, Google, Nextdoor, Thumbtack)
+  { name: 'platform_awards', re: /\b(?:angie\s*[\'\u2019]?s?\s+list\s+super\s+service|home\s*advisor\s+(?:elite|screened\s*&\s*approved|top\s+pro)|nextdoor\s+(?:favorite|neighborhood\s+favorite)|yelp\s+(?:elite|people[\'\u2019]?s?\s+love\s+us)|google\s+(?:guaranteed|screened|local\s+favorite)|thumbtack\s+top\s+pro|porch\s+vetted|trustpilot\s+(?:excellent|verified)|expertise\.com|three\s+best\s+rated|consumer\s+affairs\s+accredited)\b/i, weight: 8 },
+  // BBB accreditation
+  { name: 'bbb_accredited', re: /\b(?:BBB|Better\s+Business\s+Bureau)[\s\S]{0,80}(?:accredited|A\+|A\s+(?:rating|rated)|torch\s+award)/i, weight: 10 },
+  // Local "Best of [City]" — captures any city
+  { name: 'best_of_city', re: /\bbest\s+(?:of|in)\s+(?:[A-Za-z]+(?:\s+[A-Za-z]+)*|the\s+[A-Za-z]+s)\b/i, weight: 8 },
+  { name: 'industry_membership', re: /\b(?:member\s+of|affiliated\s+with|partnered\s+with|certified\s+by|accredited\s+by|registered\s+with)\s+(?:the\s+)?[A-Z][A-Z\s&]{2,}\b/, weight: 6 },
+  { name: 'review_count', re: /(\d{2,6})\+?\s*(?:verified\s+|five[- ]star\s+|5[- ]star\s+|happy\s+customer\s+)?(?:reviews?|ratings?|testimonials?|stars?)/i, weight: 8 },
+  { name: 'aggregate_rating_visible', re: /(?:rated\s+)?[4-5](?:\.[5-9])?\s*(?:out\s+of\s+5|\/\s*5|\u2605)/i, weight: 6 },
+  { name: 'years_award', re: /\b(?:since|established|in\s+business\s+for|serving\s+\w+\s+for)\s+(?:over\s+)?(?:1[5-9]|[2-9]\d|\d{3})\s*(?:\+\s*)?(?:years?|yrs?)/i, weight: 6 }
 ];
 
 const TRUST_PATTERNS = [
@@ -60,12 +68,15 @@ const ATTRIBUTION_PATTERNS = [
 ];
 
 const IDENTITY_PATTERNS = [
-  { name: 'owner_named_with_photo', re: /(?:owner|founder|president)[\s\S]{0,80}<img/i, weight: 8 },
-  { name: 'business_legal_name', re: /\b(?:LLC|Inc\.?|Corp\.?|Corporation|Co\.?|Company)\b/i, weight: 4 },
-  { name: 'license_number_shown', re: /\b(?:license\s*(?:#|no\.?|number)?\s*[:\-]?\s*[A-Z0-9\-]{4,})/i, weight: 8 }
+  { name: 'owner_named_with_photo', re: /(?:owner|founder|president|ceo)[\s\S]{0,120}<img/i, weight: 8 },
+  { name: 'business_legal_name', re: /\b(?:LLC|L\.L\.C\.|Inc\.?|Corp\.?|Corporation|Co\.?|Company|PLLC|P\.A\.|LLP)\b/, weight: 4 },
+  // License number formats: License #, Lic. #, LIC#, Lic No., Reg #, MO License XXXXX, state-prefix patterns
+  { name: 'license_number_shown', re: /\b(?:licen[sc]e|lic\.?|reg\.?|registration)\s*(?:no\.?|number|#|nbr\.?)?\s*[:\-]?\s*(?:[A-Z]{1,3}[\-\s]?)?[A-Z0-9\-]{4,15}\b/i, weight: 8 },
+  { name: 'state_license_callout', re: /\b(?:MO|AR|KS|OK|TX|CA|FL|NY|MI|IL|OH|GA|NC|VA|WA|CO|AZ|TN|IN|MA|MD|MN|WI|NJ|PA|AL|LA|KY|OR|SC|UT|NV|NM|MS|IA|NE|ID|HI|AK|VT|NH|ME|RI|DE|MT|ND|SD|WV|WY|CT|DC)[- ]?(?:state[- ]?)?(?:license|licensed|certified|registered|permit)/i, weight: 6 },
+  { name: 'ein_or_duns', re: /\b(?:EIN|D[\s\-]?U[\s\-]?N[\s\-]?S|tax\s+id)\s*[:\-]?\s*\d{2}[\s\-]?\d{4,}/i, weight: 4 }
 ];
 
-function evalPatternBlock(text, html, patterns) {
+function evalPatternBlock(text, html, patterns, ctx = {}) {
   let totalWeight = 0;
   let scored = 0;
   const hits = [];
@@ -77,13 +88,17 @@ function evalPatternBlock(text, html, patterns) {
       if (m) { matched = true; scored += (p.weight || 0); }
     }
     if (p.score) {
-      const s = p.score({ text, html, isHttps: undefined });
+      const s = p.score({ text, html, ...ctx });
       if (s > 0) { matched = true; scored += s; totalWeight += s; }
     }
     if (matched) hits.push(p.name);
   });
-  const score = totalWeight > 0 ? Math.round((scored / totalWeight) * 100) : 0;
-  return { score, hits, missingPatterns: patterns.filter(p => !hits.includes(p.name)).map(p => p.name) };
+  // Linear ratio undervalues rich pages that hit several strong signals but
+  // miss long-tail patterns. Apply a saturating curve: ratio^0.7 lifts mid
+  // range without inflating empty pages (0 stays 0).
+  const ratio = totalWeight > 0 ? scored / totalWeight : 0;
+  const score = Math.round(Math.pow(ratio, 0.7) * 100);
+  return { score, hits, scored, totalWeight, missingPatterns: patterns.filter(p => !hits.includes(p.name)).map(p => p.name) };
 }
 
 /**
@@ -193,9 +208,10 @@ function buildEeatFixes(dims, facts) {
     fixes.push({
       key: 'eeat-experience-add-years',
       severity: 'medium',
-      title: 'Add a "years in business / projects completed" stat strip',
-      detail: 'Three-stat strip near the hero ("12 yrs serving X / 1,400+ jobs / 5\u2605 across 200+ reviews") delivers experience signals search engines and AI engines parse and cite.',
+      title: 'Add a stat strip with your real years-in-business and project counts',
+      detail: 'Three-stat strip near the hero with YOUR real numbers (e.g., years serving the area, total jobs completed, review count). This delivers Experience signals that Google E-E-A-T and AI citation engines explicitly weight. Use only numbers you can prove — vague claims hurt trust.',
       copyPasteReady: false,
+      pattern: '<div class="trust-strip"><span>[X] years serving [city]</span><span>[Y]+ jobs completed</span><span>[Z] [average rating] across [count] reviews</span></div>',
       effortMinutes: 15
     });
   }
