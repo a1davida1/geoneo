@@ -14,6 +14,7 @@
  * - [x] Performance timeouts documented
  * - [x] All lints clean
  */
+try { require('dotenv').config(); } catch { /* dotenv optional in prod */ }
 const http = require('http');
 const https = require('https');
 const fs = require('fs');
@@ -37,6 +38,23 @@ const { buildCompetitorIntelligencePayload } = require('./services/competitorInt
 const { getTracker, upsertItem, deleteItem } = require('./services/fixTracker');
 const { authorizeInternalApi, authorizeInternalOrMember } = require('./services/apiAccess');
 const { loadAdminSummary } = require('./services/adminSummary');
+const { enrichDomainWithAhrefs } = require('./services/ahrefsClient');
+const {
+  normalizeLeadGenQuantity,
+  extractLeadGenCandidates,
+  assessSeoProvider,
+  extractContactInfo,
+  scoreLeadOpportunity,
+  buildOutreachPlan,
+  buildAdvancedLeadInsights,
+  getAhrefsIntegrationStatus,
+  createLeadGenRun,
+  getLeadGenRun,
+  updateLeadGenRun,
+  updateCandidateResult,
+  saveLeadGenDecision,
+  normalizeDomainToken: normalizeLeadGenDomain
+} = require('./services/leadGenBatch');
 
 const PORT = process.env.PORT || 4173;
 const HOST = process.env.HOST || '127.0.0.1';
@@ -5731,6 +5749,35 @@ function sendJson(res, statusCode, data) {
   res.end(JSON.stringify(data));
 }
 
+function readJsonRequestBody(req, maxBytes = 1024 * 1024) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    req.on('data', (chunk) => {
+      size += chunk.length;
+      if (size > maxBytes) {
+        reject(new Error('request_body_too_large'));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => {
+      const raw = Buffer.concat(chunks).toString('utf8').trim();
+      if (!raw) {
+        resolve({});
+        return;
+      }
+      try {
+        resolve(JSON.parse(raw));
+      } catch {
+        reject(new Error('invalid_json_body'));
+      }
+    });
+    req.on('error', reject);
+  });
+}
+
 function sendApiForbidden(res) {
   sendJson(res, 403, {
     error: 'forbidden',
@@ -5760,6 +5807,182 @@ function jsonAdminNoAudit(domain) {
         ? '. Diagnose: GET /api/admin/audits/debug?domain=' + encodeURIComponent(raw) + ' (internal auth).'
         : '.')
   };
+}
+
+async function runLeadGenBatch(runId) {
+  const queued = await getLeadGenRun(runId);
+  if (!queued) return;
+  await updateLeadGenRun(runId, (run) => ({ ...run, status: 'running', startedAt: run.startedAt || new Date().toISOString() }));
+
+  for (const candidate of queued.candidates || []) {
+    const domain = normalizeLeadGenDomain(candidate.domain || candidate.website);
+    if (!domain) continue;
+    await updateCandidateResult(runId, domain, { status: 'running', startedAt: new Date().toISOString(), error: '' });
+
+    try {
+      const createdAt = new Date().toISOString();
+      const auditId = makeAuditId({
+        company: candidate.businessName || domain,
+        website: candidate.website,
+        createdAt
+      });
+      const result = await runAudit(candidate.website, {
+        auditId,
+        industry: candidate.industry,
+        businessName: candidate.businessName,
+        city: candidate.city,
+        state: candidate.state,
+        zip: candidate.zip,
+        market: [candidate.city, candidate.state, candidate.zip].filter(Boolean).join(', '),
+        auditMode: 'business'
+      });
+      const filteredResult = filterAuditResultByPackage(result, 'admin');
+      const record = buildAuditRecord({
+        contactName: '',
+        businessName: candidate.businessName,
+        businessEmail: '',
+        phone: '',
+        industry: candidate.industry,
+        city: candidate.city,
+        state: candidate.state,
+        zip: candidate.zip,
+        website: candidate.website,
+        market: [candidate.city, candidate.state, candidate.zip].filter(Boolean).join(', '),
+        auditMode: 'business',
+        createdAt,
+        auditId,
+        auditResult: result,
+        purchasedPackage: 'admin',
+        amountPaid: 0,
+        customerResult: filteredResult
+      });
+      const saveResult = await saveAuditRecord(record);
+      const score = calculateVisibilityScore(buildVisibilityScoreInputFromAudit(record));
+      await recordScore(domainKeyFromAuditRecord(record), score);
+      const seoProvider = assessSeoProvider({
+        pageTitle: result?.siteProfile?.title,
+        visibleText: [
+          result?.siteProfile?.title,
+          result?.siteProfile?.metaDescription,
+          result?.siteProfile?.h1
+        ].filter(Boolean).join(' '),
+        auditResult: result
+      });
+      const contactInfo = extractContactInfo({
+        auditResult: result,
+        text: [
+          result?.siteProfile?.title,
+          result?.siteProfile?.metaDescription,
+          result?.siteProfile?.h1,
+          candidate.website
+        ].filter(Boolean).join(' ')
+      });
+      const leadScore = scoreLeadOpportunity({
+        candidate,
+        scores: result.scores || {},
+        contactInfo,
+        seoProvider
+      });
+      const outreachPlan = buildOutreachPlan({
+        candidate,
+        scores: result.scores || {},
+        contactInfo,
+        seoProvider,
+        leadScore
+      });
+      const advancedInsights = buildAdvancedLeadInsights({
+        candidate,
+        scores: result.scores || {},
+        contactInfo,
+        seoProvider,
+        leadScore
+      });
+      const latestRun = await getLeadGenRun(runId);
+      const ahrefs = await enrichDomainWithAhrefs(domain, {
+        enabled: Boolean(latestRun && latestRun.useAhrefs)
+      });
+      await updateCandidateResult(runId, domain, {
+        status: 'complete',
+        completedAt: new Date().toISOString(),
+        auditId: saveResult.auditId || auditId,
+        saved: Boolean(saveResult.saved),
+        saveError: saveResult.error || '',
+        reportPath: buildReportLinks(saveResult.auditId || auditId).reportPath,
+        scores: result.scores || {},
+        visibilityScore: score,
+        seoProvider,
+        contactInfo,
+        leadScore,
+        outreachPlan,
+        advancedInsights,
+        ahrefs
+      });
+    } catch (error) {
+      await updateCandidateResult(runId, domain, {
+        status: 'failed',
+        completedAt: new Date().toISOString(),
+        error: error && error.message ? error.message : 'lead_gen_audit_failed'
+      });
+    }
+  }
+
+  await updateLeadGenRun(runId, (run) => ({ ...run, status: 'complete', completedAt: new Date().toISOString() }));
+}
+
+const BRANSON_BATCH_FALLBACK_CANDIDATES = [
+  { website: 'thebransonhotel.com', businessName: 'The Branson Hotel', industry: 'hotel', city: 'Branson', state: 'MO' },
+  { website: 'thebradford.net', businessName: 'The Bradford', industry: 'hotel', city: 'Branson', state: 'MO' },
+  { website: 'theozarkerlodge.com', businessName: 'The Ozarker Lodge', industry: 'hotel', city: 'Branson', state: 'MO' },
+  { website: 'grottoresort.com', businessName: 'Grotto Resort', industry: 'hotel', city: 'Branson', state: 'MO' },
+  { website: 'bransoncarriagehouseinn.com', businessName: 'Branson Carriage House Inn', industry: 'hotel', city: 'Branson', state: 'MO' },
+  { website: 'greengablesinnbranson.com', businessName: 'Green Gables Inn Branson', industry: 'hotel', city: 'Branson', state: 'MO' },
+  { website: 'bransonsbest.com', businessName: "Branson's Best", industry: 'hotel', city: 'Branson', state: 'MO' },
+  { website: 'myerhospitality.com', businessName: 'Myer Hospitality', industry: 'hotel', city: 'Branson', state: 'MO' },
+  { website: 'angelinnbranson.com', businessName: 'Angel Inn Branson', industry: 'hotel', city: 'Branson', state: 'MO' },
+  { website: 'gazeboinn.com', businessName: 'Gazebo Inn', industry: 'hotel', city: 'Branson', state: 'MO' },
+  { website: 'bransonuptown.com', businessName: 'Branson Uptown', industry: 'restaurant', city: 'Branson', state: 'MO' },
+  { website: 'localflavorbranson.com', businessName: 'Local Flavor Branson', industry: 'restaurant', city: 'Branson', state: 'MO' },
+  { website: 'billygailsrestaurant.com', businessName: "Billy Gail's Restaurant", industry: 'restaurant', city: 'Branson', state: 'MO' },
+  { website: 'blackoakgrill.com', businessName: 'Black Oak Grill', industry: 'restaurant', city: 'Branson', state: 'MO' },
+  { website: 'ssdockside.com', businessName: 'SS Dockside', industry: 'restaurant', city: 'Branson', state: 'MO' },
+  { website: 'guysbranson.com', businessName: 'Guys Branson', industry: 'restaurant', city: 'Branson', state: 'MO' },
+  { website: 'branson.landsharkbarandgrill.com', businessName: 'LandShark Bar and Grill Branson', industry: 'restaurant', city: 'Branson', state: 'MO' },
+  { website: 'bransonsbestrestaurants.com', businessName: "Branson's Best Restaurants", industry: 'restaurant', city: 'Branson', state: 'MO' },
+  { website: 'dinebranson.com', businessName: 'Dine Branson', industry: 'restaurant', city: 'Branson', state: 'MO' },
+  { website: 'farmhouserestaurantbranson.com', businessName: 'Farmhouse Restaurant Branson', industry: 'restaurant', city: 'Branson', state: 'MO' },
+  { website: 'chrisstowingrecovery.com', businessName: "Chris's Towing Recovery", industry: 'towing', city: 'Branson', state: 'MO' },
+  { website: 'schraderstowingmo.com', businessName: "Schrader's Towing", industry: 'towing', city: 'Branson', state: 'MO' },
+  { website: 'daveysautobody.com', businessName: "Davey's Auto Body", industry: 'towing', city: 'Branson', state: 'MO' },
+  { website: 'crawfordsautomotiveandtowing.com', businessName: "Crawford's Automotive and Towing", industry: 'towing', city: 'Branson', state: 'MO' },
+  { website: 'anchorroadside.com', businessName: 'Anchor Roadside', industry: 'towing', city: 'Branson', state: 'MO' },
+  { website: 'rpmrecovery.com', businessName: 'RPM Recovery', industry: 'towing', city: 'Branson', state: 'MO' },
+  { website: 'servicewisetowing.com', businessName: 'Service Wise Towing', industry: 'towing', city: 'Branson', state: 'MO' },
+  { website: 'mohneystowinginc.net', businessName: "Mohney's Towing", industry: 'towing', city: 'Branson', state: 'MO' }
+];
+
+function fallbackLeadGenCandidates({ industry, city, state, quantity }) {
+  const cleanIndustry = normalizeString(industry).toLowerCase();
+  const cleanCity = normalizeString(city).toLowerCase();
+  const cleanState = normalizeString(state).toLowerCase();
+  if (cleanCity !== 'branson' || (cleanState && cleanState !== 'mo')) return [];
+  const aliases = cleanIndustry === 'lodging' ? ['hotel'] : (cleanIndustry === 'restaurants' ? ['restaurant'] : [cleanIndustry]);
+  return BRANSON_BATCH_FALLBACK_CANDIDATES
+    .filter((candidate) => aliases.some((alias) => normalizeString(candidate.industry).toLowerCase().includes(alias) || alias.includes(normalizeString(candidate.industry).toLowerCase())))
+    .slice(0, normalizeLeadGenQuantity(quantity))
+    .map((candidate, index) => ({
+      id: normalizeLeadGenDomain(candidate.website),
+      domain: normalizeLeadGenDomain(candidate.website),
+      website: /^https?:\/\//i.test(candidate.website) ? candidate.website : `https://${candidate.website}`,
+      businessName: candidate.businessName,
+      industry: candidate.industry,
+      city: candidate.city,
+      state: candidate.state,
+      source: 'branson_batch_fallback',
+      sourceRank: index + 1,
+      confidence: 100,
+      resultType: 'local_business',
+      notes: 'Recovered from committed Branson batch audit candidate list.'
+    }));
 }
 
 function buildAdminLeadsHtml(records, pipeline = {}, paidLeads = []) {
@@ -6174,6 +6397,30 @@ async function requestHandler(req, res) {
     return;
   }
 
+  if (reqUrl.pathname === '/api/admin/login' && req.method === 'POST') {
+    let raw = '';
+    req.on('data', (c) => { raw += c; if (raw.length > 4096) req.destroy(); });
+    req.on('end', () => {
+      try {
+        const body = raw ? JSON.parse(raw) : {};
+        const provided = String((body && body.password) || '').trim();
+        const expected = String(process.env.GEONEO_INTERNAL_API_SECRET || '').trim();
+        if (!expected) {
+          sendJson(res, 503, { ok: false, error: 'login_unavailable', detail: 'Set GEONEO_INTERNAL_API_SECRET to enable remote admin login.' });
+          return;
+        }
+        if (!provided || provided !== expected) {
+          sendJson(res, 401, { ok: false, error: 'invalid_password' });
+          return;
+        }
+        sendJson(res, 200, { ok: true, token: expected, hint: 'Save this value as the Bearer token in Mission Control sidebar.' });
+      } catch (e) {
+        sendJson(res, 400, { ok: false, error: 'bad_request', detail: e.message });
+      }
+    });
+    return;
+  }
+
   if (reqUrl.pathname === '/api/admin/summary' && req.method === 'GET') {
     if (!authorizeInternalApi(req)) {
       sendApiForbidden(res);
@@ -6242,6 +6489,179 @@ async function requestHandler(req, res) {
       });
     } catch (e) {
       sendJson(res, 500, { ok: false, operator: true, error: e.message || 'audit debug failed' });
+    }
+    return;
+  }
+
+  if (reqUrl.pathname === '/api/admin/lead-gen/discover' && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) {
+      sendApiForbidden(res);
+      return;
+    }
+    try {
+      const body = await readJsonRequestBody(req);
+      const quantity = normalizeLeadGenQuantity(body.quantity);
+      const marketModel = await runMarketOnlyAudit({
+        industry: body.industry,
+        businessName: body.businessName,
+        city: body.city,
+        state: body.state,
+        zip: body.zip
+      });
+      let discovered = extractLeadGenCandidates(marketModel, {
+        quantity,
+        industry: body.industry,
+        city: body.city,
+        state: body.state,
+        zip: body.zip
+      });
+      if (!discovered.length) {
+        discovered = fallbackLeadGenCandidates({
+          industry: body.industry,
+          city: body.city,
+          state: body.state,
+          quantity
+        });
+      }
+      const manual = Array.isArray(body.manualCandidates)
+        ? body.manualCandidates.map((candidate) => ({
+            website: candidate.website || candidate.url || candidate.domain,
+            domain: normalizeLeadGenDomain(candidate.domain || candidate.website || candidate.url),
+            businessName: normalizeString(candidate.businessName || candidate.companyName || candidate.name),
+            industry: normalizeString(candidate.industry || body.industry),
+            city: normalizeString(candidate.city || body.city),
+            state: normalizeString(candidate.state || body.state),
+            zip: normalizeString(candidate.zip || body.zip),
+            source: 'manual'
+          })).filter((candidate) => candidate.domain)
+        : [];
+      const seen = new Set();
+      const candidates = [...manual, ...discovered]
+        .filter((candidate) => {
+          const key = normalizeLeadGenDomain(candidate.domain || candidate.website);
+          if (!key || seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        })
+        .slice(0, quantity);
+      sendJson(res, 200, {
+        ok: true,
+        quantity,
+        candidates,
+        market: {
+          dataQuality: marketModel.dataQuality,
+          sourceNote: marketModel.sourceNote,
+          summaryScores: marketModel.summaryScores,
+          overview: marketModel.industryAnalysis && marketModel.industryAnalysis.overview
+        }
+      });
+    } catch (error) {
+      sendJson(res, 500, { ok: false, error: error.message || 'lead_gen_discovery_failed' });
+    }
+    return;
+  }
+
+  if (reqUrl.pathname === '/api/admin/lead-gen/ahrefs/status' && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) {
+      sendApiForbidden(res);
+      return;
+    }
+    sendJson(res, 200, { ok: true, ahrefs: getAhrefsIntegrationStatus() });
+    return;
+  }
+
+  if (reqUrl.pathname === '/api/admin/lead-gen/runs' && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) {
+      sendApiForbidden(res);
+      return;
+    }
+    try {
+      const body = await readJsonRequestBody(req);
+      const quantity = normalizeLeadGenQuantity(body.quantity);
+      let candidates = Array.isArray(body.candidates) ? body.candidates : [];
+      if (!candidates.length) {
+        const marketModel = await runMarketOnlyAudit({
+          industry: body.industry,
+          businessName: body.businessName,
+          city: body.city,
+          state: body.state,
+          zip: body.zip
+        });
+        candidates = extractLeadGenCandidates(marketModel, {
+          quantity,
+          industry: body.industry,
+          city: body.city,
+          state: body.state,
+          zip: body.zip
+        });
+        if (!candidates.length) {
+          candidates = fallbackLeadGenCandidates({
+            industry: body.industry,
+            city: body.city,
+            state: body.state,
+            quantity
+          });
+        }
+      }
+      const run = await createLeadGenRun({
+        industry: body.industry,
+        city: body.city,
+        state: body.state,
+        zip: body.zip,
+        useAhrefs: Boolean(body.useAhrefs),
+        quantity,
+        candidates
+      });
+      setImmediate(() => {
+        runLeadGenBatch(run.id).catch((error) => {
+          console.error('[lead-gen] batch run failed', error && error.message ? error.message : error);
+          updateLeadGenRun(run.id, (current) => ({ ...current, status: 'failed', error: error && error.message ? error.message : 'lead_gen_run_failed' })).catch(() => {});
+        });
+      });
+      sendJson(res, 202, { ok: true, run });
+    } catch (error) {
+      sendJson(res, 500, { ok: false, error: error.message || 'lead_gen_run_start_failed' });
+    }
+    return;
+  }
+
+  if (/^\/api\/admin\/lead-gen\/runs\/[^/]+$/.test(reqUrl.pathname) && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) {
+      sendApiForbidden(res);
+      return;
+    }
+    const runId = decodeURIComponent(reqUrl.pathname.split('/').pop());
+    const run = await getLeadGenRun(runId);
+    if (!run) {
+      sendJson(res, 404, { ok: false, error: 'lead_gen_run_not_found' });
+      return;
+    }
+    sendJson(res, 200, { ok: true, run });
+    return;
+  }
+
+  if (/^\/api\/admin\/lead-gen\/runs\/[^/]+\/decision$/.test(reqUrl.pathname) && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) {
+      sendApiForbidden(res);
+      return;
+    }
+    try {
+      const parts = reqUrl.pathname.split('/');
+      const runId = decodeURIComponent(parts[5]);
+      const body = await readJsonRequestBody(req);
+      const domain = normalizeLeadGenDomain(body.domain || body.website);
+      if (!domain) {
+        sendJson(res, 400, { ok: false, error: 'missing_domain' });
+        return;
+      }
+      const decision = await saveLeadGenDecision(runId, domain, body);
+      if (!decision) {
+        sendJson(res, 404, { ok: false, error: 'lead_gen_candidate_not_found' });
+        return;
+      }
+      sendJson(res, 200, { ok: true, decision });
+    } catch (error) {
+      sendJson(res, 500, { ok: false, error: error.message || 'lead_gen_decision_failed' });
     }
     return;
   }

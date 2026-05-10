@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>GeoNeo Admin</title>
+  <title>GeoNeo Mission Control</title>
   <link rel="stylesheet" href="/styles.css" />
   <style>
     :root {
@@ -261,20 +261,69 @@
       margin-top: 0.75rem;
       max-height: 360px;
     }
+    .leadgen-table-wrap {
+      overflow: auto;
+      border: 1px solid var(--admin-line);
+      border-radius: 12px;
+      background: var(--admin-surface);
+      margin-top: 1rem;
+    }
+    table.leadgen-table {
+      width: 100%;
+      min-width: 1180px;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+    }
+    table.leadgen-table th,
+    table.leadgen-table td {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--admin-line);
+      text-align: left;
+      vertical-align: top;
+    }
+    table.leadgen-table th { color: var(--admin-muted); font-weight: 600; }
+    .leadgen-status {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.14);
+      color: var(--admin-muted);
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .leadgen-status.complete { background: rgba(74, 222, 128, 0.14); color: #bbf7d0; }
+    .leadgen-status.failed { background: rgba(248, 113, 113, 0.14); color: #fecaca; }
+    .leadgen-status.running { background: rgba(56, 189, 248, 0.14); color: #bae6fd; }
+    .leadgen-status.hot { background: rgba(248, 113, 113, 0.18); color: #fecaca; }
+    .leadgen-status.warm { background: rgba(251, 191, 36, 0.16); color: #fde68a; }
+    .leadgen-status.cold { background: rgba(148, 163, 184, 0.14); color: #cbd5e1; }
+    .leadgen-small-input, .leadgen-note {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid var(--admin-line);
+      border-radius: 8px;
+      background: var(--admin-bg);
+      color: var(--admin-text);
+      padding: 6px 8px;
+      font-size: 0.75rem;
+    }
+    .leadgen-note { min-height: 54px; resize: vertical; }
   </style>
 </head>
 <body>
   <div class="admin-shell">
     <aside>
-      <h1>GeoNeo Admin</h1>
-      <div class="sub">Operator shell · same auth as APIs</div>
+      <h1>Mission Control</h1>
+      <div class="sub">Operator console · loopback or bearer auth</div>
       <nav id="nav">
-        <a href="#overview" data-panel="overview">Overview</a>
-        <a href="#inspector" data-panel="inspector" class="active">Site check</a>
-        <a href="#tools" data-panel="tools">More tools</a>
-        <a href="#leads" data-panel="leads">Leads</a>
-        <a href="#operations" data-panel="operations">Weekly scoring</a>
-        <a href="#public" data-panel="public">Public pages</a>
+        <a href="#overview" data-panel="overview">Command Center</a>
+        <a href="#inspector" data-panel="inspector" class="active">Quick Audit</a>
+        <a href="#tools" data-panel="tools">Operator Toolbox</a>
+        <a href="#leadgen" data-panel="leadgen">Prospect Hunter</a>
+        <a href="#leads" data-panel="leads">Lead Pipeline</a>
+        <a href="#operations" data-panel="operations">Visibility Engine</a>
+        <a href="#public" data-panel="public">Customer Surfaces</a>
       </nav>
       <div class="token-box">
         <label for="bearer">Remote: Bearer token<br />(stores in localStorage)</label>
@@ -287,9 +336,9 @@
       <div id="flash"></div>
 
       <section id="panel-overview" class="panel">
-        <h2>Overview</h2>
+        <h2>Command Center</h2>
         <p style="color:var(--admin-muted);font-size:0.9rem;max-width:52rem;">
-          Open <strong>Site check</strong> for the normal workflow (one URL, one button). Use <strong>More tools</strong> for market audits, HTML reports, Neo Club, POSTs, and other endpoints.
+          Live snapshot of audit volume, pipeline, weekly scoring health, and the email outbox. For a single URL: <strong>Quick Audit</strong>. For market discovery + bulk: <strong>Prospect Hunter</strong>. For raw API access: <strong>Operator Toolbox</strong>.
         </p>
         <div class="btn-row">
           <button type="button" id="btnRefreshSummary">Refresh snapshot</button>
@@ -305,7 +354,7 @@
       </section>
 
       <section id="panel-inspector" class="panel active">
-        <h2>Site check</h2>
+        <h2>Quick Audit</h2>
         <p style="color:var(--admin-muted);font-size:0.9rem;max-width:40rem;line-height:1.45;margin:0 0 1rem;">
           Paste a URL → one run saves the audit (if the server can write) and loads your score. Remote host: sidebar token.
         </p>
@@ -377,13 +426,13 @@
       </section>
 
       <section id="panel-tools" class="panel">
-        <h2>More tools</h2>
+        <h2>Operator Toolbox</h2>
         <p style="color:var(--admin-muted);font-size:0.9rem;max-width:52rem;">
-          Everyday URL checks: use <strong>Site check</strong>. This page is for HTML reports, citation fixer, Neo Club JSON, fix-tracker POST, pipeline, leads, and <strong>advanced audit</strong> (market / free-tier fields).
+          Raw API access: HTML reports, citation fixer, Neo Club JSON, fix-tracker POST, pipeline stage updates, lead inserts, and <strong>advanced audit</strong> (market / free-tier fields). For everyday URL checks use <strong>Quick Audit</strong>.
         </p>
 
         <h3 class="tools-section">Advanced audit — <code>GET /api/audit</code></h3>
-        <p style="font-size:0.8rem;color:var(--admin-muted);">Use for <strong>market</strong> mode, <strong>free</strong> package (needs contact fields), or extra parameters. Normal HTTPS sites: <strong>Site check</strong>.</p>
+        <p style="font-size:0.8rem;color:var(--admin-muted);">Use for <strong>market</strong> mode, <strong>free</strong> package (needs contact fields), or extra parameters. Normal HTTPS sites: <strong>Quick Audit</strong>.</p>
         <div class="btn-row" style="flex-direction:column;align-items:stretch;max-width:52rem;">
           <label><span style="font-size:0.75rem;color:var(--admin-muted);">Website URL</span><br />
             <input id="auditUrl" class="inline-text" style="width:100%;" type="text" placeholder="https://example.com" />
@@ -506,17 +555,88 @@
       </section>
 
       <section id="panel-leads" class="panel">
-        <h2>Leads</h2>
-        <p style="color:var(--admin-muted);font-size:0.9rem;">Loads <code>/admin/leads</code> with your saved Bearer token so pipeline saves work when not on localhost.</p>
+        <h2>Lead Pipeline</h2>
+        <p style="color:var(--admin-muted);font-size:0.9rem;">Inbound leads from public audit forms, sortable by priority and pipeline stage. Loads <code>/admin/leads</code> with your saved Bearer token so pipeline saves work when not on localhost.</p>
         <p id="leadsLoadHint" style="font-size:0.8rem;color:var(--admin-accent);min-height:1.2em;"></p>
         <iframe class="leads-frame" title="Leads" id="leadsFrame"></iframe>
       </section>
 
+      <section id="panel-leadgen" class="panel">
+        <h2>Prospect Hunter</h2>
+        <p style="color:var(--admin-muted);font-size:0.9rem;max-width:56rem;">
+          Pick a vertical + city → discover the ranking businesses → deep-audit them in bulk → tag winners with owner, years-in-business, notes, and SEO provider attribution. Optional Ahrefs enrichment for backlink and authority signals. Export to CSV when ready to outreach.
+        </p>
+        <div class="btn-row" style="align-items:flex-end;max-width:64rem;">
+          <label style="flex:1;min-width:180px;">
+            <span style="font-size:0.75rem;color:var(--admin-muted);">Industry / vertical</span>
+            <input id="leadGenIndustry" class="inline-text" style="width:100%;margin-top:4px;" type="text" placeholder="hotel, plumber, restaurant" />
+          </label>
+          <label style="flex:1;min-width:140px;">
+            <span style="font-size:0.75rem;color:var(--admin-muted);">City</span>
+            <input id="leadGenCity" class="inline-text" style="width:100%;margin-top:4px;" type="text" placeholder="Branson" />
+          </label>
+          <label style="width:110px;">
+            <span style="font-size:0.75rem;color:var(--admin-muted);">State</span>
+            <input id="leadGenState" class="inline-text" style="width:100%;margin-top:4px;" type="text" placeholder="MO" />
+          </label>
+          <label style="width:110px;">
+            <span style="font-size:0.75rem;color:var(--admin-muted);">Quantity</span>
+            <input id="leadGenQuantity" class="inline-text" style="width:100%;margin-top:4px;" type="number" min="1" max="250" value="100" />
+          </label>
+        </div>
+        <div class="btn-row" style="align-items:center;">
+          <label style="display:flex;align-items:center;gap:8px;color:var(--admin-muted);font-size:0.85rem;">
+            <input type="checkbox" id="leadGenUseAhrefs" />
+            <span>Use Ahrefs if configured (optional paid API units)</span>
+          </label>
+          <button type="button" id="btnLeadGenAhrefsStatus">Check Ahrefs status</button>
+          <span id="leadGenAhrefsStatus" style="font-size:0.8rem;color:var(--admin-muted);"></span>
+        </div>
+        <details class="advanced" style="max-width:64rem;">
+          <summary>Optional manual URLs (one per line)</summary>
+          <p style="font-size:0.8rem;color:var(--admin-muted);">Manual URLs are included first, then auto-discovered candidates fill the remaining quantity.</p>
+          <textarea id="leadGenManual" class="catalog" placeholder="https://example.com&#10;competitor.com"></textarea>
+        </details>
+        <div class="btn-row">
+          <button type="button" id="btnLeadGenDiscover">Discover candidates</button>
+          <button type="button" class="primary" id="btnLeadGenRun">Run deep audits</button>
+          <button type="button" id="btnLeadGenRefresh" disabled>Refresh run</button>
+          <button type="button" id="btnLeadGenExport" disabled>Export CSV</button>
+        </div>
+        <div class="btn-row" style="align-items:flex-end;">
+          <label>
+            <span style="font-size:0.75rem;color:var(--admin-muted);">Filter</span><br>
+            <select id="leadGenFilter" class="inline-text" style="padding:10px;">
+              <option value="all">All</option>
+              <option value="hot">Hot</option>
+              <option value="ready_for_ai_call">Ready for AI call</option>
+              <option value="kept">Kept</option>
+              <option value="complete">Complete</option>
+              <option value="failed">Failed</option>
+            </select>
+          </label>
+          <label>
+            <span style="font-size:0.75rem;color:var(--admin-muted);">Sort</span><br>
+            <select id="leadGenSort" class="inline-text" style="padding:10px;">
+              <option value="score_desc">Lead score high to low</option>
+              <option value="audit_asc">Weakest audit first</option>
+              <option value="rank_asc">Search rank first</option>
+              <option value="name_asc">Business name A-Z</option>
+            </select>
+          </label>
+        </div>
+        <p id="leadGenStatus" style="color:var(--admin-accent);font-size:0.85rem;min-height:1.25rem;"></p>
+        <div id="leadGenStats" class="grid"></div>
+        <pre id="leadGenOut" class="out" style="max-height:220px;">Discover candidates to begin.</pre>
+        <div id="leadGenResults"></div>
+      </section>
+
       <section id="panel-operations" class="panel">
-        <h2>Weekly visibility scoring</h2>
-        <p style="color:var(--admin-muted);font-size:0.9rem;">
-          Dry run computes eligible domains and simulates scoring without writing scores or sending email.
-          Live run persists scores and may enqueue/send weekly emails per domain (production behavior).
+        <h2>Visibility Engine</h2>
+        <p style="color:var(--admin-muted);font-size:0.9rem;max-width:56rem;">
+          Continuous Visibility Scoring — node-cron weekly job (Mondays 03:00 server time) that re-scores every eligible paid member.
+          <strong>Dry run</strong> computes eligible domains and simulates scoring without writing or emailing.
+          <strong>Live run</strong> persists scores and may enqueue/send weekly emails per domain (production behavior).
         </p>
         <div class="btn-row">
           <button type="button" class="primary" id="btnDryRun">Dry run weekly job</button>
@@ -526,10 +646,9 @@
       </section>
 
       <section id="panel-public" class="panel">
-        <h2>Public marketing &amp; customer pages</h2>
+        <h2>Customer-Facing Pages</h2>
         <p style="color:var(--admin-muted);font-size:0.9rem;max-width:52rem;">
-          These are <strong>not</strong> operator tools. They use normal lead capture, package tiers, and member gating (same as production visitors).
-          Use <strong>Site check</strong> for operator score JSON without setup. Public links below are the real customer HTML flows (gating applies).
+          The real customer HTML flows — normal lead capture, package tiers, and member gating apply (same as production visitors). For operator score JSON without lead capture, use <strong>Quick Audit</strong>.
         </p>
         <p class="links">
           <a href="/website-audit.html" target="_blank" rel="noopener">Website audit</a>
@@ -886,7 +1005,7 @@
             showFlash('404 — ' + String(data.hint), false);
           } else {
             const detail = (data && (data.error || data.message)) ? String(data.error || data.message) + ' ' : '';
-            showFlash('404 — ' + detail + 'Run Site check first or use Debug lookup.', false);
+            showFlash('404 — ' + detail + 'Run Quick Audit first or use Debug lookup.', false);
           }
         }
         if (res.status === 403 && data && data.error === 'membership_required') {
@@ -910,7 +1029,7 @@
         } else if (res.ok && data && data.matchCount > 0) {
           showFlash('Found ' + data.matchCount + ' audit(s) for this root. GET buttons should work.', true);
         } else if (res.ok && data && data.totalRecords === 0) {
-          showFlash('Audit file empty — run Site check or set GEONEO_AUDITS_PATH.', false);
+          showFlash('Audit file empty — run Quick Audit or set GEONEO_AUDITS_PATH.', false);
         }
       };
 
@@ -1268,6 +1387,281 @@
         writeCatalogResult(res, data);
         if (res.ok) showFlash('Lead saved.', true);
       };
+
+      let leadGenCandidates = [];
+      let leadGenRunId = '';
+      let leadGenPollTimer = null;
+      let leadGenCurrentRun = null;
+
+      function leadGenPayload() {
+        const manualCandidates = document.getElementById('leadGenManual').value
+          .split(/\n+/)
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .map((website) => ({ website, source: 'manual' }));
+        return {
+          industry: document.getElementById('leadGenIndustry').value.trim(),
+          city: document.getElementById('leadGenCity').value.trim(),
+          state: document.getElementById('leadGenState').value.trim(),
+          quantity: Number(document.getElementById('leadGenQuantity').value || 25),
+          useAhrefs: document.getElementById('leadGenUseAhrefs').checked,
+          manualCandidates
+        };
+      }
+
+      function renderLeadGenStats(run, candidates) {
+        const host = document.getElementById('leadGenStats');
+        const rows = [
+          ['Total', candidates.length, ''],
+          ['Hot', candidates.filter((c) => c.leadScore && c.leadScore.tier === 'hot').length, 'Best first'],
+          ['Ready calls', candidates.filter((c) => c.outreachPlan && c.outreachPlan.callReadiness === 'ready_for_ai_call').length, 'Email replies → AI call'],
+          ['Kept', candidates.filter((c) => c.decision && c.decision.keep).length, 'Saved picks'],
+          ['Complete', candidates.filter((c) => c.status === 'complete').length, 'Deep audited'],
+          ['Failed', candidates.filter((c) => c.status === 'failed').length, 'Needs retry']
+        ];
+        host.innerHTML = rows.map(([label, value, hint]) => `<div class="stat"><div class="label">${escapeHtml(label)}</div><div class="value">${escapeHtml(value)}</div>${hint ? `<div class="hint">${escapeHtml(hint)}</div>` : ''}</div>`).join('');
+      }
+
+      function visibleLeadGenCandidates(candidates) {
+        const filter = document.getElementById('leadGenFilter').value;
+        const sort = document.getElementById('leadGenSort').value;
+        let rows = candidates.slice();
+        if (filter === 'hot') rows = rows.filter((c) => c.leadScore && c.leadScore.tier === 'hot');
+        if (filter === 'ready_for_ai_call') rows = rows.filter((c) => c.outreachPlan && c.outreachPlan.callReadiness === 'ready_for_ai_call');
+        if (filter === 'kept') rows = rows.filter((c) => c.decision && c.decision.keep);
+        if (filter === 'complete') rows = rows.filter((c) => c.status === 'complete');
+        if (filter === 'failed') rows = rows.filter((c) => c.status === 'failed');
+        rows.sort((a, b) => {
+          if (sort === 'audit_asc') return Number(a.scores?.overall || 999) - Number(b.scores?.overall || 999);
+          if (sort === 'rank_asc') return Number(a.sourceRank || 999) - Number(b.sourceRank || 999);
+          if (sort === 'name_asc') return String(a.businessName || '').localeCompare(String(b.businessName || ''));
+          return Number(b.leadScore?.score || 0) - Number(a.leadScore?.score || 0);
+        });
+        return rows;
+      }
+
+      function renderLeadGenTable(candidates, opts) {
+        const host = document.getElementById('leadGenResults');
+        renderLeadGenStats(opts && opts.run ? opts.run : null, candidates || []);
+        const visible = visibleLeadGenCandidates(candidates || []);
+        if (!candidates || !candidates.length) {
+          host.innerHTML = '<p style="color:var(--admin-muted);">No candidates yet.</p>';
+          return;
+        }
+        const rows = visible.map((c) => {
+          const decision = c.decision || {};
+          const seo = c.seoProvider || {};
+          const lead = c.leadScore || {};
+          const contact = c.contactInfo || {};
+          const outreach = c.outreachPlan || {};
+          const advanced = c.advancedInsights || {};
+          const compliance = advanced.aiCallCompliance || {};
+          const value = advanced.estimatedOpportunity || {};
+          const ahrefs = c.ahrefs || {};
+          const score = c.scores && c.scores.overall != null ? c.scores.overall : (c.visibilityScore && c.visibilityScore.overall != null ? c.visibilityScore.overall : '—');
+          const report = c.reportPath ? `<a href="${escapeHtml(c.reportPath)}" target="_blank" rel="noopener" style="color:var(--admin-accent);">Report</a>` : '—';
+          return `<tr data-domain="${escapeHtml(c.domain || '')}">
+            <td><input type="checkbox" class="leadgen-keep" ${decision.keep ? 'checked' : ''}></td>
+            <td>
+              <strong>${escapeHtml(c.businessName || c.domain || '')}</strong><br>
+              <a href="${escapeHtml(c.website || '')}" target="_blank" rel="noopener" style="color:var(--admin-accent);">${escapeHtml(c.domain || c.website || '')}</a><br>
+              <span style="color:var(--admin-muted);">Rank ${escapeHtml(c.sourceRank || '—')} · ${escapeHtml(c.source || '')}</span>
+            </td>
+            <td><span class="leadgen-status ${escapeHtml(c.status || 'pending')}">${escapeHtml(c.status || 'pending')}</span><br>${c.error ? `<span style="color:#fecaca;">${escapeHtml(c.error)}</span>` : ''}</td>
+            <td>
+              <strong>${escapeHtml(lead.score != null ? lead.score : '—')}</strong><br>
+              <span class="leadgen-status ${escapeHtml(lead.tier || '')}">${escapeHtml(lead.tier || 'unscored')}</span>
+              ${(lead.reasons || []).slice(0, 2).map((reason) => `<div style="color:var(--admin-muted);font-size:0.72rem;">${escapeHtml(reason)}</div>`).join('')}
+            </td>
+            <td>${escapeHtml(score)}</td>
+            <td>
+              ${contact.score != null ? `${escapeHtml(contact.score)}/100` : '—'}<br>
+              <span style="color:var(--admin-muted);">${escapeHtml(contact.bestChannel || 'research_needed')}</span>
+              ${(contact.emails || []).slice(0, 1).map((x) => `<div>${escapeHtml(x)}</div>`).join('')}
+              ${(contact.phones || []).slice(0, 1).map((x) => `<div>${escapeHtml(x)}</div>`).join('')}
+            </td>
+            <td>
+              <strong>${escapeHtml(seo.classification || 'unknown')}</strong><br>
+              <span style="color:var(--admin-muted);">${escapeHtml(seo.confidence || 'low')}</span>
+              ${(seo.evidence || []).slice(0, 2).map((e) => `<div style="color:var(--admin-muted);font-size:0.72rem;">${escapeHtml(e)}</div>`).join('')}
+            </td>
+            <td>
+              <strong>${escapeHtml(outreach.callReadiness || '—')}</strong><br>
+              <span style="color:var(--admin-muted);">${escapeHtml(outreach.nextBestAction || '')}</span>
+            </td>
+            <td>
+              <strong>${escapeHtml(compliance.aiCallRisk || '—')}</strong><br>
+              <span style="color:var(--admin-muted);">${escapeHtml(compliance.recordingConsent || '')}</span>
+            </td>
+            <td>
+              ${value.high ? `$${escapeHtml(value.low)}-$${escapeHtml(value.high)}` : '—'}<br>
+              <span style="color:var(--admin-muted);">${escapeHtml(advanced.pipelineStage || '')}</span>
+            </td>
+            <td>
+              ${ahrefs.domainRating != null ? `DR ${escapeHtml(ahrefs.domainRating)}` : (ahrefs.skipped ? 'Skipped' : '—')}<br>
+              <span style="color:var(--admin-muted);">${ahrefs.refdomains != null ? `${escapeHtml(ahrefs.refdomains)} refs` : ''}${ahrefs.backlinks != null ? ` · ${escapeHtml(ahrefs.backlinks)} links` : ''}</span>
+              ${ahrefs.partial ? '<div style="color:#fde68a;font-size:0.72rem;">partial</div>' : ''}
+            </td>
+            <td><input class="leadgen-small-input leadgen-owner" value="${escapeHtml(decision.ownerName || '')}" placeholder="Owner"></td>
+            <td><input class="leadgen-small-input leadgen-years" value="${escapeHtml(decision.yearsInBusiness || '')}" placeholder="Years"></td>
+            <td><input class="leadgen-small-input leadgen-tags" value="${escapeHtml((decision.tags || []).join(', '))}" placeholder="keeper, call"></td>
+            <td>
+              <select class="leadgen-small-input leadgen-seo-override">
+                ${['', 'diy_local', 'pro', 'agency', 'unknown'].map((v) => `<option value="${v}" ${decision.seoProviderOverride === v ? 'selected' : ''}>${v || 'auto'}</option>`).join('')}
+              </select>
+            </td>
+            <td><textarea class="leadgen-note leadgen-notes" placeholder="Notes">${escapeHtml(decision.notes || '')}</textarea></td>
+            <td>${report}<br><button type="button" class="leadgen-save" style="margin-top:6px;padding:6px 10px;font-size:0.75rem;">Save</button></td>
+          </tr>`;
+        }).join('');
+        host.innerHTML = `<div class="leadgen-table-wrap"><table class="leadgen-table">
+          <thead><tr><th>Keep</th><th>Business</th><th>Status</th><th>Lead</th><th>Audit</th><th>Contact</th><th>SEO owner</th><th>Next action</th><th>AI call law</th><th>Value</th><th>Ahrefs</th><th>Owner</th><th>Years</th><th>Tags</th><th>Override</th><th>Notes</th><th>Actions</th></tr></thead>
+          <tbody>${rows || '<tr><td colspan="17">No rows match this filter.</td></tr>'}</tbody>
+        </table></div>`;
+        if (opts && opts.raw) {
+          document.getElementById('leadGenOut').textContent = JSON.stringify(opts.raw, null, 2);
+        }
+      }
+
+      async function pollLeadGenRun() {
+        if (!leadGenRunId) return;
+        const { res, data } = await fetchJson('/api/admin/lead-gen/runs/' + encodeURIComponent(leadGenRunId));
+        if (!res.ok || !data.run) {
+          document.getElementById('leadGenStatus').textContent = 'Could not load run.';
+          return;
+        }
+        const run = data.run;
+        leadGenCurrentRun = run;
+        document.getElementById('leadGenStatus').textContent =
+          `Run ${run.id}: ${run.status} · ${run.summary.completed}/${run.summary.total} complete · ${run.summary.failed} failed · ${run.summary.kept} kept · ${run.summary.hot || 0} hot · ${run.summary.readyForCall || 0} ready for AI call`;
+        renderLeadGenTable(run.candidates || [], { raw: run, run });
+        document.getElementById('btnLeadGenRefresh').disabled = false;
+        document.getElementById('btnLeadGenExport').disabled = !(run.candidates || []).length;
+        if (run.status === 'running' || run.status === 'queued') {
+          clearTimeout(leadGenPollTimer);
+          leadGenPollTimer = setTimeout(pollLeadGenRun, 2500);
+        }
+      }
+
+      document.getElementById('btnLeadGenDiscover').onclick = async function () {
+        const body = leadGenPayload();
+        if (!body.industry || !body.city) return showFlash('Enter industry and city.', false);
+        const btn = document.getElementById('btnLeadGenDiscover');
+        btn.disabled = true;
+        document.getElementById('leadGenStatus').textContent = 'Discovering candidates…';
+        try {
+          const { res, data } = await postJson('/api/admin/lead-gen/discover', body);
+          if (!res.ok) {
+            document.getElementById('leadGenOut').textContent = JSON.stringify(data, null, 2);
+            showFlash('Lead-gen discovery failed.', false);
+            return;
+          }
+          leadGenCandidates = data.candidates || [];
+          document.getElementById('leadGenStatus').textContent = `Found ${leadGenCandidates.length} candidate(s). Review/edit, then run deep audits.`;
+          renderLeadGenTable(leadGenCandidates, { raw: data });
+        } finally {
+          btn.disabled = false;
+        }
+      };
+
+      document.getElementById('btnLeadGenRun').onclick = async function () {
+        const body = leadGenPayload();
+        body.candidates = leadGenCandidates;
+        if (!body.industry || !body.city) return showFlash('Enter industry and city.', false);
+        const btn = document.getElementById('btnLeadGenRun');
+        btn.disabled = true;
+        document.getElementById('leadGenStatus').textContent = 'Starting deep audit batch…';
+        try {
+          const { res, data } = await postJson('/api/admin/lead-gen/runs', body);
+          document.getElementById('leadGenOut').textContent = JSON.stringify(data, null, 2);
+          if (!res.ok || !data.run) {
+            showFlash('Could not start lead-gen batch.', false);
+            return;
+          }
+          leadGenRunId = data.run.id;
+          showFlash('Prospect Hunter batch started.', true);
+          await pollLeadGenRun();
+        } finally {
+          btn.disabled = false;
+        }
+      };
+
+      document.getElementById('btnLeadGenRefresh').onclick = pollLeadGenRun;
+      document.getElementById('btnLeadGenAhrefsStatus').onclick = async function () {
+        const { res, data } = await fetchJson('/api/admin/lead-gen/ahrefs/status');
+        const el = document.getElementById('leadGenAhrefsStatus');
+        if (!res.ok) {
+          el.textContent = 'Ahrefs status unavailable.';
+          showFlash('Could not read Ahrefs status.', false);
+          return;
+        }
+        el.textContent = data.ahrefs.configured
+          ? 'Ahrefs configured via AHREFS_API_KEY. Paid calls remain opt-in.'
+          : 'Ahrefs not configured. Set AHREFS_API_KEY to enable optional enrichment.';
+      };
+      document.getElementById('leadGenFilter').onchange = function () {
+        renderLeadGenTable((leadGenCurrentRun && leadGenCurrentRun.candidates) || leadGenCandidates, { run: leadGenCurrentRun });
+      };
+      document.getElementById('leadGenSort').onchange = function () {
+        renderLeadGenTable((leadGenCurrentRun && leadGenCurrentRun.candidates) || leadGenCandidates, { run: leadGenCurrentRun });
+      };
+      document.getElementById('btnLeadGenExport').onclick = function () {
+        const rows = visibleLeadGenCandidates((leadGenCurrentRun && leadGenCurrentRun.candidates) || leadGenCandidates);
+        const headers = ['businessName', 'domain', 'website', 'status', 'leadScore', 'leadTier', 'auditScore', 'contactScore', 'bestChannel', 'seoOwner', 'callReadiness', 'emailSubject', 'emailOpening', 'aiCallRisk', 'recordingConsent', 'estimatedHighValue', 'pipelineStage', 'ahrefsDomainRating', 'ahrefsRefdomains', 'ahrefsBacklinks', 'keep', 'tags', 'ownerName', 'yearsInBusiness', 'notes', 'reportPath'];
+        const csv = [headers.join(',')].concat(rows.map((c) => {
+          const d = c.decision || {};
+          const vals = [
+            c.businessName, c.domain, c.website, c.status,
+            c.leadScore && c.leadScore.score, c.leadScore && c.leadScore.tier,
+            c.scores && c.scores.overall,
+            c.contactInfo && c.contactInfo.score, c.contactInfo && c.contactInfo.bestChannel,
+            c.seoProvider && c.seoProvider.classification,
+            c.outreachPlan && c.outreachPlan.callReadiness,
+            c.outreachPlan && c.outreachPlan.emailSubject,
+            c.outreachPlan && c.outreachPlan.emailOpening,
+            c.advancedInsights && c.advancedInsights.aiCallCompliance && c.advancedInsights.aiCallCompliance.aiCallRisk,
+            c.advancedInsights && c.advancedInsights.aiCallCompliance && c.advancedInsights.aiCallCompliance.recordingConsent,
+            c.advancedInsights && c.advancedInsights.estimatedOpportunity && c.advancedInsights.estimatedOpportunity.high,
+            c.advancedInsights && c.advancedInsights.pipelineStage,
+            c.ahrefs && c.ahrefs.domainRating,
+            c.ahrefs && c.ahrefs.refdomains,
+            c.ahrefs && c.ahrefs.backlinks,
+            d.keep, (d.tags || []).join('|'), d.ownerName, d.yearsInBusiness, d.notes, c.reportPath
+          ];
+          return vals.map((value) => `"${String(value == null ? '' : value).replace(/"/g, '""')}"`).join(',');
+        })).join('\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `geoneo-leadgen-${leadGenRunId || 'candidates'}.csv`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      };
+
+      document.getElementById('leadGenResults').addEventListener('click', async function (event) {
+        if (!event.target.classList.contains('leadgen-save')) return;
+        if (!leadGenRunId) return showFlash('No run loaded.', false);
+        const row = event.target.closest('tr');
+        const domain = row && row.dataset.domain;
+        if (!domain) return;
+        const body = {
+          domain,
+          keep: row.querySelector('.leadgen-keep').checked,
+          tags: row.querySelector('.leadgen-tags').value.split(',').map((x) => x.trim()).filter(Boolean),
+          notes: row.querySelector('.leadgen-notes').value,
+          ownerName: row.querySelector('.leadgen-owner').value,
+          yearsInBusiness: row.querySelector('.leadgen-years').value,
+          seoProviderOverride: row.querySelector('.leadgen-seo-override').value
+        };
+        const { res, data } = await postJson('/api/admin/lead-gen/runs/' + encodeURIComponent(leadGenRunId) + '/decision', body);
+        if (res.ok) {
+          showFlash('Lead decision saved.', true);
+          await pollLeadGenRun();
+        } else {
+          document.getElementById('leadGenOut').textContent = JSON.stringify(data, null, 2);
+          showFlash('Could not save lead decision.', false);
+        }
+      });
 
       refreshSummary();
     })();
