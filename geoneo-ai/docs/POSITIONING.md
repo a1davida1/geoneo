@@ -8,9 +8,27 @@ If something in code or marketing contradicts it, this doc wins.**
 
 ## One-sentence pitch
 
-> GeoNeo AI shows home-service contractors in the Ozarks exactly why they're
-> losing local Google and ChatGPT searches to competitors — and gives them the
-> specific fixes to make this week, not a 40-page report.
+> GeoNeo AI runs the deepest free SEO + AI-search audit a local contractor can
+> get — including the exact dollar amount they're losing each month and a visual
+> mockup of how their site could look — then sells the implementation plan and
+> ongoing maintenance behind it.
+
+## The strategic insight
+
+The free audit IS the marketing tool. Most SEO platforms gate the findings
+behind a paywall and let the free version show only a score. We do the
+opposite: **the free audit shows everything wrong, in depth, with real dollar
+estimates and concrete examples specific to the prospect's business.** What's
+gated is the *fix list* — the exact code, copy, and implementation roadmap. And
+the ongoing tracking that prevents regression.
+
+This works because:
+
+1. Contractors are skeptical and need to see the work before they pay.
+2. Showing concrete dollar losses creates emotional urgency the score alone can't.
+3. Detailed free output is shareable — "look how detailed this audit was" drives word of mouth.
+4. The fix list is the actual deliverable they pay for, so it preserves paid value.
+5. Visual "instant makeover" mockups (their actual site re-rendered by an image model) hit harder than any score chart.
 
 ## Who we serve
 
@@ -50,87 +68,89 @@ it's working. They're stuck between three bad options:
    prices, shared leads, race-to-the-bottom.
 3. **DIY tools** (Semrush, Moz, BrightLocal) — built for marketers, not for a
    plumber with 20 minutes between jobs.
+4. **The bar-friend marketer** — paying $300-$700/mo to a local "marketing
+   guy" whose entire deliverable is $200 of FB ads and a monthly invoice.
 
 Meanwhile, a structural shift is happening that none of those options is
 addressing: customers are asking ChatGPT, Perplexity, Google AI Overviews, and
 Gemini for local recommendations. Most contractors don't even know this is
 happening, and no one is telling them whether they're getting recommended.
 
-## The promise
+## What the free audit shows (the marketing weapon)
 
-Every paying customer receives:
+Every free scan returns:
 
-1. **Exact visibility snapshot** — What local Google, Maps, and AI searches (ChatGPT, Perplexity, Gemini, Google AI Overviews) you appeared in this week, with real citation counts where possible.
-2. **Competitor intelligence** — Who beat you on those exact queries, why (technical, content, local signals, E-E-A-T gaps), and side-by-side comparison.
-3. **Three prioritized changes to make this week** — Specific, time-bounded actions the owner can execute in under an hour or hand to any web person. Every fix includes estimated effort and expected business impact.
+1. **Visibility score + grade letter + percentile** vs same-vertical / same-market-size businesses
+2. **Per-pillar deep findings** — Technical, E-E-A-T, Schema, GEO/AI-search, Local, Images, Sitemap, Content Authority. For each finding: what's wrong, why it matters.
+3. **Dollar-loss estimate** for every finding, in two flavors:
+   - **General** ("Contractors in your vertical without X average $Y-$Z/mo missed revenue")
+   - **Specific** ("YOU specifically are missing from these 7 queries; at your industry CPL of $X, that's $Y-$Z/mo you're not capturing")
+4. **Concrete examples** — 3-5 actual queries the prospect lost, with the actual competitor URLs that beat them, the actual schema fields they have that the prospect doesn't.
+5. **AI engine presence test** — did Claude / ChatGPT / Gemini / Perplexity recommend the prospect's business when asked "best [industry] in [city]?" Yes/no per engine, with the actual queries used.
+6. **Competitor schema gap** — what their top-3 competitors have that they don't.
+7. **Visual instant makeover** — Playwright captures their actual homepage; an image model returns 2 mockup variants of how it could be redesigned (Modern Trust + High Conversion).
+8. **What's NOT in the free audit** (footer, single line): "The implementation plan, exact code-paste blocks, schema generators, llms.txt generator, content roadmap, and weekly monitoring are in the $199 Fix Plan."
 
-Free scans show the visibility snapshot and high-level issues. The full prioritized implementation path (the "what to do this week" list with details) is unlocked via the one-time $79 purchase or Neo Club membership.
+## The pricing ladder
 
-No dashboards the owner won't open. No jargon. No annual contracts.
+| Tier | Price | What it delivers |
+|---|---|---|
+| **Free Audit** | $0 | Everything above. The marketing weapon. Findings + dollar estimates + visual makeover + competitor gap + AI presence test. **No fixes, no generators, no monitoring.** |
+| **Fix Plan** | **$199 one-time** | Full audit + 3 prioritized fixes (with copy-paste code blocks) + schema generators + llms.txt generator + implementation roadmap + **2 months free of Maintenance ($158 value)**. After 2 months, auto-rolls to $79/mo Maintenance unless cancelled. |
+| **Maintenance Plan** | **$79/mo** | Weekly re-score + brief + fix tracker + member dashboard + AI presence re-test + score history + alerts when something regresses. Cancel anytime. |
+| **Smart Spend** | **$499/mo** | Maintenance + ad spend audit (Google Ads / FB Pixel / LSA detection + spend bracket estimate) + monthly keyword strategy refresh + competitor ad library scrape + monthly Matt review call + vendor accountability sheet (the questions to ask their current marketing person). For owners paying ~$500/mo to a vendor whose deliverable is invisible. |
+| **White Glove** | **$800-$1,500/mo** | Smart Spend + 2 expert-byline articles per month (we draft, the owner reviews, real attribution) + 12-month content roadmap + done-for-you technical fixes from the audit + monthly schema/llms.txt updates + on-site Matt visit each quarter (year-1 customers). The full done-for-you product. |
+
+### Credit + auto-roll logic
+
+- $199 Fix Plan includes 2 free months of Maintenance ($158 credit baked in). Auto-rolls to $79/mo at day 60 unless cancelled. Email at day 53 ("your Maintenance starts in 7 days — here's what we found this week").
+- Maintenance ($79/mo) credits in full toward Smart Spend ($499/mo) for the first 30 days post-upgrade.
+- Smart Spend ($499/mo) credits in full toward White Glove for the first 30 days post-upgrade.
+- No one loses money when they upgrade.
+
+### Why this ladder works
+
+- **$0 → $199** is a small step backed by huge perceived value (deep audit + dollar estimates + visual mockup makes $199 feel like a steal).
+- **$199 → $79/mo** happens automatically (2 months free, then auto-roll). Default behavior is conversion, not opt-in upgrade.
+- **$79/mo → $499/mo** triggers when audits show ad-spend signals (Google Ads tag detected, FB Pixel installed) — the upsell pitch is "you're already spending $300-$700/mo here, let's make it work."
+- **$499/mo → $800-$1,500/mo** triggers when audits show content velocity gap and the prospect has the credentials/expertise to be a byline author — the pitch is "we'll publish your expert articles for you."
 
 ## Why we can win
 
-1. **We watch AI search, not just Google.** Most local-SEO tools ignore
-   ChatGPT, Perplexity, Gemini, Google AI Overviews. This is the emerging
-   battleground and we lead with it.
-2. **We translate.** Our output is sentences a contractor acts on, not
-   dashboards a marketer interprets.
-3. **We're local.** Branson-based. We can drive to every Year-1 customer.
-   Face-to-face closes at ~10× cold email.
-4. **No retainer.** Flat monthly price. Cancel anytime. This alone breaks the
-   agency objection.
-
-## Two Paths to Paid Value (Year 1)
-
-GeoNeo offers two distinct commercial products that match how contractors actually buy:
-
-1. **One-Time Audit + Prioritized Fix Plan** — A single, low-price purchase that delivers the complete "what's wrong + exactly what to do this week" implementation guide (full Gold-level depth). Price: **$79 one-time**. No subscription. Perfect for owners who want the roadmap now and will implement themselves or hand it to a web person.
-
-2. **Neo Club Recurring Membership** — Ongoing visibility system: weekly strategy drops, expert tactical guides, private brief episodes, and direct access to Matt for questions and accountability. **$99–$199/mo** depending on scope. Includes the one-time audit credit.
-
-Free scans always surface both offers clearly after results.
-
-## Pricing (Year 1)
-
-| Product                  | Price          | Who it's for                                      |
-|--------------------------|----------------|---------------------------------------------------|
-| Free audit               | $0             | Funnel entry — real scores + summary of issues    |
-| One-Time Full Fix Plan   | $79 one-time   | Complete prioritized implementation roadmap       |
-| Specialist Strategy Session | $197 one-time | Full audit + 30-minute live strategy call with Matt |
-| Neo Club (Starter)       | $99/mo         | Single location + weekly strategy + Matt access   |
-| Neo Club (Growth)        | $199/mo        | Up to 3 locations + deeper support                |
-| Neo Club (Multi-market)  | $399/mo        | 4+ locations + priority access                    |
-
-**Credit logic**: The $79 one-time payment (One-Time Full Fix Plan) and the distinct $197 "Full Audit + Specialist Strategy Session" (30-min call with Matt + full audit + custom plan) are both available. The $79 is credited in full toward any Neo Club membership. Lower-tier recurring payments credit toward higher tiers. No one loses money when they grow with us.
+1. **The free audit is genuinely deep.** Most competitors hold this back to a score. We give findings + dollars + visual makeover before asking for money. That builds trust and shareability.
+2. **We watch AI search, not just Google.** Claude, ChatGPT, Perplexity, Gemini, Google AI Overviews. Most local-SEO tools ignore these. This is the emerging battleground and we lead with it.
+3. **We translate.** Our output is sentences a contractor acts on, not dashboards a marketer interprets.
+4. **We're local.** Branson-based. We can drive to every Year-1 customer. Face-to-face closes at ~10× cold email.
+5. **No retainer surprises.** Every tier is month-to-month, cancel anytime. The $199 → $79/mo auto-roll is disclosed up front, not buried.
 
 ## Success indicators (what "working" means)
 
-- **Month 1:** First 5 paying Starter customers in SW Missouri.
-- **Month 3:** 20 paying customers, $3K MRR, one public case study per vertical.
-- **Month 6:** 50 paying customers, $8K MRR, NW Arkansas opened.
-- **Month 12:** 100 paying customers, $15-20K MRR, first Growth-tier upsells
-  converting from Starter.
+- **Month 1:** First 5 paying $199 Fix Plan customers in SW Missouri.
+- **Month 3:** 20 Fix Plans, ~10 rolled to Maintenance ($790 MRR), first 1 Smart Spend ($499) closed.
+- **Month 6:** 50 Fix Plans cumulative, ~30 active Maintenance subs ($2,370 MRR), 3 Smart Spend ($1,497), 1 White Glove ($1,000) — total ~$4,800 MRR.
+- **Month 12:** 150 Fix Plans cumulative, ~80 active Maintenance ($6,320 MRR), 10 Smart Spend ($4,990), 5 White Glove ($5,000) — total ~$16,300 MRR.
 
 ## Non-negotiables
 
+- **Free audit shows depth, gates fixes only.** Findings, scores, dollar estimates, examples, competitor comparisons, AI presence tests, visual makeover — all visible to free. Gated: the exact code-paste blocks, the prioritized 3-fix plan, schema generators, llms.txt generator, ongoing monitoring.
+- **No runtime LLM-generated text in audit output.** All findings, recommendations, dollar estimates, and competitor comparisons are produced by deterministic logic on real extracted data + real competitor signals + industry CPL benchmarks. The only LLM usage is **measurement** (multi-LLM citation matrix testing whether AI engines recommend the audited business) and **visual mockups** (the Instant Makeover image generation, explicitly labeled as a concept).
 - Output must be owner-readable, not marketer-readable. Every sentence must be actionable by a busy contractor.
 - Every paid audit must deliver exactly three prioritized, time-estimated fixes for "this week" with clear effort and expected lift. Vague advice is not acceptable.
-- AI-search visibility (citation readiness, question-to-answer coverage, E-E-A-T signals) is a core part of every report, never an upsell.
-- We never hide a finding behind a paywall — free shows *what's wrong*; paid shows *the exact prioritized fixes and how to implement them*.
+- AI-search visibility (citation readiness, question-to-answer coverage, E-E-A-T signals) is in every audit, free or paid.
 - We never lock into contracts. Month-to-month, cancel anytime.
-- The one-time $79 path and the recurring Neo Club path must both be presented clearly after every scan.
+- The pricing ladder must be presented clearly after every scan, with the auto-roll terms disclosed up front (not buried).
 
 ## What this positioning explicitly rejects
 
 - "Platform for agencies" — we'd lose focus.
 - "Tool for every industry" — dilutes the product and the marketing.
-- "AI-only" as a narrow positioning — we still need Google/Maps parity;
-  contractors care about phones ringing, not which engine recommended them.
+- "AI-only" as a narrow positioning — we still need Google/Maps parity; contractors care about phones ringing, not which engine recommended them.
 - Big-city first — we'd be outspent. Ozarks first, then expand.
+- **Score-only free tier** — leaves money on the table because it doesn't create the urgency that converts. We show the depth.
 
 ---
 
-_Last updated: 2026-05-07_
+_Last updated: 2026-05-10_
 _Owner: Matt (founder)_
 
-**Note on product evolution**: This document now explicitly defines the two commercial products (One-Time Full Fix Plan at $79 and Neo Club recurring membership) as the primary paid value propositions. All code, UI copy, and marketing must align with this structure.
+**Major revision 2026-05-10**: Replaced "$79 one-time + $99-$399 Neo Club" model with the 5-tier ladder above. Reframed free audit as the deep-marketing-weapon (gates fixes only, shows everything else). Added Instant Makeover visual mockup as a free-tier feature. Documented the auto-roll from $199 Fix Plan to $79/mo Maintenance.
