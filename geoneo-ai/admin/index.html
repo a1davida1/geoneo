@@ -261,6 +261,80 @@
       margin-top: 0.75rem;
       max-height: 360px;
     }
+    /* Lead-gen card grid (replaces 21-column table) */
+    .leadgen-cards {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+      gap: 1rem; margin-top: 1rem;
+    }
+    .leadgen-card {
+      background: var(--admin-surface); border: 1px solid var(--admin-line); border-radius: 12px;
+      padding: 1rem 1.25rem; display: flex; flex-direction: column; gap: 0.5rem; position: relative;
+    }
+    .leadgen-card.status-complete { border-left: 4px solid #4ade80; }
+    .leadgen-card.status-failed { border-left: 4px solid #ef4444; }
+    .leadgen-card.status-running { border-left: 4px solid #38bdf8; }
+    .leadgen-card.status-pending { border-left: 4px solid var(--admin-line); }
+    .leadgen-card-head { display: flex; justify-content: space-between; gap: 0.75rem; align-items: flex-start; }
+    .leadgen-biz { flex: 1; min-width: 0; }
+    .leadgen-biz .name { font-weight: 700; color: var(--admin-text); margin: 0 0 2px; font-size: 1rem; line-height: 1.3; word-break: break-word; }
+    .leadgen-biz .domain { font-size: 0.8rem; color: var(--admin-accent); text-decoration: none; }
+    .leadgen-biz .src { font-size: 0.7rem; color: var(--admin-muted); margin-top: 2px; }
+    .leadgen-grade {
+      width: 56px; height: 56px; border-radius: 50%; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; flex-shrink: 0;
+      background: rgba(56,189,248,0.1); border: 2px solid var(--admin-line);
+    }
+    .leadgen-grade .letter { font-size: 1.4rem; font-weight: 800; line-height: 1; }
+    .leadgen-grade .num { font-size: 0.65rem; color: var(--admin-muted); margin-top: 2px; }
+    .leadgen-grade.A, .leadgen-grade.B { border-color: #4ade80; background: rgba(74,222,128,0.12); }
+    .leadgen-grade.A .letter, .leadgen-grade.B .letter { color: #bbf7d0; }
+    .leadgen-grade.C { border-color: #fbbf24; background: rgba(251,191,36,0.12); }
+    .leadgen-grade.C .letter { color: #fde68a; }
+    .leadgen-grade.D, .leadgen-grade.F { border-color: #ef4444; background: rgba(239,68,68,0.12); }
+    .leadgen-grade.D .letter, .leadgen-grade.F .letter { color: #fecaca; }
+    .leadgen-card .quick-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 6px 12px; margin: 6px 0; font-size: 0.78rem; }
+    .leadgen-card .quick-stats .k { color: var(--admin-muted); display: block; font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 2px; }
+    .leadgen-card .quick-stats .v { font-weight: 600; color: var(--admin-text); }
+    .leadgen-card .phone-row { background: rgba(56,189,248,0.06); border: 1px solid rgba(56,189,248,0.2); border-radius: 6px; padding: 6px 10px; font-size: 0.85rem; }
+    .leadgen-card .phone-row a { color: var(--admin-accent); text-decoration: none; font-weight: 600; }
+    .leadgen-card .actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; padding-top: 6px; border-top: 1px solid var(--admin-line); }
+    .leadgen-card .actions button, .leadgen-card .actions a {
+      font-size: 0.78rem; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--admin-line);
+      background: var(--admin-bg); color: var(--admin-text); cursor: pointer; text-decoration: none;
+    }
+    .leadgen-card .actions button:hover { background: var(--admin-surface); }
+    .leadgen-card .actions .primary { background: var(--admin-accent); color: #0f172a; border-color: var(--admin-accent); font-weight: 600; }
+    .leadgen-card .keep-toggle { position: absolute; top: 10px; right: 10px; }
+    .leadgen-bulk-bar {
+      display: flex; gap: 0.75rem; padding: 0.75rem 1rem; background: var(--admin-surface);
+      border: 1px solid var(--admin-line); border-radius: 8px; margin-top: 0.75rem;
+      align-items: center; flex-wrap: wrap;
+    }
+    .leadgen-bulk-bar .bulk-count { color: var(--admin-muted); font-size: 0.85rem; }
+    .leadgen-bulk-bar button { padding: 8px 14px; border-radius: 6px; }
+    .leadgen-bulk-bar button.primary { background: var(--admin-accent); color: #0f172a; border-color: var(--admin-accent); font-weight: 600; }
+
+    /* Notes modal */
+    .geo-modal-backdrop {
+      position: fixed; inset: 0; background: rgba(15,23,42,0.7); z-index: 1000;
+      display: none; align-items: center; justify-content: center; padding: 2rem;
+    }
+    .geo-modal-backdrop.open { display: flex; }
+    .geo-modal {
+      background: var(--admin-surface); border: 1px solid var(--admin-line); border-radius: 12px;
+      max-width: 560px; width: 100%; max-height: 80vh; overflow-y: auto; padding: 1.5rem;
+    }
+    .geo-modal h3 { margin: 0 0 0.5rem; }
+    .geo-modal .biz-line { color: var(--admin-muted); font-size: 0.85rem; margin-bottom: 1rem; }
+    .geo-modal label { display: block; margin-bottom: 0.75rem; }
+    .geo-modal label span { display: block; font-size: 0.75rem; color: var(--admin-muted); margin-bottom: 4px; }
+    .geo-modal input, .geo-modal textarea, .geo-modal select {
+      width: 100%; padding: 8px 10px; background: var(--admin-bg); color: var(--admin-text);
+      border: 1px solid var(--admin-line); border-radius: 6px; font-size: 0.9rem; box-sizing: border-box;
+    }
+    .geo-modal textarea { min-height: 100px; font-family: inherit; }
+    .geo-modal .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 1rem; }
+
     .leadgen-table-wrap {
       overflow: auto;
       border: 1px solid var(--admin-line);
@@ -765,8 +839,8 @@
           <label>
             <span style="font-size:0.75rem;color:var(--admin-muted);">Sort</span><br>
             <select id="leadGenSort" class="inline-text" style="padding:10px;">
+              <option value="audit_asc" selected>Weakest audit first</option>
               <option value="score_desc">Lead score high to low</option>
-              <option value="audit_asc">Weakest audit first</option>
               <option value="rank_asc">Search rank first</option>
               <option value="name_asc">Business name A-Z</option>
             </select>
@@ -1872,101 +1946,261 @@
         return rows;
       }
 
+      function leadGradeFor(score) {
+        const n = Number(score);
+        if (!Number.isFinite(n)) return { letter: '?', grade: '', num: '—' };
+        if (n >= 90) return { letter: 'A', grade: 'A', num: n };
+        if (n >= 80) return { letter: 'B+', grade: 'B', num: n };
+        if (n >= 70) return { letter: 'B', grade: 'B', num: n };
+        if (n >= 60) return { letter: 'C+', grade: 'C', num: n };
+        if (n >= 50) return { letter: 'C', grade: 'C', num: n };
+        if (n >= 40) return { letter: 'D', grade: 'D', num: n };
+        return { letter: 'F', grade: 'F', num: n };
+      }
+
+      function pickPrimaryPhone(c) {
+        const contact = c.contactInfo || {};
+        const fromContact = (contact.phones || [])[0];
+        if (fromContact) return fromContact;
+        const ahrefs = c.ahrefs || {};
+        if (ahrefs.phone) return ahrefs.phone;
+        if (c.decision && c.decision.phone) return c.decision.phone;
+        return null;
+      }
+
+      function pickPrimaryEmail(c) {
+        const contact = c.contactInfo || {};
+        return (contact.emails || [])[0] || null;
+      }
+
       function renderLeadGenTable(candidates, opts) {
         const host = document.getElementById('leadGenResults');
         renderLeadGenStats(opts && opts.run ? opts.run : null, candidates || []);
         const visible = visibleLeadGenCandidates(candidates || []);
         if (!candidates || !candidates.length) {
-          host.innerHTML = '<p style="color:var(--admin-muted);">No candidates yet.</p>';
+          host.innerHTML = '<p style="color:var(--admin-muted);">No candidates yet. Hit Discover to populate.</p>';
           return;
         }
-        const rows = visible.map((c) => {
+        return renderLeadGenCards(visible, opts);
+      }
+
+      function renderLeadGenCards(visible, opts) {
+        const host = document.getElementById('leadGenResults');
+        const cards = visible.map((c) => {
           const decision = c.decision || {};
-          const seo = c.seoProvider || {};
           const lead = c.leadScore || {};
-          const contact = c.contactInfo || {};
-          const outreach = c.outreachPlan || {};
+          const seo = c.seoProvider || {};
           const advanced = c.advancedInsights || {};
-          const compliance = advanced.aiCallCompliance || {};
           const value = advanced.estimatedOpportunity || {};
           const ahrefs = c.ahrefs || {};
-          const score = c.scores && c.scores.overall != null ? c.scores.overall : (c.visibilityScore && c.visibilityScore.overall != null ? c.visibilityScore.overall : '—');
-          const report = c.reportPath ? `<a href="${escapeHtml(c.reportPath)}" target="_blank" rel="noopener" style="color:var(--admin-accent);">Report</a>` : '—';
-          return `<tr data-domain="${escapeHtml(c.domain || '')}">
-              <td><input type="checkbox" class="leadgen-keep" ${decision.keep ? 'checked' : ''}></td>
-            <td>
-              <strong>${escapeHtml(c.businessName || c.domain || '')}</strong><br>
-              <a href="${escapeHtml(c.website || '')}" target="_blank" rel="noopener" style="color:var(--admin-accent);">${escapeHtml(c.domain || c.website || '')}</a><br>
-              <span style="color:var(--admin-muted);">Rank ${escapeHtml(c.sourceRank || '—')} · ${escapeHtml(c.source || '')}</span>
-            </td>
-            <td><span class="leadgen-status ${escapeHtml(c.status || 'pending')}">${escapeHtml(c.status || 'pending')}</span><br>${c.error ? `<span style="color:#fecaca;">${escapeHtml(c.error)}</span>` : ''}</td>
-            <td>
-              <strong>${escapeHtml(lead.score != null ? lead.score : '—')}</strong><br>
-              <span class="leadgen-status ${escapeHtml(lead.tier || '')}">${escapeHtml(lead.tier || 'unscored')}</span>
-              ${(lead.reasons || []).slice(0, 2).map((reason) => `<div style="color:var(--admin-muted);font-size:0.72rem;">${escapeHtml(reason)}</div>`).join('')}
-            </td>
-            <td>${escapeHtml(score)}</td>
-            <td>
-              ${contact.score != null ? `${escapeHtml(contact.score)}/100` : '—'}<br>
-              <span style="color:var(--admin-muted);">${escapeHtml(contact.bestChannel || 'research_needed')}</span>
-              ${(contact.emails || []).slice(0, 1).map((x) => `<div>${escapeHtml(x)}</div>`).join('')}
-            </td>
-            <td>
-              ${(contact.phones || []).slice(0, 1).map((x) => `<div>${escapeHtml(x)}</div>`).join('') || '—'}
-            </td>
-            <td>
-              <strong>${escapeHtml(seo.classification || 'unknown')}</strong><br>
-              <span style="color:var(--admin-muted);">${escapeHtml(seo.confidence || 'low')}</span>
-              ${(seo.evidence || []).slice(0, 2).map((e) => `<div style="color:var(--admin-muted);font-size:0.72rem;">${escapeHtml(e)}</div>`).join('')}
-            </td>
-            <td>
-              ${advanced.seoQuality ? `<strong>${escapeHtml(advanced.seoQuality.classification || '—')}</strong><br>` : '—<br>'}
-              <span style="color:var(--admin-muted);">${advanced.seoQuality ? `Q${advanced.seoQuality.overallQuality || 0}` : ''}</span>
-            </td>
-            <td>
-              ${advanced.estimatedSeoBudget ? `<strong>${advanced.estimatedSeoBudget.estimatedMonthlyHigh > 0 ? '$' + advanced.estimatedSeoBudget.estimatedMonthlyLow + '-' + advanced.estimatedSeoBudget.estimatedMonthlyHigh + '/mo' : 'No budget'}</strong><br>` : '—<br>'}
-              <span style="color:var(--admin-muted);">${advanced.estimatedSeoBudget ? escapeHtml(advanced.estimatedSeoBudget.confidence || '') : ''}</span>
-            </td>
-            <td>
-              ${ahrefs.organicKeywords != null ? `<strong>${escapeHtml(ahrefs.organicKeywords)} org</strong>` : '—'}<br>
-              <span style="color:var(--admin-muted);">${ahrefs.paidKeywords != null ? `${escapeHtml(ahrefs.paidKeywords)} paid` : ''}</span>
-            </td>
-            <td>
-              ${ahrefs.domainRating != null ? `<strong>DR ${escapeHtml(ahrefs.domainRating)}</strong>` : (ahrefs.skipped ? 'Skipped' : '—')}<br>
-              <span style="color:var(--admin-muted);">${ahrefs.refdomains != null ? `${escapeHtml(ahrefs.refdomains)} rd` : ''}</span>
-            </td>
-            <td>
-              <strong>${escapeHtml(outreach.callReadiness || '—')}</strong><br>
-              <span style="color:var(--admin-muted);">${escapeHtml(outreach.nextBestAction || '')}</span>
-            </td>
-            <td>
-              <strong>${escapeHtml(compliance.aiCallRisk || '—')}</strong><br>
-              <span style="color:var(--admin-muted);">${escapeHtml(compliance.recordingConsent || '')}</span>
-            </td>
-            <td>
-              ${value.high ? `$${escapeHtml(value.low)}-$${escapeHtml(value.high)}` : '—'}<br>
-              <span style="color:var(--admin-muted);">${escapeHtml(advanced.pipelineStage || '')}</span>
-            </td>
-            <td><input class="leadgen-small-input leadgen-owner" value="${escapeHtml(decision.ownerName || '')}" placeholder="Owner"></td>
-            <td><input class="leadgen-small-input leadgen-years" value="${escapeHtml(decision.yearsInBusiness || '')}" placeholder="Years"></td>
-            <td><input class="leadgen-small-input leadgen-phone" value="${escapeHtml(decision.phone || '')}" placeholder="Phone"></td>
-            <td><input class="leadgen-small-input leadgen-tags" value="${escapeHtml((decision.tags || []).join(', '))}" placeholder="keeper, call"></td>
-            <td>
-              <select class="leadgen-small-input leadgen-seo-override">
-                ${['', 'diy_local', 'pro', 'agency', 'unknown'].map((v) => `<option value="${v}" ${decision.seoProviderOverride === v ? 'selected' : ''}>${v || 'auto'}</option>`).join('')}
-              </select>
-            </td>
-            <td><textarea class="leadgen-note leadgen-notes" placeholder="Notes">${escapeHtml(decision.notes || '')}</textarea></td>
-            <td>${report}<br><button type="button" class="leadgen-save" style="margin-top:6px;padding:6px 10px;font-size:0.75rem;">Save</button></td>
-          </tr>`;
+          const score = c.scores && c.scores.overall != null ? c.scores.overall :
+            (c.visibilityScore && c.visibilityScore.overall != null ? c.visibilityScore.overall : null);
+          const grade = leadGradeFor(score);
+          const phone = pickPrimaryPhone(c);
+          const email = pickPrimaryEmail(c);
+          const status = c.status || 'pending';
+          const reportLink = c.reportPath
+            ? `<a href="${escapeHtml(c.reportPath)}" target="_blank" rel="noopener">Report ↗</a>` : '';
+          const dollarBand = value.high ? `$${value.low}–$${value.high}/mo` : '—';
+
+          return `<div class="leadgen-card status-${escapeHtml(status)}" data-domain="${escapeHtml(c.domain || '')}">
+            <input type="checkbox" class="keep-toggle leadgen-keep" ${decision.keep ? 'checked' : ''} title="Keep">
+            <div class="leadgen-card-head">
+              <div class="leadgen-biz">
+                <p class="name">${escapeHtml(c.businessName || c.domain || 'Unknown')}</p>
+                <a class="domain" href="${escapeHtml(c.website || ('https://' + (c.domain || '')))}" target="_blank" rel="noopener">${escapeHtml(c.domain || c.website || '')}</a>
+                <p class="src">${escapeHtml(status)}${c.sourceRank ? ' · rank #' + c.sourceRank : ''}${c.source ? ' · ' + c.source : ''}</p>
+              </div>
+              <div class="leadgen-grade ${grade.grade}">
+                <span class="letter">${grade.letter}</span>
+                <span class="num">${grade.num}</span>
+              </div>
+            </div>
+            ${phone ? `<div class="phone-row">📞 <a href="tel:${escapeHtml(String(phone).replace(/[^\d+]/g, ''))}">${escapeHtml(phone)}</a>${email ? ` · ${escapeHtml(email)}` : ''}</div>` : ''}
+            <div class="quick-stats">
+              <div><span class="k">Lead</span><span class="v">${escapeHtml(lead.tier || 'unscored')} ${lead.score != null ? '(' + lead.score + ')' : ''}</span></div>
+              <div><span class="k">SEO owner</span><span class="v">${escapeHtml(seo.classification || '—')}</span></div>
+              <div><span class="k">Opportunity</span><span class="v">${dollarBand}</span></div>
+              ${ahrefs.domainRating != null ? `<div><span class="k">DR</span><span class="v">${escapeHtml(ahrefs.domainRating)} ${ahrefs.refdomains != null ? '· ' + ahrefs.refdomains + ' rd' : ''}</span></div>` : (ahrefs.skipped ? '<div><span class="k">DR</span><span class="v" style="color:var(--admin-muted);">Ahrefs off</span></div>' : '')}
+            </div>
+            ${c.error ? `<div style="color:#fecaca;font-size:0.78rem;background:rgba(239,68,68,0.08);padding:6px 10px;border-radius:6px;">⚠ ${escapeHtml(c.error)}</div>` : ''}
+            <div class="actions">
+              <button type="button" class="primary leadgen-deep" data-domain="${escapeHtml(c.domain || '')}" data-url="${escapeHtml(c.website || ('https://' + (c.domain || '')))}">Run deep audit</button>
+              <button type="button" class="leadgen-notes-open" data-domain="${escapeHtml(c.domain || '')}">Notes / Save</button>
+              ${reportLink}
+            </div>
+          </div>`;
         }).join('');
-        host.innerHTML = `<div class="leadgen-table-wrap"><table class="leadgen-table">
-          <thead><tr><th>Keep</th><th>Business</th><th>Status</th><th>Lead</th><th>Audit</th><th>Contact</th><th>Phone</th><th>SEO owner</th><th>Quality</th><th>Budget</th><th>Keywords</th><th>DR</th><th>Next action</th><th>AI call law</th><th>Value</th><th>Owner</th><th>Years</th><th>Tags</th><th>Override</th><th>Notes</th><th>Actions</th></tr></thead>
-          <tbody>${rows || '<tr><td colspan="21">No rows match this filter.</td></tr>'}</tbody>
-        </table></div>`;
-        if (opts && opts.raw) {
-          document.getElementById('leadGenOut').textContent = JSON.stringify(opts.raw, null, 2);
+
+        host.innerHTML = `
+          <div class="leadgen-bulk-bar">
+            <span class="bulk-count">${visible.length} candidate${visible.length === 1 ? '' : 's'} visible</span>
+            <button type="button" id="btnLeadGenBulkDeep" class="primary">⚡ Run deep audit on all visible</button>
+            <button type="button" id="btnLeadGenSaveAll">Save kept candidates</button>
+            <span id="leadGenBulkProgress" style="color:var(--admin-accent);font-size:0.85rem;margin-left:auto;"></span>
+          </div>
+          <div class="leadgen-cards">${cards}</div>
+        `;
+
+        wireLeadGenCardActions(visible);
+      }
+
+      function wireLeadGenCardActions(visible) {
+        const host = document.getElementById('leadGenResults');
+        host.querySelectorAll('.leadgen-deep').forEach(btn => {
+          btn.onclick = async () => {
+            const url = btn.getAttribute('data-url');
+            const domain = btn.getAttribute('data-domain');
+            btn.disabled = true; btn.textContent = 'Auditing…';
+            try {
+              const params = new URLSearchParams();
+              params.set('url', url); params.set('tier', 'admin');
+              const { res, data } = await fetchJson('/api/audit-deep?' + params.toString());
+              if (res.ok && data.audit) {
+                showFlash('Audit complete: ' + data.audit.overallScore + '/100 (' + data.audit.grade + ')', true);
+                // Update card grade in place
+                const card = btn.closest('.leadgen-card');
+                if (card) {
+                  const g = leadGradeFor(data.audit.overallScore);
+                  const gradeEl = card.querySelector('.leadgen-grade');
+                  gradeEl.className = 'leadgen-grade ' + g.grade;
+                  gradeEl.querySelector('.letter').textContent = g.letter;
+                  gradeEl.querySelector('.num').textContent = g.num;
+                }
+              } else { showFlash('Audit failed: ' + res.status, false); }
+            } catch (e) { showFlash('Error: ' + e.message, false); }
+            finally { btn.disabled = false; btn.textContent = 'Run deep audit'; }
+          };
+        });
+        host.querySelectorAll('.leadgen-notes-open').forEach(btn => {
+          btn.onclick = () => openNotesModal(btn.getAttribute('data-domain'), visible);
+        });
+        const bulkBtn = document.getElementById('btnLeadGenBulkDeep');
+        if (bulkBtn) bulkBtn.onclick = () => runBulkDeepAudit(visible);
+        const saveAllBtn = document.getElementById('btnLeadGenSaveAll');
+        if (saveAllBtn) saveAllBtn.onclick = () => saveAllKeptCandidates(visible);
+      }
+
+      async function runBulkDeepAudit(candidates) {
+        const progress = document.getElementById('leadGenBulkProgress');
+        const total = candidates.length;
+        let done = 0, failed = 0;
+        progress.textContent = `0/${total}`;
+        // Concurrency limit: 4 parallel audits
+        const queue = candidates.slice();
+        async function worker() {
+          while (queue.length) {
+            const c = queue.shift();
+            const url = c.website || ('https://' + (c.domain || ''));
+            try {
+              const params = new URLSearchParams();
+              params.set('url', url); params.set('tier', 'admin');
+              if (c.industry) params.set('industry', c.industry);
+              const { res, data } = await fetchJson('/api/audit-deep?' + params.toString());
+              if (res.ok && data.audit) {
+                done++;
+                const card = document.querySelector('.leadgen-card[data-domain="' + (c.domain || '') + '"]');
+                if (card) {
+                  const g = leadGradeFor(data.audit.overallScore);
+                  const gradeEl = card.querySelector('.leadgen-grade');
+                  gradeEl.className = 'leadgen-grade ' + g.grade;
+                  gradeEl.querySelector('.letter').textContent = g.letter;
+                  gradeEl.querySelector('.num').textContent = g.num;
+                  card.classList.remove('status-pending', 'status-running');
+                  card.classList.add('status-complete');
+                }
+              } else { failed++; }
+            } catch { failed++; }
+            progress.textContent = `${done + failed}/${total}` + (failed ? ` (${failed} failed)` : '');
+          }
         }
+        await Promise.all([worker(), worker(), worker(), worker()]);
+        progress.textContent = `Done: ${done}/${total}` + (failed ? ` (${failed} failed)` : '');
+        showFlash(`Bulk audit done: ${done} OK / ${failed} failed.`, failed === 0);
+      }
+
+      function openNotesModal(domain, candidates) {
+        const c = candidates.find(x => x.domain === domain);
+        if (!c) return;
+        const decision = c.decision || {};
+        const modal = ensureNotesModal();
+        modal.querySelector('.modal-biz').textContent = (c.businessName || domain) + ' · ' + domain;
+        modal.querySelector('[name="ownerName"]').value = decision.ownerName || '';
+        modal.querySelector('[name="phone"]').value = decision.phone || pickPrimaryPhone(c) || '';
+        modal.querySelector('[name="yearsInBusiness"]').value = decision.yearsInBusiness || '';
+        modal.querySelector('[name="tags"]').value = (decision.tags || []).join(', ');
+        modal.querySelector('[name="seoProviderOverride"]').value = decision.seoProviderOverride || '';
+        modal.querySelector('[name="notes"]').value = decision.notes || '';
+        modal.querySelector('[name="keep"]').checked = !!decision.keep;
+        modal.dataset.domain = domain;
+        modal.parentElement.classList.add('open');
+      }
+
+      function ensureNotesModal() {
+        let backdrop = document.getElementById('leadgenNotesModal');
+        if (backdrop) return backdrop.firstElementChild;
+        backdrop = document.createElement('div');
+        backdrop.id = 'leadgenNotesModal';
+        backdrop.className = 'geo-modal-backdrop';
+        backdrop.innerHTML = `
+          <div class="geo-modal" data-domain="">
+            <h3>Save / Notes</h3>
+            <div class="biz-line modal-biz">—</div>
+            <label><span>Owner name</span><input type="text" name="ownerName" /></label>
+            <label><span>Phone</span><input type="text" name="phone" /></label>
+            <label><span>Years in business</span><input type="number" name="yearsInBusiness" min="0" /></label>
+            <label><span>Tags (comma-separated)</span><input type="text" name="tags" placeholder="hot, ready_for_ai_call, kept" /></label>
+            <label><span>SEO owner override</span><select name="seoProviderOverride">
+              <option value="">auto-detected</option>
+              <option value="diy_local">diy_local</option>
+              <option value="pro">pro</option>
+              <option value="agency">agency</option>
+              <option value="unknown">unknown</option>
+            </select></label>
+            <label><span>Notes</span><textarea name="notes" placeholder="Conversation context, follow-up plan, objections raised…"></textarea></label>
+            <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" name="keep" /><span style="margin-bottom:0;">Keep this candidate</span></label>
+            <div class="modal-actions">
+              <button type="button" class="modal-cancel">Cancel</button>
+              <button type="button" class="primary modal-save" style="background:var(--admin-accent);color:#0f172a;border-color:var(--admin-accent);font-weight:600;">Save</button>
+            </div>
+          </div>`;
+        document.body.appendChild(backdrop);
+        backdrop.querySelector('.modal-cancel').onclick = () => backdrop.classList.remove('open');
+        backdrop.onclick = (e) => { if (e.target === backdrop) backdrop.classList.remove('open'); };
+        backdrop.querySelector('.modal-save').onclick = async () => {
+          const modal = backdrop.firstElementChild;
+          const domain = modal.dataset.domain;
+          if (!domain || !leadGenRunId) { showFlash('No active run to save against.', false); return; }
+          const body = {
+            decision: {
+              keep: modal.querySelector('[name="keep"]').checked,
+              ownerName: modal.querySelector('[name="ownerName"]').value.trim(),
+              phone: modal.querySelector('[name="phone"]').value.trim(),
+              yearsInBusiness: Number(modal.querySelector('[name="yearsInBusiness"]').value) || 0,
+              tags: modal.querySelector('[name="tags"]').value.split(',').map(s => s.trim()).filter(Boolean),
+              seoProviderOverride: modal.querySelector('[name="seoProviderOverride"]').value,
+              notes: modal.querySelector('[name="notes"]').value
+            }
+          };
+          const { res } = await postJson('/api/admin/lead-gen/runs/' + encodeURIComponent(leadGenRunId) + '/decision', { domain, ...body.decision });
+          if (res.ok) { showFlash('Saved.', true); backdrop.classList.remove('open'); pollLeadGenRun(); }
+          else { showFlash('Save failed: ' + res.status, false); }
+        };
+        return backdrop.firstElementChild;
+      }
+
+      async function saveAllKeptCandidates(candidates) {
+        if (!leadGenRunId) { showFlash('No active run.', false); return; }
+        const cards = document.querySelectorAll('.leadgen-card');
+        let saved = 0;
+        for (const card of cards) {
+          const domain = card.getAttribute('data-domain');
+          const keep = card.querySelector('.leadgen-keep')?.checked;
+          if (!keep) continue;
+          await postJson('/api/admin/lead-gen/runs/' + encodeURIComponent(leadGenRunId) + '/decision', { domain, keep: true });
+          saved++;
+        }
+        showFlash(`Saved ${saved} kept candidate${saved === 1 ? '' : 's'}.`, true);
       }
 
       async function pollLeadGenRun() {
