@@ -1,0 +1,854 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Your GeoNeo Dashboard</title>
+  <meta name="description" content="Your GeoNeo dashboard — score history, latest audit, fix plan, and re-audit on demand." />
+  <meta name="robots" content="noindex" />
+  <style>
+    body { background: #f8fafc; color: #0f172a; font-family: -apple-system, Segoe UI, Roboto, sans-serif; line-height: 1.55; margin: 0; }
+    .wrap { max-width: 880px; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
+    .hero {
+      background: linear-gradient(135deg, #0f172a, #1e293b); color: #f1f5f9;
+      padding: 1.75rem 2rem; border-radius: 14px; margin-bottom: 1.5rem;
+      display: flex; gap: 1.5rem; align-items: center; flex-wrap: wrap;
+    }
+    .hero .meta { flex: 1; min-width: 220px; }
+    .hero h1 { margin: 0 0 0.25rem; font-size: 1.5rem; }
+    .hero .domain { color: #60a5fa; text-decoration: none; font-size: 0.92rem; }
+    .hero .grade {
+      width: 96px; height: 96px; border-radius: 50%; flex-shrink: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: rgba(255,255,255,0.06); border: 4px solid #4ade80;
+    }
+    .hero .grade.A { border-color: #4ade80; }
+    .hero .grade.B { border-color: #84cc16; }
+    .hero .grade.C { border-color: #fbbf24; }
+    .hero .grade.D, .hero .grade.F { border-color: #ef4444; }
+    .hero .grade .let { font-size: 2rem; font-weight: 800; line-height: 1; }
+    .hero .grade .num { font-size: 0.78rem; color: #cbd5e1; margin-top: 2px; }
+    .card {
+      background: white; border: 1px solid #e2e8f0; border-radius: 12px;
+      padding: 1.25rem 1.5rem; margin-bottom: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .card h2 { margin: 0 0 1rem; font-size: 1.05rem; }
+    .pillars { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; }
+    .pillar { background: #f8fafc; border-radius: 8px; padding: 10px 12px; text-align: center; }
+    .pillar .v { font-size: 1.4rem; font-weight: 800; line-height: 1; }
+    .pillar .v.green { color: #16a34a; }
+    .pillar .v.yellow { color: #ca8a04; }
+    .pillar .v.red { color: #dc2626; }
+    .pillar .k { font-size: 0.72rem; color: #64748b; text-transform: capitalize; margin-top: 4px; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 1rem; }
+    .actions a, .actions button {
+      display: inline-block; padding: 10px 18px; border-radius: 8px;
+      text-decoration: none; font-weight: 600; font-size: 0.9rem; cursor: pointer;
+      border: 1px solid #e2e8f0; background: white; color: #0f172a; font-family: inherit;
+    }
+    .actions a.primary, .actions button.primary {
+      background: #0369a1; color: white; border-color: #0369a1;
+    }
+    .actions a:hover, .actions button:hover { transform: translateY(-1px); transition: 0.15s; }
+    .sparkline-wrap svg { width: 100%; height: 80px; display: block; }
+    .sparkline-wrap .sp-line { fill: none; stroke: #0369a1; stroke-width: 2; }
+    .sparkline-wrap .sp-area { fill: rgba(3,105,161,0.10); }
+    .sparkline-wrap .sp-dot { fill: #0369a1; }
+    .sparkline-wrap .sp-dot-last { fill: #16a34a; stroke: white; stroke-width: 2; }
+    .findings ol { padding-left: 20px; margin: 0; }
+    .findings li { margin: 8px 0; }
+    .findings .badge { font-size: 0.7rem; padding: 1px 7px; border-radius: 999px; font-weight: 700; text-transform: uppercase; margin-left: 6px; }
+    .findings .badge.high { background: #fee2e2; color: #991b1b; }
+    .findings .badge.medium { background: #fef3c7; color: #92400e; }
+    .findings .badge.low { background: #f1f5f9; color: #475569; }
+    .findings .impact { color: #16a34a; font-weight: 700; }
+    /* Fix tracker */
+    .tracker-item {
+      display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px;
+      background: #f8fafc; border-radius: 8px; margin: 6px 0;
+      border-left: 3px solid #cbd5e1; transition: border-color 0.15s, opacity 0.15s;
+    }
+    .tracker-item.done { opacity: 0.55; border-left-color: #16a34a; }
+    .tracker-item.done .tracker-title { text-decoration: line-through; color: #64748b; }
+    .tracker-item.in_progress { border-left-color: #fbbf24; }
+    .tracker-item.blocked { border-left-color: #dc2626; }
+    .tracker-checkbox { width: 18px; height: 18px; flex-shrink: 0; margin-top: 2px; cursor: pointer; }
+    .tracker-content { flex: 1; min-width: 0; }
+    .tracker-title { font-weight: 600; font-size: 0.95rem; margin: 0 0 2px; line-height: 1.3; }
+    .tracker-notes { font-size: 0.82rem; color: #64748b; margin-top: 2px; }
+    .tracker-status {
+      display: inline-block; padding: 1px 8px; border-radius: 999px;
+      font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.04em; margin-right: 6px;
+    }
+    .tracker-status.not_started { background: #e2e8f0; color: #475569; }
+    .tracker-status.in_progress { background: #fef3c7; color: #92400e; }
+    .tracker-status.done { background: #dcfce7; color: #166534; }
+    .tracker-status.blocked { background: #fee2e2; color: #991b1b; }
+    .tracker-status-select {
+      padding: 3px 8px; border-radius: 6px; border: 1px solid #cbd5e1;
+      background: white; color: #0f172a; font-size: 0.78rem; font-family: inherit;
+    }
+    /* Week-over-week diff */
+    .diff-stat-row { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+    .diff-stat { flex: 1; min-width: 130px; padding: 10px 12px; background: #f8fafc; border-radius: 8px; }
+    .diff-stat .k { font-size: 0.7rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.04em; }
+    .diff-stat .v { font-size: 1.4rem; font-weight: 800; line-height: 1; }
+    .diff-stat .v.up { color: #16a34a; }
+    .diff-stat .v.down { color: #dc2626; }
+    .diff-list { padding-left: 18px; margin: 6px 0; font-size: 0.88rem; }
+    .diff-list li { margin: 3px 0; }
+    .diff-fixed { color: #16a34a; }
+    .diff-new { color: #dc2626; }
+    /* Pillar deep-dive accordions */
+    .pillar-row {
+      border: 1px solid #e2e8f0; border-radius: 8px; margin: 6px 0; background: #f8fafc;
+    }
+    .pillar-row summary {
+      list-style: none; cursor: pointer; padding: 12px 16px; display: flex;
+      justify-content: space-between; align-items: center; gap: 12px;
+    }
+    .pillar-row summary::-webkit-details-marker { display: none; }
+    .pillar-row .pillar-name { font-weight: 600; font-size: 0.95rem; flex: 1; }
+    .pillar-row .pillar-score {
+      font-size: 1.1rem; font-weight: 800; padding: 4px 10px; border-radius: 999px;
+      background: #e2e8f0; color: #475569;
+    }
+    .pillar-row .pillar-score.green { background: #dcfce7; color: #166534; }
+    .pillar-row .pillar-score.yellow { background: #fef3c7; color: #92400e; }
+    .pillar-row .pillar-score.red { background: #fee2e2; color: #991b1b; }
+    .pillar-row .pillar-arrow { color: #94a3b8; transition: transform 0.15s; }
+    .pillar-row[open] .pillar-arrow { transform: rotate(90deg); }
+    .pillar-row .pillar-body { padding: 0 16px 16px; border-top: 1px solid #e2e8f0; }
+    .pillar-row .pillar-body pre {
+      background: #0f172a; color: #e2e8f0; padding: 12px; border-radius: 6px;
+      font-size: 0.72rem; max-height: 400px; overflow: auto; white-space: pre-wrap;
+    }
+    .pillar-row .pillar-finding {
+      margin: 8px 0; padding: 10px 12px; background: white; border-radius: 6px;
+      border-left: 3px solid #cbd5e1; font-size: 0.88rem;
+    }
+    .pillar-row .pillar-finding.critical { border-left-color: #dc2626; }
+    .pillar-row .pillar-finding.major { border-left-color: #f59e0b; }
+    .pillar-row .pillar-finding.minor { border-left-color: #94a3b8; }
+    .pillar-row .pillar-finding strong { display: block; margin-bottom: 3px; }
+    .pillar-row .pillar-finding .meta { font-size: 0.75rem; color: #64748b; margin-top: 4px; }
+    /* Generated assets */
+    .asset-item {
+      background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+      padding: 12px 14px; margin: 8px 0;
+    }
+    .asset-item .asset-name {
+      font-weight: 600; font-size: 0.95rem; margin-bottom: 6px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .asset-item button {
+      padding: 5px 10px; border-radius: 6px; border: 1px solid #cbd5e1;
+      background: white; color: #0f172a; font-size: 0.78rem; cursor: pointer;
+    }
+    .asset-item button.copied { background: #dcfce7; border-color: #16a34a; color: #166534; }
+    .asset-item pre {
+      background: #0f172a; color: #e2e8f0; padding: 10px; border-radius: 6px;
+      font-size: 0.72rem; max-height: 250px; overflow: auto; white-space: pre-wrap;
+      margin: 0;
+    }
+    .loading { text-align: center; padding: 4rem 1rem; color: #64748b; }
+    .loading .spinner { width: 36px; height: 36px; border: 3px solid #e2e8f0; border-top-color: #0369a1; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 1rem; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .error { background: #fee2e2; color: #991b1b; padding: 1rem 1.5rem; border-radius: 10px; margin: 2rem 0; text-align: center; }
+    .footer { font-size: 0.78rem; color: #94a3b8; text-align: center; margin-top: 2rem; }
+    .footer a { color: #64748b; }
+    .delta { font-weight: 700; }
+    .delta.up { color: #16a34a; }
+    .delta.down { color: #dc2626; }
+    .toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: #16a34a; color: white; padding: 10px 18px; border-radius: 8px;
+      font-weight: 600; box-shadow: 0 6px 24px rgba(0,0,0,0.18); display: none; z-index: 100;
+    }
+    .toast.error { background: #dc2626; }
+
+    /* ==== Mirrored prospect-page sections ==== */
+    .ps-empty { color: #94a3b8; font-style: italic; font-size: 0.88rem; margin: 0; }
+
+    .losing-narrative {
+      background: linear-gradient(135deg, #fff7ed 0%, #fef3c7 100%);
+      border-left: 4px solid #f97316; padding: 1.1rem 1.3rem;
+      border-radius: 10px; font-size: 1rem; color: #7c2d12; line-height: 1.5;
+    }
+    .losing-narrative strong { color: #9a3412; }
+
+    .local-rank-row { display: flex; flex-wrap: wrap; gap: 1.5rem; margin-bottom: 0.75rem; }
+    .local-rank-stat .label { font-size: 0.7rem; text-transform: uppercase; color: #64748b; letter-spacing: 0.06em; font-weight: 700; }
+    .local-rank-stat .value { font-size: 1.6rem; font-weight: 800; color: #0f172a; line-height: 1; margin-top: 4px; }
+    .local-rank-stat.bad .value { color: #dc2626; }
+    .local-rank-stat.warn .value { color: #d97706; }
+    .local-rank-stat.good .value { color: #16a34a; }
+
+    .comp-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .comp-table th, .comp-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #e2e8f0; }
+    .comp-table th { font-size: 0.7rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; }
+    .comp-table td.num { font-weight: 700; }
+    .comp-table tr.you td { background: #eff6ff; }
+    .comp-table tr.beats td { background: #fef2f2; }
+
+    .gbp-stats { display: flex; flex-wrap: wrap; gap: 1rem; padding: 0.75rem 1rem; background: #f8fafc; border-radius: 8px; margin-bottom: 0.5rem; }
+    .gbp-stat { display: flex; flex-direction: column; }
+    .gbp-stat .k { font-size: 0.7rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; }
+    .gbp-stat .v { font-size: 1.1rem; font-weight: 700; color: #0f172a; }
+    .gbp-issue { background: #fef2f2; border-left: 3px solid #dc2626; padding: 8px 12px; border-radius: 6px; font-size: 0.92rem; color: #7f1d1d; margin-top: 6px; }
+
+    .review-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    @media (max-width: 540px) { .review-compare { grid-template-columns: 1fr; } }
+    .review-card { padding: 1rem; border-radius: 10px; background: #f8fafc; }
+    .review-card.you { background: #eff6ff; border-left: 4px solid #0369a1; }
+    .review-card.them { background: #fef2f2; border-left: 4px solid #dc2626; }
+    .review-card .who { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; font-weight: 700; }
+    .review-card .stars { font-size: 1.4rem; font-weight: 800; margin: 4px 0; color: #0f172a; }
+    .review-card .count { font-size: 0.85rem; color: #475569; }
+    .review-gap-note { margin-top: 1rem; color: #7f1d1d; font-size: 0.92rem; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div id="loading" class="loading"><div class="spinner"></div><p>Loading your dashboard…</p></div>
+    <div id="error" class="error" style="display:none;"></div>
+    <div id="content" style="display:none;">
+      <div class="hero">
+        <div class="meta">
+          <p style="margin:0 0 4px;font-size:0.75rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.06em;">Your GeoNeo Dashboard</p>
+          <h1 id="bizName">—</h1>
+          <a class="domain" id="domainLink" target="_blank" rel="noopener">—</a>
+          <p style="margin:8px 0 0;color:#cbd5e1;font-size:0.85rem;" id="lastAudit">—</p>
+        </div>
+        <div class="grade" id="grade"><div class="let" id="gradeLetter">—</div><div class="num" id="gradeScore">— / 100</div></div>
+      </div>
+
+      <div class="card">
+        <h2>📈 Visibility score history</h2>
+        <div class="sparkline-wrap" id="sparkline"></div>
+        <p id="sparkSummary" style="margin:8px 0 0;font-size:0.85rem;color:#64748b;"></p>
+      </div>
+
+      <div class="card">
+        <h2>🏛 Pillar breakdown</h2>
+        <div class="pillars" id="pillars"></div>
+      </div>
+
+      <!-- Mirrored prospect-page sections (filled by /api/prospect-page-data) -->
+      <div class="card" id="cdLosingCard" style="display:none;">
+        <h2>🎯 Where you stand vs the local field</h2>
+        <div id="cdLosingBody"></div>
+      </div>
+
+      <div class="card" id="cdCompetitorsCard" style="display:none;">
+        <h2>🏆 Top local competitors</h2>
+        <p style="color:#475569;margin:0 0 0.75rem;font-size:0.9rem;">Who you're going head-to-head with in local search.</p>
+        <div id="cdCompetitorsBody"></div>
+      </div>
+
+      <div class="card" id="cdGbpCard" style="display:none;">
+        <h2>📌 Google Business Profile</h2>
+        <p style="color:#475569;margin:0 0 0.75rem;font-size:0.9rem;">Your free Google listing — biggest single driver of local map-pack rankings.</p>
+        <div id="cdGbpBody"></div>
+      </div>
+
+      <div class="card" id="cdReviewGapCard" style="display:none;">
+        <h2>⭐ Review & reputation gap</h2>
+        <p style="color:#475569;margin:0 0 0.75rem;font-size:0.9rem;">How you compare on customer trust signals.</p>
+        <div id="cdReviewGapBody"></div>
+      </div>
+
+      <div class="card findings">
+        <h2>🔧 Top fixes</h2>
+        <ol id="findings"></ol>
+      </div>
+
+      <div class="card" id="industryBenchmarkCard" style="display:none;">
+        <h2>📊 You vs your peers</h2>
+        <div id="industryBenchmarkBody"></div>
+      </div>
+
+      <div class="card">
+        <h2>🔍 Full audit — all findings</h2>
+        <p style="color:#475569;margin:0 0 0.75rem;font-size:0.9rem;">Everything detected, grouped by severity. <span id="allFindingsCount">—</span></p>
+        <div id="allFindings"></div>
+      </div>
+
+      <div class="card">
+        <h2>🏛 Per-pillar deep dive</h2>
+        <p style="color:#475569;margin:0 0 1rem;font-size:0.9rem;">Click any pillar to see the raw analyzer output — what we measured, what we found.</p>
+        <div id="pillarDeepDive"></div>
+      </div>
+
+      <div class="card" id="generatedAssetsCard" style="display:none;">
+        <h2>📦 Generated assets</h2>
+        <p style="color:#475569;margin:0 0 1rem;font-size:0.9rem;">Ready-to-paste files we generated from your audit — copy them directly into your site.</p>
+        <div id="generatedAssets"></div>
+      </div>
+
+      <div class="card">
+        <h2>✅ Fix tracker</h2>
+        <p style="color:#475569;font-size:0.9rem;margin:0 0 1rem;">Check off as you ship them. We auto-sync new audit findings here on every re-audit.</p>
+        <div id="trackerList"></div>
+      </div>
+
+      <div class="card" id="diffCard" style="display:none;">
+        <h2>📊 What changed this week</h2>
+        <div id="diffSummary"></div>
+      </div>
+
+      <div class="card">
+        <h2>⚡ What's next</h2>
+        <p style="color:#475569;">Re-audit on demand to see if your latest changes moved the needle. Each re-audit refreshes pillars, fixes, and the score history line.</p>
+        <div class="actions">
+          <button id="btnReaudit" class="primary">⚡ Re-audit my site now</button>
+          <a id="btnFixPlan" href="#">📋 Open my Fix Plan</a>
+          <a id="btnFullReport" href="#">📄 Open full audit page</a>
+        </div>
+        <p id="reauditStatus" style="font-size:0.82rem;color:#64748b;margin-top:8px;min-height:1.2em;"></p>
+      </div>
+
+      <p class="footer">
+        Token expires <span id="tokenExpiry">—</span> ·
+        Lost this email? Reply to <a id="replyAddr" href="mailto:audit@geoneo.ai">audit@geoneo.ai</a>
+      </p>
+    </div>
+  </div>
+
+  <div id="toast" class="toast">Done</div>
+
+  <script>
+    function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
+    function showToast(text, ok = true) {
+      const t = document.getElementById('toast');
+      t.textContent = text;
+      t.classList.toggle('error', !ok);
+      t.style.display = 'block';
+      setTimeout(() => { t.style.display = 'none'; }, 2400);
+    }
+    function gradeClass(score) {
+      if (score == null) return '';
+      if (score >= 80) return 'A'; if (score >= 70) return 'B';
+      if (score >= 60) return 'C'; if (score >= 45) return 'D';
+      return 'F';
+    }
+    function gradeLetter(score) {
+      if (score == null) return '—';
+      if (score >= 90) return 'A'; if (score >= 80) return 'B+'; if (score >= 70) return 'B';
+      if (score >= 60) return 'C+'; if (score >= 50) return 'C'; if (score >= 40) return 'D';
+      return 'F';
+    }
+    function pillarColor(score) {
+      if (score == null) return '';
+      if (score >= 75) return 'green';
+      if (score >= 50) return 'yellow';
+      return 'red';
+    }
+    function renderSparkline(history) {
+      const points = (history || [])
+        .filter(h => h && h.audit && typeof h.audit.overallScore === 'number')
+        .slice().reverse()
+        .map(h => ({ score: h.audit.overallScore, at: h.audit.generatedAt || h.generatedAt }));
+      const wrap = document.getElementById('sparkline');
+      const summary = document.getElementById('sparkSummary');
+      if (points.length < 2) {
+        wrap.innerHTML = '<div style="color:#64748b;font-size:0.85rem;padding:1rem 0;">' +
+          (points.length === 1 ? `Single audit: ${points[0].score}/100. Re-audit again to start the trend.` : 'Not enough audits yet.') +
+          '</div>';
+        summary.textContent = '';
+        return;
+      }
+      const w = 800, h = 80, padX = 8, padY = 8;
+      const innerW = w - padX * 2, innerH = h - padY * 2;
+      const xs = points.map((_, i) => padX + (innerW * i / (points.length - 1)));
+      const ys = points.map(p => padY + innerH - ((p.score - 0) / 100) * innerH);
+      const linePath = xs.map((x, i) => (i === 0 ? `M ${x.toFixed(1)} ${ys[i].toFixed(1)}` : `L ${x.toFixed(1)} ${ys[i].toFixed(1)}`)).join(' ');
+      const areaPath = `${linePath} L ${xs[xs.length-1].toFixed(1)} ${(padY + innerH).toFixed(1)} L ${xs[0].toFixed(1)} ${(padY + innerH).toFixed(1)} Z`;
+      const dots = xs.map((x, i) => {
+        const last = i === xs.length - 1;
+        return `<circle class="${last ? 'sp-dot-last' : 'sp-dot'}" cx="${x.toFixed(1)}" cy="${ys[i].toFixed(1)}" r="${last ? 5 : 3}"><title>${points[i].score}/100 · ${new Date(points[i].at).toLocaleDateString()}</title></circle>`;
+      }).join('');
+      wrap.innerHTML = `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><path class="sp-area" d="${areaPath}"></path><path class="sp-line" d="${linePath}"></path>${dots}</svg>`;
+      const first = points[0].score, last = points[points.length-1].score;
+      const delta = last - first;
+      const dirClass = delta > 0 ? 'up' : (delta < 0 ? 'down' : '');
+      const arrow = delta > 0 ? '▲' : (delta < 0 ? '▼' : '—');
+      summary.innerHTML = `${points.length} audits over ${Math.round((new Date(points[points.length-1].at) - new Date(points[0].at)) / (1000 * 60 * 60 * 24))} days · ${first} → ${last} <span class="delta ${dirClass}">${arrow} ${Math.abs(delta)}pts</span>`;
+    }
+    const STATUSES = [
+      { value: 'not_started', label: 'Not started' },
+      { value: 'in_progress', label: 'In progress' },
+      { value: 'done', label: 'Done' },
+      { value: 'blocked', label: 'Blocked' }
+    ];
+
+    async function loadFixTracker(token) {
+      const host = document.getElementById('trackerList');
+      try {
+        const r = await fetch(`/api/customer/fix-tracker?token=${encodeURIComponent(token)}`);
+        const data = await r.json();
+        if (!r.ok || !data.ok) { host.innerHTML = '<div style="color:#64748b;">Tracker unavailable.</div>'; return; }
+        const items = (data.tracker?.items || []).slice().sort((a, b) => {
+          // Done items go to the bottom; rest sort by updatedAt desc
+          if (a.status === 'done' && b.status !== 'done') return 1;
+          if (b.status === 'done' && a.status !== 'done') return -1;
+          return new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0);
+        });
+        if (!items.length) {
+          host.innerHTML = '<div style="color:#64748b;font-size:0.9rem;">No items yet. Items appear here automatically after each audit.</div>';
+          return;
+        }
+        host.innerHTML = items.map((item) => {
+          const isDone = item.status === 'done';
+          return `<div class="tracker-item ${escapeHtml(item.status)}">
+            <input type="checkbox" class="tracker-checkbox" ${isDone ? 'checked' : ''} data-id="${escapeHtml(item.id)}" data-action="toggle-done" />
+            <div class="tracker-content">
+              <div class="tracker-title">${escapeHtml(item.title)}</div>
+              ${item.notes ? `<div class="tracker-notes">${escapeHtml(item.notes.slice(0, 240))}</div>` : ''}
+              <div style="margin-top:6px;">
+                <span class="tracker-status ${escapeHtml(item.status)}">${escapeHtml(item.status.replace('_', ' '))}</span>
+                <select class="tracker-status-select" data-id="${escapeHtml(item.id)}" data-action="set-status">
+                  ${STATUSES.map((s) => `<option value="${s.value}" ${s.value === item.status ? 'selected' : ''}>${s.label}</option>`).join('')}
+                </select>
+              </div>
+            </div>
+          </div>`;
+        }).join('');
+        host.querySelectorAll('[data-action="toggle-done"]').forEach((cb) => {
+          cb.onchange = async () => {
+            await upsertItem(token, { id: cb.getAttribute('data-id'), status: cb.checked ? 'done' : 'not_started' });
+            loadFixTracker(token);
+          };
+        });
+        host.querySelectorAll('[data-action="set-status"]').forEach((sel) => {
+          sel.onchange = async () => {
+            await upsertItem(token, { id: sel.getAttribute('data-id'), status: sel.value });
+            loadFixTracker(token);
+          };
+        });
+      } catch (err) {
+        host.innerHTML = '<div style="color:#dc2626;font-size:0.85rem;">Tracker error: ' + escapeHtml(err.message) + '</div>';
+      }
+    }
+    async function upsertItem(token, patch) {
+      try {
+        await fetch(`/api/customer/fix-tracker/upsert?token=${encodeURIComponent(token)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(patch)
+        });
+        showToast('Updated', true);
+      } catch (err) {
+        showToast('Update failed', false);
+      }
+    }
+
+    function renderIndustryBenchmark(d) {
+      const card = document.getElementById('industryBenchmarkCard');
+      const body = document.getElementById('industryBenchmarkBody');
+      const bm = d.latestAudit?.industryBenchmark;
+      if (!bm || !bm.overall) { card.style.display = 'none'; return; }
+      card.style.display = 'block';
+      const yourScore = d.latestAudit.overallScore;
+      const cohort = bm.cohort || {};
+      const cohortLabel = `${escapeHtml(d.industry || 'businesses')} in ${escapeHtml(cohort.citySize === 'micro' ? 'micro' : cohort.citySize || 'similar')} markets (n=${cohort.n || '?'})`;
+      const beats = yourScore > bm.overall.p50 ? 'beating' : 'below';
+      const beatColor = yourScore > bm.overall.p50 ? '#16a34a' : '#dc2626';
+      body.innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:10px;">
+          <div style="background:#eff6ff;padding:10px;border-radius:8px;text-align:center;border:1px solid #0369a1;">
+            <div style="font-size:0.7rem;color:#64748b;text-transform:uppercase;">You</div>
+            <div style="font-size:1.5rem;font-weight:800;color:#0369a1;">${yourScore}</div>
+          </div>
+          <div style="background:#f8fafc;padding:10px;border-radius:8px;text-align:center;">
+            <div style="font-size:0.7rem;color:#64748b;text-transform:uppercase;">25th %ile</div>
+            <div style="font-size:1.5rem;font-weight:800;color:#dc2626;">${bm.overall.p25}</div>
+          </div>
+          <div style="background:#f8fafc;padding:10px;border-radius:8px;text-align:center;">
+            <div style="font-size:0.7rem;color:#64748b;text-transform:uppercase;">Median</div>
+            <div style="font-size:1.5rem;font-weight:800;color:#475569;">${bm.overall.p50}</div>
+          </div>
+          <div style="background:#f8fafc;padding:10px;border-radius:8px;text-align:center;">
+            <div style="font-size:0.7rem;color:#64748b;text-transform:uppercase;">75th %ile</div>
+            <div style="font-size:1.5rem;font-weight:800;color:#16a34a;">${bm.overall.p75}</div>
+          </div>
+        </div>
+        <p style="margin:0;font-size:0.92rem;color:#475569;">
+          You're <strong style="color:${beatColor};">${beats}</strong> the median ${escapeHtml(d.industry || 'business')}
+          ${bm.percentileRank ? ' · You\u2019re in the <strong>' + escapeHtml(bm.percentileRank) + ' percentile</strong>' : ''}.
+        </p>
+        <p style="margin:6px 0 0;font-size:0.78rem;color:#94a3b8;">Cohort: ${cohortLabel}</p>`;
+    }
+
+    function renderAllFindings(findings) {
+      const host = document.getElementById('allFindings');
+      const counter = document.getElementById('allFindingsCount');
+      if (!findings.length) {
+        counter.textContent = 'No findings — site is in good shape!';
+        host.innerHTML = '';
+        return;
+      }
+      // Group by severity
+      const groups = { critical: [], major: [], minor: [], info: [] };
+      const sevAlias = { critical: 'critical', high: 'critical', major: 'major', medium: 'major', minor: 'minor', low: 'minor', info: 'info' };
+      findings.forEach((f) => {
+        const sev = sevAlias[String(f.severity || '').toLowerCase()] || 'minor';
+        groups[sev].push(f);
+      });
+      counter.textContent = `${findings.length} total · ${groups.critical.length} critical · ${groups.major.length} major · ${groups.minor.length} minor`;
+      const sevColor = { critical: '#dc2626', major: '#f59e0b', minor: '#94a3b8', info: '#0369a1' };
+      const sections = ['critical', 'major', 'minor', 'info'].filter((s) => groups[s].length);
+      host.innerHTML = sections.map((sev) => `
+        <details ${sev === 'critical' ? 'open' : ''} style="margin:10px 0;">
+          <summary style="cursor:pointer;font-weight:600;font-size:0.95rem;color:${sevColor[sev]};">
+            ${groups[sev].length} ${sev} issue${groups[sev].length === 1 ? '' : 's'}
+          </summary>
+          <ol style="padding-left:20px;margin:8px 0;font-size:0.88rem;">
+            ${groups[sev].map((f) => `<li style="margin:6px 0;">
+              <strong>${escapeHtml(f.title)}</strong>
+              ${f.section ? `<span style="font-size:0.7rem;color:#94a3b8;margin-left:6px;">[${escapeHtml(f.section)}]</span>` : ''}
+              ${f.dollarImpact?.monthly?.high ? ` <span style="color:#16a34a;font-weight:600;">+$${escapeHtml(f.dollarImpact.monthly.low)}–$${escapeHtml(f.dollarImpact.monthly.high)}/mo</span>` : ''}
+              <br><span style="color:#475569;font-size:0.85rem;">${escapeHtml(f.detail || '')}</span>
+              ${f.fixEstimate ? `<div style="font-size:0.72rem;color:#64748b;margin-top:3px;">⏱ ${escapeHtml(f.fixEstimate)} · difficulty: ${escapeHtml(f.fixDifficulty || 'easy')}</div>` : ''}
+              ${f.example ? `<div style="font-size:0.72rem;color:#64748b;margin-top:3px;">📌 Example: <a href="${escapeHtml(f.example.exampleUrl || '#')}" target="_blank" style="color:#0369a1;">${escapeHtml(f.example.exampleDomain)}</a> — ${escapeHtml((f.example.why || '').slice(0, 140))}</div>` : ''}
+              ${f.competitorEvidence?.peersWithFix?.length ? `<div style="font-size:0.72rem;color:#64748b;margin-top:3px;">🎯 ${f.competitorEvidence.peersWithFix.length} peer(s) already fixed this: ${f.competitorEvidence.peersWithFix.slice(0, 3).map((p) => escapeHtml(p.domain)).join(', ')}</div>` : ''}
+            </li>`).join('')}
+          </ol>
+        </details>`).join('');
+    }
+
+    function renderPillarDeepDive(sections, sectionScores, allFindings) {
+      const host = document.getElementById('pillarDeepDive');
+      const labels = {
+        schema: 'Schema Markup', eeat: 'E-E-A-T (Trust signals)',
+        geo: 'AI-Search Readiness (GEO)', sitemap: 'Sitemap.xml',
+        nap: 'NAP Consistency', images: 'Image Audit',
+        performance: 'Page Performance (Core Web Vitals)', content: 'Content Quality',
+        ssl: 'SSL & Security', crawlability: 'Crawlability',
+        internal_linking: 'Internal Linking', mobile: 'Mobile Usability',
+        hreflang: 'hreflang / Multilingual'
+      };
+      const pillars = Object.keys(sectionScores || {}).sort((a, b) => (sectionScores[a] || 0) - (sectionScores[b] || 0));
+      if (!pillars.length) { host.innerHTML = '<p style="color:#94a3b8;">No pillar data.</p>'; return; }
+      host.innerHTML = pillars.map((key) => {
+        const score = sectionScores[key];
+        const meta = sections?.[key] || {};
+        const cls = score >= 75 ? 'green' : (score >= 50 ? 'yellow' : 'red');
+        const pillarFindings = (allFindings || []).filter((f) => f.section === key);
+        const findingsHtml = pillarFindings.length
+          ? pillarFindings.map((f) => {
+              const sev = String(f.severity || 'minor').toLowerCase();
+              const sevAlias = { high: 'critical', medium: 'major', low: 'minor' };
+              const sevClass = sevAlias[sev] || sev;
+              return `<div class="pillar-finding ${escapeHtml(sevClass)}">
+                <strong>${escapeHtml(f.title)}</strong>
+                <span>${escapeHtml(f.detail || '')}</span>
+                <div class="meta">${escapeHtml(f.severity || 'minor')} · ${escapeHtml(f.fixEstimate || 'unknown effort')}</div>
+              </div>`;
+            }).join('')
+          : '<p style="color:#16a34a;font-size:0.85rem;margin:4px 0;">✓ No issues detected in this pillar.</p>';
+        // Strip noisy/large fields from metadata for display
+        const displayMeta = stripNoisyMetadata(meta);
+        return `<details class="pillar-row">
+          <summary>
+            <span class="pillar-arrow">▶</span>
+            <span class="pillar-name">${escapeHtml(labels[key] || key)}</span>
+            <span class="pillar-score ${cls}">${score}/100</span>
+          </summary>
+          <div class="pillar-body">
+            <h4 style="margin:12px 0 4px;font-size:0.85rem;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;">Findings (${pillarFindings.length})</h4>
+            ${findingsHtml}
+            <details style="margin-top:14px;"><summary style="cursor:pointer;font-size:0.78rem;color:#64748b;">🔧 Raw analyzer metadata (technical)</summary>
+              <pre>${escapeHtml(JSON.stringify(displayMeta, null, 2).slice(0, 4000))}</pre>
+            </details>
+          </div>
+        </details>`;
+      }).join('');
+    }
+
+    function stripNoisyMetadata(meta) {
+      // Remove the heaviest sub-fields that aren't useful for the customer to read
+      if (!meta || typeof meta !== 'object') return meta;
+      const cleaned = { ...meta };
+      ['providerRaw', 'rawHtml', 'fullText', 'screenshot', 'screenshotPath'].forEach((k) => delete cleaned[k]);
+      // Cap arrays at 5 items each
+      for (const [k, v] of Object.entries(cleaned)) {
+        if (Array.isArray(v) && v.length > 5) cleaned[k] = [...v.slice(0, 5), `… ${v.length - 5} more`];
+      }
+      return cleaned;
+    }
+
+    function renderGeneratedAssets(assets, token) {
+      const card = document.getElementById('generatedAssetsCard');
+      const host = document.getElementById('generatedAssets');
+      if (!assets || (typeof assets === 'object' && !Object.keys(assets).length)) { card.style.display = 'none'; return; }
+      card.style.display = 'block';
+      // Generated llms.txt is always available via dedicated endpoint
+      const blocks = [];
+      blocks.push({
+        name: 'llms.txt',
+        description: 'Drop this file at the root of your domain (https://yourdomain.com/llms.txt). AI crawlers (ChatGPT, Claude, Perplexity) read it.',
+        downloadUrl: `/api/customer/llms-txt?token=${encodeURIComponent(token)}`
+      });
+      // Add any dynamic assets from the audit (schema JSON-LD blocks etc.)
+      if (assets.schemas && typeof assets.schemas === 'object') {
+        for (const [schemaType, jsonLd] of Object.entries(assets.schemas)) {
+          if (typeof jsonLd === 'string' || typeof jsonLd === 'object') {
+            blocks.push({
+              name: `${schemaType} schema (JSON-LD)`,
+              description: `Paste inside <head> as a <script type="application/ld+json"> block.`,
+              code: typeof jsonLd === 'string' ? jsonLd : JSON.stringify(jsonLd, null, 2)
+            });
+          }
+        }
+      }
+      host.innerHTML = blocks.map((b, i) => `
+        <div class="asset-item">
+          <div class="asset-name">
+            ${escapeHtml(b.name)}
+            ${b.code ? `<button class="asset-copy" data-i="${i}">Copy</button>` : ''}
+            ${b.downloadUrl ? `<a href="${escapeHtml(b.downloadUrl)}" target="_blank" style="text-decoration:none;"><button>↓ Download</button></a>` : ''}
+          </div>
+          <div style="font-size:0.82rem;color:#64748b;margin-bottom:6px;">${escapeHtml(b.description)}</div>
+          ${b.code ? `<pre id="asset-code-${i}">${escapeHtml(b.code.slice(0, 2000))}</pre>` : ''}
+        </div>`).join('');
+      // Wire copy buttons
+      host.querySelectorAll('.asset-copy').forEach((btn) => {
+        btn.onclick = async () => {
+          const i = btn.getAttribute('data-i');
+          const code = blocks[i]?.code || '';
+          try { await navigator.clipboard.writeText(code); btn.textContent = '✓ Copied'; btn.classList.add('copied'); setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000); }
+          catch { btn.textContent = '✗ Failed'; }
+        };
+      });
+    }
+
+    function renderWeekDiff(history) {
+      const card = document.getElementById('diffCard');
+      const host = document.getElementById('diffSummary');
+      if (!card || !host) return;
+      if (!Array.isArray(history) || history.length < 2) { card.style.display = 'none'; return; }
+      const newest = history[0];
+      // Pick entry closest to 7 days ago
+      const target = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      let old = null; let bestDelta = Infinity;
+      for (const h of history.slice(1)) {
+        const ts = new Date(h.audit?.generatedAt || h.generatedAt || 0).getTime();
+        if (!ts) continue;
+        const d = Math.abs(ts - target);
+        if (d < bestDelta) { bestDelta = d; old = h; }
+      }
+      if (!old || !newest.audit || !old.audit) { card.style.display = 'none'; return; }
+      const scoreDelta = (newest.audit.overallScore || 0) - (old.audit.overallScore || 0);
+      const oldFindingKeys = new Set((old.audit.findings || []).map((f) => f.key));
+      const newFindingKeys = new Set((newest.audit.findings || []).map((f) => f.key));
+      const fixed = (old.audit.findings || []).filter((f) => !newFindingKeys.has(f.key));
+      const added = (newest.audit.findings || []).filter((f) => !oldFindingKeys.has(f.key));
+      if (scoreDelta === 0 && !fixed.length && !added.length) { card.style.display = 'none'; return; }
+      card.style.display = 'block';
+      const cls = scoreDelta > 0 ? 'up' : (scoreDelta < 0 ? 'down' : '');
+      const arrow = scoreDelta > 0 ? '▲' : (scoreDelta < 0 ? '▼' : '—');
+      const fixedHtml = fixed.length
+        ? `<h3 style="margin:8px 0 4px;font-size:1rem;color:#16a34a;">✓ Fixed ${fixed.length}</h3>
+           <ul class="diff-list">${fixed.slice(0, 6).map((f) => `<li class="diff-fixed">${escapeHtml(f.title)}</li>`).join('')}</ul>` : '';
+      const addedHtml = added.length
+        ? `<h3 style="margin:12px 0 4px;font-size:1rem;color:#dc2626;">⚠ New issues ${added.length}</h3>
+           <ul class="diff-list">${added.slice(0, 6).map((f) => `<li class="diff-new"><strong>${escapeHtml(f.title)}</strong></li>`).join('')}</ul>` : '';
+      host.innerHTML = `<div class="diff-stat-row">
+        <div class="diff-stat"><div class="k">Score change</div><div class="v ${cls}">${arrow} ${Math.abs(scoreDelta)}<span style="font-size:0.9rem;color:#64748b;font-weight:400;"> pts</span></div></div>
+        <div class="diff-stat"><div class="k">Fixed</div><div class="v up">${fixed.length}</div></div>
+        <div class="diff-stat"><div class="k">New issues</div><div class="v ${added.length ? 'down' : ''}">${added.length}</div></div>
+      </div>
+      ${fixedHtml}
+      ${addedHtml}`;
+    }
+
+    async function load() {
+      const params = new URLSearchParams(location.search);
+      const token = params.get('token');
+      if (!token) { showError('Missing access token. Check the link in your email.'); return; }
+      let res, data;
+      try {
+        res = await fetch(`/api/customer/dashboard?token=${encodeURIComponent(token)}`);
+        data = await res.json();
+      } catch (err) {
+        showError('Network error: ' + err.message); return;
+      }
+      if (!res.ok || !data.ok) { showError(data?.error || ('HTTP ' + res.status)); return; }
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('content').style.display = 'block';
+      const d = data.dashboard;
+      document.getElementById('bizName').textContent = d.businessName || d.domain;
+      const link = document.getElementById('domainLink');
+      link.textContent = d.domain;
+      link.href = `https://${d.domain}`;
+      document.getElementById('lastAudit').textContent = d.latestAudit?.generatedAt
+        ? `Last audited ${new Date(d.latestAudit.generatedAt).toLocaleDateString()}`
+        : 'No audit yet';
+      const score = d.latestAudit?.overallScore;
+      document.getElementById('gradeLetter').textContent = gradeLetter(score);
+      document.getElementById('gradeScore').textContent = (score ?? '—') + ' / 100';
+      const gradeEl = document.getElementById('grade');
+      gradeEl.classList.add(gradeClass(score));
+      // Pillars
+      const ss = d.latestAudit?.sectionScores || {};
+      document.getElementById('pillars').innerHTML = Object.keys(ss).length
+        ? Object.entries(ss).map(([k, v]) => `<div class="pillar"><div class="v ${pillarColor(v)}">${escapeHtml(v)}</div><div class="k">${escapeHtml(k)}</div></div>`).join('')
+        : '<div style="color:#64748b;">No pillar scores available.</div>';
+      // Findings
+      const findings = (d.latestAudit?.findings || []).slice(0, 8);
+      document.getElementById('findings').innerHTML = findings.length
+        ? findings.map(f => `<li><strong>${escapeHtml(f.title)}</strong><span class="badge ${escapeHtml(f.severity || 'low')}">${escapeHtml(f.severity || 'low')}</span>${f.dollarImpact?.monthly?.high ? ` <span class="impact">+$${escapeHtml(f.dollarImpact.monthly.low)}–$${escapeHtml(f.dollarImpact.monthly.high)}/mo</span>` : ''}<br><span style="color:#475569;font-size:0.92rem;">${escapeHtml(f.detail || '')}</span></li>`).join('')
+        : '<li style="color:#64748b;">No fixes pending — site is in good shape!</li>';
+      // History
+      renderSparkline(d.history || []);
+      // Fix tracker (auto-syncs from latest audit findings on the server)
+      loadFixTracker(token);
+      // What-changed-this-week diff
+      renderWeekDiff(d.history || []);
+      // Industry baseline (peer comparison)
+      renderIndustryBenchmark(d);
+      // ALL findings (full audit deep view)
+      renderAllFindings(d.latestAudit?.findings || []);
+      // Per-pillar deep dive (raw analyzer metadata)
+      renderPillarDeepDive(d.latestAudit?.sections || {}, d.latestAudit?.sectionScores || {}, d.latestAudit?.findings || []);
+      // Generated assets (llms.txt, schema, etc.)
+      renderGeneratedAssets(d.latestAudit?.generatedAssets, token);
+      // Action links
+      document.getElementById('btnFixPlan').href = `/api/customer/fix-plan?token=${encodeURIComponent(token)}`;
+      document.getElementById('btnFullReport').href = `/audit-results.html?url=${encodeURIComponent('https://' + d.domain)}`;
+      document.getElementById('btnReaudit').onclick = async () => {
+        const status = document.getElementById('reauditStatus');
+        status.textContent = 'Re-auditing… this takes ~30-60s.';
+        try {
+          const r = await fetch(`/api/customer/reaudit?token=${encodeURIComponent(token)}`, { method: 'POST' });
+          const j = await r.json();
+          if (!r.ok || !j.ok) { status.textContent = 'Failed: ' + (j.error || r.status); showToast('Re-audit failed', false); return; }
+          showToast('Re-audit complete!', true);
+          status.textContent = 'Done. Reloading…';
+          setTimeout(load, 800);
+        } catch (err) {
+          status.textContent = 'Error: ' + err.message;
+          showToast('Re-audit failed', false);
+        }
+      };
+      document.getElementById('tokenExpiry').textContent = d.tokenExpiresAt ? new Date(d.tokenExpiresAt).toLocaleDateString() : 'soon';
+      // Mirrored prospect-page sections (competitors, GBP, losing narrative, review gap)
+      loadProspectMirror(d.domain, token);
+    }
+
+    async function loadProspectMirror(domain, token) {
+      if (!domain) return;
+      try {
+        const params = new URLSearchParams({ domain });
+        if (token) params.set('token', token);
+        const r = await fetch('/api/prospect-page-data?' + params.toString());
+        if (!r.ok) return;
+        const payload = await r.json();
+        renderCdLosing(payload);
+        renderCdCompetitors(payload);
+        renderCdGbp(payload);
+        renderCdReviewGap(payload);
+      } catch { /* silent — these cards stay hidden if unavailable */ }
+    }
+
+    function renderCdLosing(payload) {
+      const card = document.getElementById('cdLosingCard');
+      const body = document.getElementById('cdLosingBody');
+      const lr = payload.localRank || {};
+      const hasRank = lr.provided && lr.totalQueriesTested;
+      const hasNarr = !!payload.losingNarrative;
+      if (!hasRank && !hasNarr) return;
+      let html = '';
+      if (hasRank) {
+        const apt = lr.avgPosition || 99;
+        const aptClass = apt <= 3 ? 'good' : apt <= 10 ? 'warn' : 'bad';
+        const visibleQ = lr.totalQueriesTested - (lr.missingFromQueries || 0);
+        html += `<div class="local-rank-row">
+          <div class="local-rank-stat ${aptClass}"><div class="label">Avg position</div><div class="value">#${apt > 50 ? '50+' : apt}</div></div>
+          <div class="local-rank-stat ${visibleQ > lr.totalQueriesTested * 0.6 ? 'good' : visibleQ > 0 ? 'warn' : 'bad'}"><div class="label">Queries you appear in</div><div class="value">${visibleQ}/${lr.totalQueriesTested}</div></div>
+          <div class="local-rank-stat ${(lr.missingFromQueries || 0) === 0 ? 'good' : 'bad'}"><div class="label">Queries you're invisible for</div><div class="value">${lr.missingFromQueries || 0}</div></div>
+        </div>`;
+      }
+      if (hasNarr) {
+        html += `<div class="losing-narrative">${escapeHtml(payload.losingNarrative)}</div>`;
+      }
+      body.innerHTML = html;
+      card.style.display = 'block';
+    }
+
+    function renderCdCompetitors(payload) {
+      const card = document.getElementById('cdCompetitorsCard');
+      const body = document.getElementById('cdCompetitorsBody');
+      const competitors = payload.competitors || [];
+      if (!competitors.length) return;
+      const audit = payload.audit || {};
+      const dr = audit.deepIntegrations?.ahrefs?.domainRating;
+      const traffic = audit.deepIntegrations?.ahrefs?.organicTraffic;
+      body.innerHTML = `<table class="comp-table">
+        <thead><tr><th>Competitor</th><th>Audit</th><th>Reviews</th><th>Rating</th><th>DR</th><th>Traffic</th></tr></thead>
+        <tbody>
+          <tr class="you">
+            <td><strong>You</strong> · ${escapeHtml(payload.businessName || '')}</td>
+            <td class="num">${audit.overallScore ?? '—'}</td>
+            <td class="num">${payload.gbp?.reviewCount ?? '—'}</td>
+            <td class="num">${payload.gbp?.rating ?? '—'}</td>
+            <td class="num">${dr != null ? Math.round(dr) : '—'}</td>
+            <td class="num">${traffic != null ? Number(traffic).toLocaleString() : '—'}</td>
+          </tr>
+          ${competitors.map((c) => `
+            <tr class="${(c.auditScore && audit.overallScore && c.auditScore > audit.overallScore) ? 'beats' : ''}">
+              <td>${escapeHtml(c.businessName || c.domain)}<div style="font-size:0.72rem;color:#94a3b8;">${escapeHtml(c.domain)}</div></td>
+              <td class="num">${c.auditScore ?? '—'}</td>
+              <td class="num">${c.reviewCount ?? '—'}</td>
+              <td class="num">${c.rating ?? '—'}</td>
+              <td class="num">${c.dr != null ? Math.round(c.dr) : '—'}</td>
+              <td class="num">${c.traffic != null ? Number(c.traffic).toLocaleString() : '—'}</td>
+            </tr>`).join('')}
+        </tbody></table>`;
+      card.style.display = 'block';
+    }
+
+    function renderCdGbp(payload) {
+      const card = document.getElementById('cdGbpCard');
+      const body = document.getElementById('cdGbpBody');
+      const gbp = payload.gbp;
+      if (!gbp || !gbp.matched) return;
+      const issuesHtml = (gbp.issues || []).length === 0
+        ? '<p style="color:#16a34a;font-weight:600;margin:0.25rem 0 0;">✓ Your GBP looks healthy.</p>'
+        : (gbp.issues || []).map((i) => `<div class="gbp-issue">⚠ ${escapeHtml(i)}</div>`).join('');
+      body.innerHTML = `<div class="gbp-stats">
+          <div class="gbp-stat"><span class="k">Rating</span><span class="v">${gbp.rating ? gbp.rating + '⭐' : 'no rating'}</span></div>
+          <div class="gbp-stat"><span class="k">Reviews</span><span class="v">${gbp.reviewCount || 0}</span></div>
+          <div class="gbp-stat"><span class="k">Photos</span><span class="v">${gbp.photoCount || 0}</span></div>
+          <div class="gbp-stat"><span class="k">Phone</span><span class="v">${gbp.phone ? '✓' : '✗ missing'}</span></div>
+          <div class="gbp-stat"><span class="k">Website link</span><span class="v">${gbp.website ? '✓' : '✗ missing'}</span></div>
+        </div>${issuesHtml}`;
+      card.style.display = 'block';
+    }
+
+    function renderCdReviewGap(payload) {
+      const card = document.getElementById('cdReviewGapCard');
+      const body = document.getElementById('cdReviewGapBody');
+      const rg = payload.reviewGaps || {};
+      if (rg.yourReviewCount == null && rg.competitorAvgReviewCount == null) return;
+      const yourCount = rg.yourReviewCount ?? 0;
+      const compCount = rg.competitorAvgReviewCount ?? 0;
+      const gap = compCount - yourCount;
+      body.innerHTML = `<div class="review-compare">
+          <div class="review-card you"><div class="who">You</div><div class="stars">${rg.yourRating ? rg.yourRating + ' ⭐' : 'no rating'}</div><div class="count">${yourCount} reviews</div></div>
+          <div class="review-card them"><div class="who">Local competitor avg</div><div class="stars">${rg.competitorAvgRating ? rg.competitorAvgRating + ' ⭐' : 'no data'}</div><div class="count">${compCount} reviews</div></div>
+        </div>${gap > 0 ? `<p class="review-gap-note">You're <strong>${gap}+ reviews behind</strong> the local average. Each Google review = roughly 1-2 clicks/mo from search.</p>` : ''}`;
+      card.style.display = 'block';
+    }
+    function showError(msg) {
+      document.getElementById('loading').style.display = 'none';
+      const e = document.getElementById('error');
+      e.style.display = 'block';
+      e.innerHTML = `<strong>Couldn't load your dashboard.</strong><br>${escapeHtml(msg)}<br><br>Need a fresh link? Reply to <a href="mailto:audit@geoneo.ai" style="color:#7f1d1d;">audit@geoneo.ai</a>.`;
+    }
+    load();
+  </script>
+</body>
+</html>

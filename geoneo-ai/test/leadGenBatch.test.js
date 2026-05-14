@@ -69,23 +69,23 @@ test('extractLeadGenCandidates filters out unknown and non-business resultTypes'
   assert.deepEqual(candidates.map((c) => c.domain), ['good.com', 'organic.com', 'website.com']);
 });
 
-test('assessSeoProvider classifies agency, pro, diy, and unknown from evidence', () => {
+test('assessSeoProvider classifies national agency, tooling, CMS, and sparse pages', () => {
   const { assessSeoProvider } = require('../services/leadGenBatch');
 
-  assert.equal(assessSeoProvider({ html: 'Website by BrightLocal Agency', pageTitle: 'Home' }).classification, 'agency');
-  assert.equal(assessSeoProvider({ html: '<meta name="generator" content="Yoast SEO">', pageTitle: 'Local Plumber' }).classification, 'pro');
+  assert.equal(assessSeoProvider({ html: 'Website by BrightLocal Agency', pageTitle: 'Home' }).classification, 'national_agency');
+  assert.equal(assessSeoProvider({ html: '<meta name="generator" content="Yoast SEO">', pageTitle: 'Local Plumber' }).classification, 'diy_with_help');
   assert.equal(
     assessSeoProvider({ html: '<script src="https://x.com/wp-content/themes/t/foo.js"></script>', pageTitle: 'Local Shop', visibleText: 'We fix roofs' }).classification,
-    'pro',
-    'HTML-only stack signals (e.g. wp-content) must match when raw HTML is supplied'
+    'local_marketer',
+    'WordPress footprint without agency tooling classifies as local marketer / freelancer'
   );
-  assert.equal(assessSeoProvider({ html: '<title>Home</title><h1>Welcome</h1>', pageTitle: 'Home' }).classification, 'diy_local');
+  assert.equal(assessSeoProvider({ html: '<title>Home</title><h1>Welcome</h1>', pageTitle: 'Home' }).classification, 'unknown');
   assert.equal(
     assessSeoProvider({ visibleText: 'Serving the Ozarks since 1999', pageTitle: 'Home' }).classification,
-    'diy_local',
-    'visibleText + pageTitle without raw HTML — generic Home title still classifies as DIY'
+    'unknown',
+    'Marketing copy alone does not imply DIY vs agency without CMS/tooling signals'
   );
-  assert.equal(assessSeoProvider({ visibleText: 'Family owned repair shop', pageTitle: 'Welcome' }).classification, 'diy_local');
+  assert.equal(assessSeoProvider({ visibleText: 'Family owned repair shop', pageTitle: 'Welcome' }).classification, 'unknown');
   assert.equal(assessSeoProvider({ html: '', pageTitle: '' }).classification, 'unknown');
 });
 

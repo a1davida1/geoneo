@@ -15,9 +15,17 @@ function normalizeInt(value, fallback) {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
+function parseBoolean(val, fallback) {
+  if (val == null) return fallback;
+  const s = String(val).trim().toLowerCase();
+  if (['true', '1', 'yes'].includes(s)) return true;
+  if (['false', '0', 'no'].includes(s)) return false;
+  return fallback;
+}
+
 function crawlConfigFromEnv(env = process.env) {
   return {
-    enabled: String(env.GEONEO_SITE_CRAWL_ENABLED ?? 'true').toLowerCase() !== 'false',
+    enabled: parseBoolean(env.GEONEO_SITE_CRAWL_ENABLED, true),
     maxPages: normalizeInt(env.GEONEO_SITE_CRAWL_MAX_PAGES, DEFAULT_MAX_PAGES),
     maxDepth: normalizeInt(env.GEONEO_SITE_CRAWL_MAX_DEPTH, DEFAULT_MAX_DEPTH),
     totalBudgetMs: normalizeInt(env.GEONEO_SITE_CRAWL_BUDGET_MS, DEFAULT_TOTAL_BUDGET_MS),

@@ -37,6 +37,7 @@ const { analyzeTechnicalSeoDeep } = require('./services/technicalSeoDeep');
 const { buildCompetitorIntelligencePayload } = require('./services/competitorIntelligence');
 const { getTracker, upsertItem, deleteItem } = require('./services/fixTracker');
 const { authorizeInternalApi, authorizeInternalOrMember } = require('./services/apiAccess');
+const orgContext = require('./services/orgContext');
 const { loadAdminSummary } = require('./services/adminSummary');
 const { runDeepAudit, filterDeepAuditByTier } = require('./services/auditDeep');
 const { buildCloserSheet } = require('./services/closerSheet');
@@ -47,6 +48,8 @@ const {
   extractLeadGenCandidates,
   assessSeoProvider,
   extractContactInfo,
+  extractContactsFromHtml,
+  mergeContacts,
   scoreLeadOpportunity,
   buildOutreachPlan,
   buildAdvancedLeadInsights,
@@ -63,6 +66,18 @@ const { runLimitedSiteCrawl } = require('./services/siteCrawl');
 const { fetchCitiesForStatePostal } = require('./services/censusPlaces');
 const { loadProspectVerticals } = require('./services/prospectVerticals');
 const { generateLocationServicePage } = require('./services/pageGenerator');
+const sweepScheduler = require('./services/scheduler');
+const auditArchive = require('./services/auditArchive');
+const qualifierService = require('./services/qualifier');
+const emailBlast = require('./services/emailBlast');
+const leadPipeline = require('./services/leadPipeline');
+const outboxSender = require('./services/outboxSender');
+const emailOutbox = require('./services/emailOutbox');
+const customerEmails = require('./services/customerEmails');
+const { renderProposalEmail, renderFullReportEmail, renderOptInEmail, renderMaintenanceOnboardingEmail, renderMaintenanceWeeklyBrief } = customerEmails;
+const dripCampaign = require('./services/dripCampaign');
+const reAuditScheduler = require('./services/reAuditScheduler');
+const backupScheduler = require('./services/backupScheduler');
 
 const PORT = process.env.PORT || 4173;
 const HOST = process.env.HOST || '127.0.0.1';
@@ -2529,7 +2544,7 @@ async function getLocalCompetitors({ industry, market, queries, locationOverride
   };
 }
 
-async function runMarketOnlyAudit(input, { provider: injectedProvider } = {}) {
+async function runMarketOnlyAudit(input, { provider: injectedProvider, maxQueries = 0 } = {}) {
   const industry = normalizeString(input.industry);
   const businessName = normalizeString(input.businessName || input.clientName);
   const city = normalizeString(input.city);
@@ -2538,7 +2553,12 @@ async function runMarketOnlyAudit(input, { provider: injectedProvider } = {}) {
   const market = createAreaLabel({ city, state, zip });
   const serpLocation = normalizeString(process.env.SERP_LOCATION) || [city, state, 'United States'].filter(Boolean).join(', ') || 'United States';
   const primaryQuery = `${industry} ${market}`.trim();
-  const queries = buildMarketQueries({ industry, city, state, zip });
+  // maxQueries > 0 caps the SERP fanout — discovery uses 2 (one organic +
+  // one local pack). Full market analysis uses all 5-7 generated queries.
+  const queries = (() => {
+    const all = buildMarketQueries({ industry, city, state, zip });
+    return maxQueries > 0 ? all.slice(0, maxQueries) : all;
+  })();
 
   const competitorMap = new Map();
   const screenshotRows = [];
@@ -4612,12 +4632,23 @@ function hasLocationPageSignal(url, locationTokens) {
   return locationTokens.some((token) => normalizedUrl.includes(`/${token}`) || normalizedUrl.includes(`-${token}`));
 }
 
-const MAX_SITEMAP_BYTES = 512 * 1024;
+// 8MB cap fits ~50k URLs (Google's per-sitemap cap is 50K URLs / 50MB).
+// Truncation now keeps partial content so even oversize sitemaps still get parsed.
+const MAX_SITEMAP_BYTES = 8 * 1024 * 1024;
 
-async function fetchHtmlWithTimeout(url, timeoutMs, maxBytes) {
+async function fetchHtmlWithTimeout(url, timeoutMs, maxBytes, externalSignal) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  let onExternalAbort;
   try {
+    if (externalSignal) {
+      if (externalSignal.aborted) {
+        clearTimeout(timeout);
+        return null;
+      }
+      onExternalAbort = () => controller.abort();
+      externalSignal.addEventListener('abort', onExternalAbort);
+    }
     const response = await fetch(url, {
       signal: controller.signal,
       redirect: 'follow',
@@ -4633,17 +4664,23 @@ async function fetchHtmlWithTimeout(url, timeoutMs, maxBytes) {
       let received = 0;
       const chunks = [];
       const decoder = new TextDecoder();
+      let truncated = false;
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         received += value.length;
         if (received > maxBytes) {
-          controller.abort();
-          return null;
+          // Keep what we have so far rather than discarding the whole response.
+          // For sitemaps + similar streams, partial data is still parseable
+          // (XML regex extraction works on truncated docs).
+          chunks.push(decoder.decode(value, { stream: true }));
+          try { reader.cancel(); } catch {}
+          truncated = true;
+          break;
         }
         chunks.push(decoder.decode(value, { stream: true }));
       }
-      chunks.push(decoder.decode());
+      if (!truncated) chunks.push(decoder.decode());
       return chunks.join('');
     }
     return await response.text();
@@ -4651,7 +4688,73 @@ async function fetchHtmlWithTimeout(url, timeoutMs, maxBytes) {
     return null;
   } finally {
     clearTimeout(timeout);
+    if (externalSignal && onExternalAbort) {
+      externalSignal.removeEventListener('abort', onExternalAbort);
+    }
   }
+}
+
+/**
+ * Shared HTML + auxiliary asset fetch for GET /api/audit-deep and sweep audits.
+ * Returns the payload object consumed by runDeepAudit.
+ */
+async function prepareDeepAuditInputs(rawUrl, { industry = '', city = '', state = '', businessName = '', signal, skipRender = false } = {}) {
+  const target = safeUrl(rawUrl);
+  if (!target) return null;
+  const origin = `${target.protocol}//${target.host}`;
+  const [pageHtmlRaw, robotsTxtRaw, llmsTxtContent, sitemapXml] = await Promise.all([
+    fetchHtmlWithTimeout(target.href, 12000, undefined, signal),
+    fetchHtmlWithTimeout(`${origin}/robots.txt`, 5000, undefined, signal),
+    fetchHtmlWithTimeout(`${origin}/llms.txt`, 5000, undefined, signal),
+    fetchHtmlWithTimeout(`${origin}/sitemap.xml`, 5000, MAX_SITEMAP_BYTES, signal)
+  ]);
+  const rawHtml = pageHtmlRaw || '';
+  // SPA detection + Puppeteer render. Wix, Squarespace, Webflow, Next.js,
+  // React/Angular/Vue apps return near-empty server HTML and add the real
+  // content via JavaScript at runtime. Without rendering we'd flag every
+  // SPA as "missing schema, missing phone, missing content" — false positives.
+  // batchMode skips render to keep throughput high.
+  let html = rawHtml;
+  let renderInfo = null;
+  if (!skipRender && rawHtml) {
+    try {
+      const renderer = require('./services/renderedHtmlFetch');
+      const result = await renderer.fetchPossiblyRendered(target.href, rawHtml);
+      html = result.html;
+      renderInfo = { source: result.source, spaSignals: result.spaInfo?.signals || [], rendered: result.source === 'rendered' || result.source === 'cached' };
+    } catch (err) {
+      // Non-fatal — fall back to raw HTML
+    }
+  }
+  const robotsTxt = robotsTxtRaw || '';
+  const finalUrl = target.href;
+  const businessFacts = {
+    businessName: businessName || inferBusinessName({
+      explicitName: businessName,
+      h1: textBetween(html, '<h1', '</h1>'),
+      title: textBetween(html, '<title', '</title>'),
+      hostname: target.hostname
+    }),
+    url: finalUrl,
+    sitemapUrl: `${origin}/sitemap.xml`,
+    city,
+    state,
+    description: textBetween(html, '<meta name="description" content="', '">') ||
+      textBetween(html, '<meta property="og:description" content="', '">') || ''
+  };
+  return {
+    html,
+    rawHtml,
+    renderInfo,
+    finalUrl,
+    robotsTxt,
+    llmsTxtContent,
+    sitemapXml,
+    industry,
+    city,
+    state,
+    businessFacts
+  };
 }
 
 async function analyzeCompetitorPages(competitors, locationTokens) {
@@ -6114,6 +6217,49 @@ async function runLeadGenBatch(runId) {
         advancedInsights,
         ahrefs
       });
+
+      // Persist to audit archive — feeds the email blast pipeline.
+      // Lead-gen records have richer side-data than ad-hoc/sweep audits,
+      // so we pass it all through (seoProvider evidence, leadScore reasons,
+      // contactInfo phones+emails, advancedInsights full).
+      auditArchive.saveAudit({
+        domain,
+        url: candidate.website,
+        source: 'lead-gen',
+        runId,
+        industry: candidate.industry,
+        city: candidate.city,
+        state: candidate.state,
+        audit: result,
+        contactInfo,
+        seoProvider,
+        leadScore,
+        advancedInsights,
+        sourceMeta: { runId, businessName: candidate.businessName }
+      }).catch((err) => console.warn('[archive] lead-gen save failed:', err && err.message));
+
+      // Background crawl (non-blocking) — Prospect Hunter only for now
+      setImmediate(async () => {
+        try {
+          const crawl = await runLimitedSiteCrawl({
+            seedUrl: candidate.website,
+            initialHtml: result.landingPageHtml || '',
+            userAgent: 'GeoNeo-AuditBot/1.0 (+https://geoneo.ai)'
+          });
+          if (crawl && (crawl.status === 'ok' || crawl.status === 'partial')) {
+            await updateCandidateResult(runId, domain, {
+              siteCrawl: {
+                status: crawl.status,
+                pagesSampled: crawl.contentPagesSampled || 0,
+                duplicateTitles: crawl.duplicateTitleCount || 0,
+                crawledAt: new Date().toISOString()
+              }
+            });
+          }
+        } catch (crawlErr) {
+          console.warn('[lead-gen] background crawl skipped for', domain, crawlErr && crawlErr.message ? crawlErr.message : crawlErr);
+        }
+      });
     } catch (error) {
       hasCandidateFailures = true;
       await updateCandidateResult(runId, domain, {
@@ -6158,6 +6304,83 @@ const BRANSON_BATCH_FALLBACK_CANDIDATES = [
   { website: 'servicewisetowing.com', businessName: 'Service Wise Towing', industry: 'towing', city: 'Branson', state: 'MO' },
   { website: 'mohneystowinginc.net', businessName: "Mohney's Towing", industry: 'towing', city: 'Branson', state: 'MO' }
 ];
+
+/**
+ * Discovery-time contact enrichment.
+ *
+ * Fetches each candidate's homepage ONCE within tight bounds and pulls contacts
+ * + SEO-owner classification out of it. Single-fetch keeps total discovery time
+ * under ~15s for 100 candidates at 12-way concurrency.
+ *
+ * Bounded:
+ *   - 12 candidates in flight at once (server-side concurrency cap)
+ *   - 2.5s timeout per page fetch
+ *   - 192 KB max body per page
+ *   - Best-effort: any single failure leaves the candidate's existing data intact.
+ *
+ * Note: the deep audit (run after discovery) does its own larger homepage fetch
+ * for analysis. Contacts also get re-extracted from that richer payload, so
+ * even if discovery enrichment misses something, the auto-audit picks it up.
+ */
+async function enrichLeadGenCandidatesContacts(candidates, { concurrency = 12, perPageTimeoutMs = 2500, maxBytes = 192 * 1024, signal } = {}) {
+  if (!Array.isArray(candidates) || !candidates.length) return candidates;
+
+  const queue = candidates.slice();
+  const enriched = new Map();
+
+  async function enrichOne(c) {
+    if (!c || !c.domain) return c;
+    if (signal && signal.aborted) return c;
+    const origin = c.website || `https://${c.domain}`;
+    let base;
+    try { base = new URL(origin); } catch { return c; }
+    const root = `${base.protocol}//${base.host}`;
+
+    // One homepage fetch — single-shot, tight timeout. /contact + /about used
+    // to be fetched too but pushed total discovery past 60s for 100 candidates.
+    const homepageHtml = await fetchHtmlWithTimeout(root + '/', perPageTimeoutMs, maxBytes, signal).catch(() => null);
+    if (!homepageHtml) return c;
+
+    const merged = mergeContacts(extractContactsFromHtml(homepageHtml));
+    const seoProvider = assessSeoProvider({
+      html: homepageHtml,
+      pageTitle: extractTitleFromHtml(homepageHtml),
+      visibleText: '',
+      auditResult: null
+    });
+
+    return {
+      ...c,
+      contactInfo: merged,
+      seoProvider: seoProvider || c.seoProvider || null,
+      enrichedAt: new Date().toISOString(),
+      enrichedFrom: 'homepage'
+    };
+  }
+
+  const workers = Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
+    while (queue.length) {
+      if (signal && signal.aborted) return;
+      const next = queue.shift();
+      if (!next) return;
+      try {
+        const out = await enrichOne(next);
+        enriched.set(normalizeLeadGenDomain(next.domain || next.website), out);
+      } catch {
+        enriched.set(normalizeLeadGenDomain(next.domain || next.website), next);
+      }
+    }
+  });
+  await Promise.all(workers);
+
+  return candidates.map((c) => enriched.get(normalizeLeadGenDomain(c.domain || c.website)) || c);
+}
+
+function extractTitleFromHtml(html) {
+  if (!html) return '';
+  const m = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  return m ? String(m[1]).replace(/\s+/g, ' ').trim().slice(0, 200) : '';
+}
 
 function fallbackLeadGenCandidates({ industry, city, state, quantity }) {
   const cleanIndustry = normalizeString(industry).toLowerCase();
@@ -6660,42 +6883,39 @@ async function requestHandler(req, res) {
       const tier = (reqUrl.searchParams.get('tier') || 'free').trim();
       const businessName = (reqUrl.searchParams.get('businessName') || '').trim();
 
-      // Fetch the target page + robots + llms.txt in parallel
-      const target = safeUrl(url);
-      if (!target) {
+      const payload = await prepareDeepAuditInputs(url, { industry, city, state, businessName });
+      if (!payload) {
         sendJson(res, 400, { error: 'invalid url' });
         return;
       }
-      const origin = `${target.protocol}//${target.host}`;
-      const [pageHtml, robotsTxtRaw, llmsTxtContent, sitemapXml] = await Promise.all([
-        fetchHtmlWithTimeout(target.href, 12000),
-        fetchHtmlWithTimeout(`${origin}/robots.txt`, 5000),
-        fetchHtmlWithTimeout(`${origin}/llms.txt`, 5000),
-        fetchHtmlWithTimeout(`${origin}/sitemap.xml`, 5000, MAX_SITEMAP_BYTES)
-      ]);
-      const html = pageHtml || '';
-      const robotsTxt = robotsTxtRaw || '';
-      const finalUrl = target.href;
+      const target = safeUrl(payload.finalUrl) || safeUrl(url);
 
-      const businessFacts = {
-        businessName: businessName || inferBusinessName({
-          explicitName: businessName,
-          h1: textBetween(html, '<h1', '</h1>'),
-          title: textBetween(html, '<title', '</title>'),
-          hostname: target.hostname
-        }),
-        url: finalUrl,
-        sitemapUrl: `${origin}/sitemap.xml`,
-        city, state,
-        description: textBetween(html, '<meta name="description" content="', '">') ||
-                     textBetween(html, '<meta property="og:description" content="', '">') || ''
-      };
+      const deepResult = await runDeepAudit(payload);
 
-      const deepResult = await runDeepAudit({
-        html, finalUrl, robotsTxt, llmsTxtContent, sitemapXml,
+      // Optional Ahrefs enrichment (DR, refdomains, organic KW, traffic).
+      // Caller opts in via ?ahrefs=1 — caches 7 days per domain so repeat
+      // audits never re-spend credits. Failure is non-fatal.
+      const wantAhrefs = (reqUrl.searchParams.get('ahrefs') || '').trim() === '1';
+      let ahrefsData = null;
+      if (wantAhrefs && target) {
+        try {
+          ahrefsData = await enrichDomainWithAhrefs(target.host, { enabled: true });
+        } catch (err) {
+          ahrefsData = { configured: true, error: err && err.message ? err.message : 'ahrefs_failed' };
+        }
+        if (ahrefsData) deepResult.ahrefs = ahrefsData;
+      }
+
+      // Persist every deep audit to the archive (idempotent within 1h per source).
+      // Non-blocking — if archive write fails, the response still goes out.
+      auditArchive.saveAudit({
+        domain: target ? target.host : '',
+        url: payload.finalUrl,
+        source: 'ad-hoc',
         industry, city, state,
-        businessFacts
-      });
+        audit: deepResult,
+        ahrefs: ahrefsData
+      }).catch((err) => console.warn('[archive] save failed:', err && err.message));
 
       const filtered = filterDeepAuditByTier(deepResult, tier);
       sendJson(res, 200, { ok: true, tier, audit: filtered });
@@ -6943,13 +7163,18 @@ async function requestHandler(req, res) {
     try {
       const body = await readJsonRequestBody(req);
       const quantity = normalizeLeadGenQuantity(body.quantity);
+      // Adaptive SERP fanout: each query returns ~10-15 unique businesses
+      // (after dedup with prior queries). Tune to roughly match the requested
+      // quantity so we don't burn unnecessary SERP credits but still find
+      // enough candidates to fill the target list.
+      const queryCap = quantity <= 25 ? 2 : (quantity <= 75 ? 4 : 6);
       const marketModel = await runMarketOnlyAudit({
         industry: body.industry,
         businessName: body.businessName,
         city: body.city,
         state: body.state,
         zip: body.zip
-      });
+      }, { maxQueries: queryCap });
       let discovered = extractLeadGenCandidates(marketModel, {
         quantity,
         industry: body.industry,
@@ -6978,7 +7203,7 @@ async function requestHandler(req, res) {
           })).filter((candidate) => candidate.domain)
         : [];
       const seen = new Set();
-      const candidates = [...manual, ...discovered]
+      const dedupedCandidates = [...manual, ...discovered]
         .filter((candidate) => {
           const key = normalizeLeadGenDomain(candidate.domain || candidate.website);
           if (!key || seen.has(key)) return false;
@@ -6986,10 +7211,30 @@ async function requestHandler(req, res) {
           return true;
         })
         .slice(0, quantity);
+
+      // Enrich contacts from each candidate's homepage — best-effort, bounded.
+      // Hard 20s wall-clock so a few hung sites can't stall the whole batch.
+      // Anything missed here gets picked up later by the deep audit's own
+      // homepage fetch, so we never lose data permanently.
+      let candidates = dedupedCandidates;
+      try {
+        const ac = new AbortController();
+        const wallMs = 20000;
+        const to = setTimeout(() => ac.abort(), wallMs);
+        try {
+          candidates = await enrichLeadGenCandidatesContacts(dedupedCandidates, { signal: ac.signal });
+        } finally {
+          clearTimeout(to);
+        }
+      } catch (enrichErr) {
+        console.warn('[lead-gen/discover] contact enrichment skipped:', enrichErr && enrichErr.message ? enrichErr.message : enrichErr);
+      }
+
       sendJson(res, 200, {
         ok: true,
         quantity,
         candidates,
+        rejected: Array.isArray(discovered._rejected) ? discovered._rejected : [],
         market: {
           dataQuality: marketModel.dataQuality,
           sourceNote: marketModel.sourceNote,
@@ -7003,12 +7248,2065 @@ async function requestHandler(req, res) {
     return;
   }
 
+  // POST /api/admin/lead-gen/deep-discover — paginated SERP (pages 1-3) +
+  // optional Google Maps (engine=google_maps) to pull a much deeper
+  // candidate set than the standard discover endpoint. Slow (10-30s),
+  // optional. UI exposes as a "🔭 Deep search" toggle.
+  if (reqUrl.pathname === '/api/admin/lead-gen/deep-discover' && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const body = await readJsonRequestBody(req);
+      const industry = String(body.industry || '').trim();
+      const city = String(body.city || '').trim();
+      const state = String(body.state || '').trim();
+      const pages = Math.max(1, Math.min(5, Number(body.pages) || 3));
+      const includeMaps = body.includeMaps !== false;
+      if (!industry || !city) { sendJson(res, 400, { ok: false, error: 'industry + city required' }); return; }
+      const provider = createSerpProvider();
+      const location = `${city}${state ? ', ' + state : ''}`;
+      const queries = [
+        `${industry} ${city}`,
+        `best ${industry} ${city}`,
+        `${industry} near me ${city}`
+      ];
+      const seen = new Set();
+      const candidates = [];
+      const stats = { serpPages: 0, mapsCalls: 0, queries: queries.length };
+      for (const q of queries) {
+        try {
+          const raw = typeof provider.getSearchResultsPaginated === 'function'
+            ? await provider.getSearchResultsPaginated(q, location, { pages, perPage: 10 })
+            : await provider.getSearchResults(q, location, { num: pages * 10 });
+          if (raw._pageRaws) stats.serpPages += raw._pageRaws.length;
+          else stats.serpPages += 1;
+          const normalized = provider.normalizeResults(raw, { query: q, location, maxOrganic: pages * 10, maxLocalPack: 10 });
+          for (const r of (normalized.organicResults || [])) {
+            const root = (r.domain || '').toLowerCase();
+            if (!root || seen.has(root)) continue;
+            seen.add(root);
+            candidates.push({
+              domain: root,
+              url: r.url,
+              title: r.title,
+              position: r.position,
+              source: `serp_page${r._serpPage || 1}`,
+              query: q
+            });
+          }
+          for (const lp of (normalized.localPackResults || [])) {
+            const root = (lp.domain || '').toLowerCase();
+            if (!root || seen.has(root)) continue;
+            seen.add(root);
+            candidates.push({
+              domain: root,
+              url: lp.url,
+              title: lp.title,
+              source: 'local_pack',
+              query: q,
+              rating: lp.rating,
+              reviews: lp.reviews
+            });
+          }
+        } catch (err) {
+          console.warn('[deep-discover] serp failed for', q, err && err.message);
+        }
+      }
+      // Maps results — much deeper GMB coverage (up to 20 places per call)
+      if (includeMaps && typeof provider.getMapsResults === 'function') {
+        for (const q of queries.slice(0, 1)) { // one maps call is enough; expensive
+          try {
+            const places = await provider.getMapsResults(q, location);
+            stats.mapsCalls++;
+            for (const p of (places || [])) {
+              const linkHost = (p.website && (() => { try { return new URL(p.website).hostname.replace(/^www\./, ''); } catch { return null; } })()) || null;
+              if (!linkHost || seen.has(linkHost)) continue;
+              seen.add(linkHost);
+              candidates.push({
+                domain: linkHost,
+                url: p.website,
+                title: p.title || p.name,
+                source: 'google_maps',
+                query: q,
+                rating: p.rating,
+                reviews: p.reviews,
+                phone: p.phone,
+                address: p.address
+              });
+            }
+          } catch (err) {
+            console.warn('[deep-discover] maps failed for', q, err && err.message);
+          }
+        }
+      }
+      sendJson(res, 200, { ok: true, candidates, stats });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'deep_discover_failed' });
+    }
+    return;
+  }
+  // GET /api/admin/competitors-of?domain=X — competitor finder. Returns
+  // up to 20 likely competitor domains based on shared organic-keyword
+  // overlap (Ahrefs-driven; falls back to industry+city queries).
+  if (reqUrl.pathname === '/api/admin/competitors-of' && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const seedDomain = String(reqUrl.searchParams.get('domain') || '').trim().toLowerCase();
+      if (!seedDomain) { sendJson(res, 400, { ok: false, error: 'domain required' }); return; }
+      const cf = require('./services/competitorFinder');
+      const result = await cf.findCompetitorsFor(seedDomain, {
+        location: reqUrl.searchParams.get('location') || '',
+        industry: reqUrl.searchParams.get('industry') || '',
+        city: reqUrl.searchParams.get('city') || '',
+        limit: Math.max(5, Math.min(40, Number(reqUrl.searchParams.get('limit')) || 20)),
+        enrichWithAhrefs: reqUrl.searchParams.get('ahrefs') !== '0'
+      });
+      sendJson(res, 200, { ok: true, ...result });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'competitors_failed' });
+    }
+    return;
+  }
+
   if (reqUrl.pathname === '/api/admin/lead-gen/ahrefs/status' && req.method === 'GET') {
     if (!authorizeInternalApi(req)) {
       sendApiForbidden(res);
       return;
     }
     sendJson(res, 200, { ok: true, ahrefs: getAhrefsIntegrationStatus() });
+    return;
+  }
+
+  // ===== Prospect Page Data (PUBLIC — token-gated) =====
+  // GET /api/prospect-page-data?domain=X&token=Y
+  // Consolidates: archived audit + competitors + GBP + review gaps + narrative.
+  // Used by audit-results.html (the page we email prospects).
+  if (reqUrl.pathname === '/api/prospect-page-data' && req.method === 'GET') {
+    try {
+      const domain = String(reqUrl.searchParams.get('domain') || '').toLowerCase().trim().replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
+      if (!domain) { sendJson(res, 400, { ok: false, error: 'domain required' }); return; }
+      const token = reqUrl.searchParams.get('token') || '';
+      // Token is recommended but not required — page works for ad-hoc previews too.
+      // When provided, verify it (mostly for analytics + abuse limits).
+      const tokenValid = token ? Boolean(qualifierService.verifyQualifierToken(token)) : null;
+
+      // Pull latest archived audit
+      const auditArchive = require('./services/auditArchive');
+      const record = await auditArchive.getDomainHistory(domain);
+      if (!record || !record.history || !record.history.length) {
+        sendJson(res, 404, { ok: false, error: 'no_audit_for_domain' });
+        return;
+      }
+      const latest = record.history[0];
+      const audit = latest.audit;
+      const industry = latest.industry || '';
+      const city = latest.city || '';
+      const state = latest.state || '';
+      const businessName = record.businessName || latest.sourceMeta?.businessName || domain;
+
+      // Local rank position — from serpContext if provided, else null
+      const sc = audit?.serpContext || {};
+      const localRank = sc.provided ? {
+        avgPosition: sc.currentAvgPosition || null,
+        missingFromQueries: sc.missingFromQueries || 0,
+        totalQueriesTested: sc.totalQueriesTested || 0,
+        provided: true
+      } : { provided: false, message: 'Local rank position requires SERP integration — runs on deep-tier audits.' };
+
+      // Competitors — best-effort. Try cached competitor data first; fall
+      // back to live findCompetitorsFor if not too expensive.
+      let competitors = [];
+      try {
+        const tracking = require('./services/competitorTracking');
+        if (tracking.getTrackedCompetitors) {
+          const tracked = await tracking.getTrackedCompetitors(domain);
+          if (Array.isArray(tracked) && tracked.length) {
+            competitors = tracked.slice(0, 5).map((c) => ({
+              domain: c.domain,
+              businessName: c.businessName || c.domain,
+              auditScore: c.audit?.overallScore || null,
+              rating: c.places?.rating || null,
+              reviewCount: c.places?.reviewCount || null,
+              dr: c.ahrefs?.domainRating || null,
+              traffic: c.ahrefs?.organicTraffic || null,
+              source: 'tracked'
+            }));
+          }
+        }
+      } catch { /* tracking optional */ }
+      // If no cached competitors AND ad-hoc deep audit, opportunistically
+      // trigger one live competitor lookup. Only when query budget exists.
+      if (!competitors.length) {
+        try {
+          const finder = require('./services/competitorFinder');
+          const result = await finder.findCompetitorsFor(domain, {
+            location: [city, state].filter(Boolean).join(', '),
+            industry, city, limit: 5, enrichWithAhrefs: true
+          });
+          competitors = (result.competitors || []).slice(0, 5).map((c) => ({
+            domain: c.domain,
+            businessName: c.title || c.domain,
+            auditScore: null, // not audited yet
+            dr: c.domainRating ?? null,
+            traffic: c.organicTraffic ?? null,
+            refdomains: c.refdomains ?? null,
+            overlapCount: c.overlapCount || 0,
+            source: 'live'
+          }));
+        } catch { /* live competitor lookup is non-fatal */ }
+      }
+
+      // Compute "losing to" narrative from the strongest competitor
+      let losingNarrative = null;
+      if (competitors.length) {
+        const top = competitors[0];
+        const reasons = [];
+        const yourScore = audit.overallScore;
+        const yourDr = audit.deepIntegrations?.ahrefs?.domainRating;
+        const yourReviews = audit.deepIntegrations?.places?.details?.reviewCount;
+        if (top.auditScore && yourScore && top.auditScore - yourScore >= 10) {
+          reasons.push(`their audit score is ${top.auditScore} vs your ${yourScore}`);
+        }
+        if (top.dr && yourDr && top.dr - yourDr >= 10) {
+          reasons.push(`their domain rating is ${Math.round(top.dr)} vs your ${Math.round(yourDr)}`);
+        }
+        if (top.traffic && top.traffic >= 500) {
+          reasons.push(`they pull ~${top.traffic.toLocaleString()} organic visits/month`);
+        }
+        if (top.reviewCount && yourReviews != null && top.reviewCount > yourReviews * 2) {
+          reasons.push(`they have ${top.reviewCount} reviews vs your ${yourReviews}`);
+        }
+        if (!reasons.length) reasons.push(`they appear in more local search queries than you do`);
+        losingNarrative = `You're losing to ${top.businessName || top.domain} because ${reasons.slice(0, 3).join('; ')}.`;
+      }
+
+      // GBP / Places
+      const placesData = audit.deepIntegrations?.places;
+      let gbp = { matched: false, message: 'Google Business Profile data needs deep-tier audit.' };
+      if (placesData?.matched) {
+        const d = placesData.details || {};
+        const issues = [];
+        if (!d.websiteUri) issues.push('No website link on Google Business Profile');
+        if (!d.regularOpeningHours) issues.push('Business hours not set');
+        if (!d.photos || d.photos.length < 5) issues.push(`Only ${d.photos?.length || 0} photos — Google rewards profiles with 10+`);
+        if (!d.rating || d.reviewCount < 10) issues.push(`Only ${d.reviewCount || 0} reviews — competitors typically have 50+`);
+        if (!d.editorialSummary && !d.description) issues.push('No business description');
+        if (d.businessStatus && d.businessStatus !== 'OPERATIONAL') issues.push(`Listed as ${d.businessStatus}`);
+        gbp = {
+          matched: true,
+          name: d.displayName || businessName,
+          rating: d.rating || null,
+          reviewCount: d.reviewCount || 0,
+          phone: d.nationalPhoneNumber || d.internationalPhoneNumber || null,
+          website: d.websiteUri || null,
+          address: d.formattedAddress || null,
+          photoCount: d.photos?.length || 0,
+          businessStatus: d.businessStatus || null,
+          issues
+        };
+      }
+
+      // Website technical issues — top findings ordered by severity + dollar impact
+      const sevRank = { high: 3, medium: 2, low: 1 };
+      const technicalFindings = (audit.findings || []).slice().sort((a, b) => {
+        const sa = sevRank[String(a.severity || '').toLowerCase()] || 0;
+        const sb = sevRank[String(b.severity || '').toLowerCase()] || 0;
+        if (sb !== sa) return sb - sa;
+        const da = a.dollarImpact?.monthly?.high || 0;
+        const db = b.dollarImpact?.monthly?.high || 0;
+        return db - da;
+      }).slice(0, 8);
+
+      // Review/reputation gaps
+      const competitorReviews = competitors.filter((c) => c.reviewCount).map((c) => c.reviewCount);
+      const competitorAvgReviews = competitorReviews.length
+        ? Math.round(competitorReviews.reduce((s, n) => s + n, 0) / competitorReviews.length)
+        : null;
+      const competitorAvgRating = (() => {
+        const rated = competitors.filter((c) => c.rating).map((c) => c.rating);
+        return rated.length ? Number((rated.reduce((s, n) => s + n, 0) / rated.length).toFixed(1)) : null;
+      })();
+      const reviewGaps = {
+        yourReviewCount: gbp.matched ? gbp.reviewCount : null,
+        yourRating: gbp.matched ? gbp.rating : null,
+        competitorAvgReviewCount: competitorAvgReviews,
+        competitorAvgRating,
+        gap: (competitorAvgReviews != null && gbp.matched) ? competitorAvgReviews - (gbp.reviewCount || 0) : null
+      };
+
+      sendJson(res, 200, {
+        ok: true,
+        token: { provided: Boolean(token), valid: tokenValid },
+        domain,
+        businessName,
+        industry,
+        city,
+        state,
+        audit,
+        localRank,
+        competitors,
+        losingNarrative,
+        gbp,
+        websiteIssues: technicalFindings,
+        reviewGaps,
+        opportunity: audit.dollarOpportunity || null
+      });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'prospect_page_failed' });
+    }
+    return;
+  }
+
+  // ===== Qualifier (PUBLIC — no auth, token-gated) =====
+  if (reqUrl.pathname === '/api/qualifier/questions' && req.method === 'GET') {
+    sendJson(res, 200, { ok: true, questions: qualifierService.QUESTIONS });
+    return;
+  }
+  // POST /api/qualify/:token — public, idempotent
+  const qualifyMatch = reqUrl.pathname.match(/^\/api\/qualify\/([^/]+)$/);
+  if (qualifyMatch && req.method === 'POST') {
+    try {
+      const token = decodeURIComponent(qualifyMatch[1]);
+      const body = await readJsonRequestBody(req);
+      const verified = qualifierService.verifyQualifierToken(token);
+      if (!verified.valid) {
+        sendJson(res, 401, { ok: false, error: 'invalid_token', reason: verified.error });
+        return;
+      }
+      // Pull latest audit from archive so server-side scoring uses real $ + score
+      const latestRecord = await auditArchive.getLatestAudit(verified.domain);
+      const auditPayload = latestRecord && latestRecord.audit ? latestRecord.audit : null;
+      const result = await qualifierService.submitAnswers({
+        token,
+        answers: body.answers || {},
+        audit: auditPayload,
+        contactInfo: body.contactInfo || null,
+        requestMeta: {
+          ua: req.headers['user-agent'] || null,
+          ip: (req.socket && req.socket.remoteAddress) || null,
+          submittedAt: new Date().toISOString()
+        }
+      });
+      // Mark archive side-channel + lookup bucket copy for response
+      await auditArchive.recordQualifierCompleted(verified.domain, {
+        bucket: result.scoring.bucket,
+        answers: result.record.answers,
+        score: result.scoring.numericScore,
+        runId: verified.runId
+      });
+      const copy = qualifierService.resolveBucketCopy(result.scoring.bucket, verified.domain, token);
+      sendJson(res, 200, {
+        ok: true,
+        bucket: result.scoring.bucket,
+        persona: result.scoring.persona,
+        recommendedTier: result.scoring.recommendedTier,
+        nextStep: result.scoring.nextStep,
+        priority: result.scoring.closerPriority,
+        numericScore: result.scoring.numericScore,
+        copy,
+        isUpdate: result.isUpdate,
+        isFollowUp: result.isFollowUp
+      });
+    } catch (err) {
+      const status = err.code === 'INVALID_TOKEN' ? 401 : 400;
+      sendJson(res, status, { ok: false, error: err.message || 'qualify_failed' });
+    }
+    return;
+  }
+  // GET reaction copy for one answer (so the UI can show real-time reactions
+  // without baking server logic into the client). Public, no auth.
+  if (reqUrl.pathname === '/api/qualifier/reaction' && req.method === 'GET') {
+    const questionId = reqUrl.searchParams.get('questionId') || '';
+    const value = reqUrl.searchParams.get('value') || '';
+    const dollarHigh = Number(reqUrl.searchParams.get('dollarHigh')) || null;
+    const reaction = qualifierService.getReactionForAnswer(questionId, value, dollarHigh ? { dollarOpportunity: { monthly: { high: dollarHigh } } } : null);
+    sendJson(res, 200, { ok: true, reaction });
+    return;
+  }
+
+  // ===== Inbound email webhook — auto-mark stage=replied =====
+  // POST /api/inbound/resend-events — Resend webhook for bounces/complaints/deliveries.
+  // Resend sends one event per email lifecycle change. We care about:
+  //   - email.bounced (hard) → suppress the recipient + revoke any consent
+  //   - email.complained → suppress (spam complaint)
+  //   - email.delivered → log only (not actioned, but useful for stats)
+  //   - email.delivery_delayed → soft bounce; first time = no action, second = suppress
+  //
+  // Auth: Resend supports webhook signing — verify via SVIX_WEBHOOK_SECRET if set.
+  // For dev, a shared header X-Resend-Webhook-Secret matches RESEND_WEBHOOK_SECRET env.
+  if (reqUrl.pathname === '/api/inbound/resend-events' && req.method === 'POST') {
+    try {
+      const body = await readJsonRequestBody(req, 256 * 1024);
+      const sharedSecret = process.env.RESEND_WEBHOOK_SECRET;
+      if (sharedSecret) {
+        const provided = req.headers['x-resend-webhook-secret'] || req.headers['x-webhook-secret'];
+        if (provided !== sharedSecret) { sendApiForbidden(res); return; }
+      }
+      const eventType = body.type || body.event || '';
+      const data = body.data || body;
+      const recipient = (data.to && Array.isArray(data.to) ? data.to[0] : data.to) || data.email || null;
+      const fromEmail = (data.from || '').toLowerCase();
+      // Resolve domain from recipient. Lead is keyed by their site domain, not
+      // their email. We look up via auditArchive.findDomainByEmail.
+      let domain = null;
+      if (recipient) {
+        try { domain = await auditArchive.findDomainByEmail(recipient); } catch {}
+      }
+      const result = { eventType, recipient, domain, action: null };
+      if (!domain) {
+        sendJson(res, 200, { ok: true, ignored: true, reason: 'no_domain_match', ...result });
+        return;
+      }
+      const callConsent = require('./services/callConsent');
+      if (eventType === 'email.bounced' || eventType === 'bounced') {
+        // Hard bounce → suppress immediately, revoke any prior call consent
+        try { await auditArchive.recordSuppression(domain, 'hard_bounce_resend'); } catch {}
+        try { await callConsent.revokeConsent({ domain, note: `Hard bounce on ${recipient}` }); } catch {}
+        try {
+          await leadPipeline.addNote(domain, {
+            author: 'resend_webhook',
+            text: `📨 Hard bounce on ${recipient}. Auto-suppressed + consent revoked. Provider event: ${eventType}`
+          });
+        } catch {}
+        result.action = 'suppressed_and_revoked';
+      } else if (eventType === 'email.complained' || eventType === 'complained') {
+        // Spam complaint → suppress + revoke
+        try { await auditArchive.recordSuppression(domain, 'spam_complaint'); } catch {}
+        try { await callConsent.revokeConsent({ domain, note: `Spam complaint from ${recipient}` }); } catch {}
+        try {
+          await leadPipeline.setStage(domain, 'lost', {
+            setBy: 'resend_webhook',
+            note: `Spam complaint from ${recipient}. Auto-suppressed.`,
+            force: true
+          });
+        } catch {}
+        result.action = 'spam_complaint_suppressed';
+      } else if (eventType === 'email.delivery_delayed' || eventType === 'delivery_delayed') {
+        // Soft bounce — first occurrence is fine, second triggers suppression.
+        // We use the lead's notes as a simple counter (avoids new storage).
+        try {
+          const lead = await leadPipeline.getLead(domain);
+          const softBounceNotes = (lead?.pipeline?.notes || []).filter((n) => n.text && n.text.includes('soft_bounce'));
+          if (softBounceNotes.length >= 1) {
+            await auditArchive.recordSuppression(domain, 'repeat_soft_bounce');
+            await leadPipeline.addNote(domain, { author: 'resend_webhook', text: `📨 soft_bounce repeat #${softBounceNotes.length + 1} on ${recipient}. Auto-suppressed.` });
+            result.action = 'repeat_soft_suppressed';
+          } else {
+            await leadPipeline.addNote(domain, { author: 'resend_webhook', text: `📨 soft_bounce on ${recipient}. Will retry.` });
+            result.action = 'soft_logged';
+          }
+        } catch {}
+      } else if (eventType === 'email.delivered' || eventType === 'delivered') {
+        result.action = 'delivered_logged'; // no-op; we trust the outbox marked sent
+      } else {
+        result.action = 'unhandled_event';
+      }
+      sendJson(res, 200, { ok: true, ...result });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'webhook_failed' });
+    }
+    return;
+  }
+
+  // POST /api/inbound/email — accepts a JSON body shaped like Resend / Postmark
+  // / Mailgun forwarded-reply webhooks. Body must include from + (subject OR text).
+  // Looks up the lead by:
+  //   1. Token in subject/body matching one of our HMAC qualifier tokens
+  //   2. From email matching a known lead's primaryEmail
+  //   3. From domain matching a tracked archive domain
+  // Then auto-moves stage to "replied", attaches reply text as note.
+  // Uses POSTMARK-style auth header (X-Postmark-Server-Token) OR a shared
+  // INBOUND_WEBHOOK_SECRET in the body for simple webhook providers.
+  if (reqUrl.pathname === '/api/inbound/email' && req.method === 'POST') {
+    try {
+      const body = await readJsonRequestBody(req, 256 * 1024);
+      const sharedSecret = process.env.INBOUND_WEBHOOK_SECRET;
+      if (sharedSecret) {
+        const provided = req.headers['x-inbound-secret'] || body.secret;
+        if (provided !== sharedSecret) { sendApiForbidden(res); return; }
+      }
+      const fromEmail = (body.from?.email || body.From || body.from || '').toString().trim().toLowerCase().match(/[\w.+-]+@[\w.-]+/)?.[0];
+      const subject = String(body.subject || body.Subject || '').trim();
+      const text = String(body.text || body.TextBody || body.html || body.HtmlBody || '').slice(0, 8000);
+      let domain = null;
+      // Try token first (in subject or text)
+      const tokenMatch = (subject + '\n' + text).match(/[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}/);
+      if (tokenMatch) {
+        const verified = qualifierService.verifyQualifierToken(tokenMatch[0]);
+        if (verified.valid) domain = verified.domain;
+      }
+      // Fall back to email lookup
+      if (!domain && fromEmail) {
+        domain = await auditArchive.findDomainByEmail(fromEmail);
+      }
+      if (!domain) {
+        sendJson(res, 200, { ok: true, matched: false, reason: 'no_lead_match', from: fromEmail || null });
+        return;
+      }
+      // Parse reply for intent/sentiment/objections (no LLM)
+      const replyParser = require('./services/replyParser');
+      const signals = replyParser.parseReply({ subject, text, from: fromEmail });
+      const next = replyParser.suggestNextAction(signals);
+      // If unsubscribe → suppress + revoke any prior call consent
+      if (signals.unsubscribe) {
+        try { await auditArchive.recordSuppression(domain, 'inbound_unsubscribe'); } catch {}
+        try {
+          const callConsent = require('./services/callConsent');
+          await callConsent.revokeConsent({
+            domain,
+            note: `Inbound unsubscribe from ${fromEmail || 'unknown'}: ${text.slice(0, 100)}`
+          });
+        } catch {}
+        try {
+          await leadPipeline.addNote(domain, {
+            author: 'inbound_email',
+            text: `🚫 Unsubscribe request from ${fromEmail || 'unknown'}.\nAuto-suppressed + call consent revoked.\nOriginal:\n${text.slice(0, 1500)}`
+          });
+        } catch {}
+        sendJson(res, 200, { ok: true, matched: true, domain, fromEmail, signals, next, suppressed: true });
+        return;
+      }
+      // Auto-replies: don't move stage, but record the bounce
+      if (signals.autoReply) {
+        try {
+          await leadPipeline.addNote(domain, {
+            author: 'inbound_email',
+            text: `📨 Auto-reply / OOO from ${fromEmail || 'unknown'}.\nOriginal subject: ${subject}\nNo stage change.`
+          });
+        } catch {}
+        sendJson(res, 200, { ok: true, matched: true, domain, fromEmail, signals, next, stageChanged: false });
+        return;
+      }
+      // If reply contains explicit call-consent language, record it + auto-enqueue an AI call
+      if (signals.callConsent) {
+        try {
+          const callConsent = require('./services/callConsent');
+          await callConsent.recordConsent({
+            domain,
+            source: 'email_reply',
+            ip: (req.headers['x-forwarded-for'] || '').toString().split(',')[0].trim() || null,
+            userAgent: req.headers['user-agent'] || null,
+            rawSnippet: text.slice(0, 200),
+            note: `Pattern: ${signals.callConsentPattern}`
+          });
+          // Enqueue high-priority AI call
+          try {
+            const lead = await leadPipeline.getLead(domain);
+            if (lead && lead.contactInfo?.primaryPhone) {
+              const sg = require('./services/aiCallScriptGenerator');
+              const aiq = require('./services/aiCallQueue');
+              const priceVariant = sg.pickPriceVariantForLead(lead);
+              const script = sg.generateScript({ lead, priceVariant, consentSource: 'email_reply' });
+              await aiq.enqueueCall({
+                lead, script, priceVariant,
+                idempotencyKey: `reply-consent:${domain}:${new Date().toISOString().slice(0, 13)}`,
+                priority: 'high'
+              });
+            }
+          } catch (err) {
+            console.warn('[inbound] consent enqueue failed:', err && err.message);
+          }
+          // Trigger a STANDARD-tier re-audit (with SPA render + PageSpeed +
+          // LanguageTool) so the AI call has fresh, accurate data to read
+          // from. Don't go full deep yet — they haven't paid. Stays cheap
+          // (PageSpeed/LT are quota-priced, not per-audit).
+          try {
+            sweepSchedulerAuditFn({
+              url: `https://${domain}`,
+              industry: lead?.industry, city: lead?.city, state: lead?.state,
+              batchMode: false, auditDepth: 'standard'
+            }).catch(() => {});
+          } catch {}
+        } catch (err) {
+          console.warn('[inbound] consent record failed:', err && err.message);
+        }
+      }
+      // Move stage based on parsed intent
+      const targetStage = signals.intent === 'no' ? 'lost' : 'replied';
+      try {
+        await leadPipeline.setStage(domain, targetStage, {
+          setBy: 'inbound_email',
+          note: `Reply from ${fromEmail || 'unknown'}: ${signals.summary}`
+        });
+      } catch {}
+      try {
+        const summaryHeader = `📧 Reply parsed: ${signals.summary}\nNext action (${next.priority}): ${next.action}\n\n`;
+        await leadPipeline.addNote(domain, {
+          author: 'inbound_email',
+          text: `${summaryHeader}From: ${fromEmail || 'unknown'}\nSubject: ${subject}\n\n${text.slice(0, 2000)}`
+        });
+      } catch {}
+      sendJson(res, 200, { ok: true, matched: true, domain, fromEmail, signals, next });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'inbound_failed' });
+    }
+    return;
+  }
+
+  // ===== Customer-facing follow-up actions (PUBLIC, token-gated) =====
+  // GET because they're invoked from email/qualifier link clicks (no JS body).
+  // Each returns a small HTML "thanks" page so the user knows it worked.
+  const followUpMatch = reqUrl.pathname.match(/^\/api\/customer\/(send-proposal|send-full-report|optin-monthly)$/);
+  if (followUpMatch && req.method === 'GET') {
+    const action = followUpMatch[1];
+    const token = reqUrl.searchParams.get('token') || '';
+    const verified = qualifierService.verifyQualifierToken(token);
+    if (!verified.valid) {
+      res.writeHead(401, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(`<!doctype html><body style="font-family:system-ui;max-width:480px;margin:4rem auto;padding:1rem;text-align:center;"><h2>Link expired</h2><p>That link has expired. <a href="/audit-results.html">Run a fresh audit</a> to get a new one.</p></body>`);
+      return;
+    }
+    try {
+      const latestRecord = await auditArchive.getLatestAudit(verified.domain);
+      const audit = latestRecord && latestRecord.audit;
+      const recipient = (latestRecord?.contactInfo?.emails || [])[0] || null;
+      const businessName = latestRecord?.sourceMeta?.businessName || verified.domain;
+      const idempotencyKey = `followup:${action}:${verified.domain}`;
+      let subject; let html; let confirmation;
+      if (action === 'send-proposal') {
+        subject = `${businessName}: 1-page audit + ROI proposal`;
+        html = renderProposalEmail({ businessName, domain: verified.domain, audit });
+        confirmation = `Proposal queued${recipient ? ` to ${recipient}` : ''}. Check your inbox in 1-2 minutes.`;
+      } else if (action === 'send-full-report') {
+        subject = `${businessName}: your full audit report`;
+        html = renderFullReportEmail({ businessName, domain: verified.domain, audit });
+        confirmation = `Full audit + DIY checklist queued${recipient ? ` to ${recipient}` : ''}. Check your inbox in 1-2 minutes.`;
+      } else { // optin-monthly
+        subject = `${businessName}: monthly visibility re-audit opt-in confirmed`;
+        html = renderOptInEmail({ businessName, domain: verified.domain });
+        confirmation = `You're opted in. We'll re-audit ${verified.domain} every 30 days and email you only when the score moves.`;
+      }
+      if (recipient) {
+        await emailOutbox.enqueueOutboxEntry({
+          idempotencyKey, type: 'followup', to: recipient, subject, html,
+          domain: verified.domain, reason: action
+        });
+      }
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(`<!doctype html><body style="font-family:system-ui;max-width:520px;margin:4rem auto;padding:1.5rem;text-align:center;background:#f8fafc;border-radius:14px;color:#0f172a;"><h2>✅ Got it.</h2><p style="font-size:1.05rem;line-height:1.55;color:#475569;">${escapeHtml(confirmation)}</p><p style="margin-top:2rem;"><a href="/audit-results.html?url=${encodeURIComponent('https://' + verified.domain)}" style="color:#0369a1;">Re-open your audit</a></p></body>`);
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(`<!doctype html><body style="font-family:system-ui;max-width:480px;margin:4rem auto;padding:1rem;text-align:center;"><h2>Something went wrong</h2><p>${escapeHtml(err.message || 'unknown')}</p></body>`);
+    }
+    return;
+  }
+
+  // ===== Fix Plan delivery (the $199 deliverable) =====
+  // GET /api/customer/fix-plan?token=X — returns full HTML Fix Plan, public,
+  // token-gated. Customer saves the URL or prints to PDF.
+  if (reqUrl.pathname === '/api/customer/fix-plan' && req.method === 'GET') {
+    const token = reqUrl.searchParams.get('token') || '';
+    const verified = qualifierService.verifyQualifierToken(token);
+    if (!verified.valid) {
+      res.writeHead(401, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(`<!doctype html><body style="font-family:system-ui;max-width:480px;margin:4rem auto;padding:1rem;text-align:center;"><h2>Link expired</h2><p>That Fix Plan link has expired. Contact us for a fresh link.</p></body>`);
+      return;
+    }
+    try {
+      const latestRecord = await auditArchive.getLatestAudit(verified.domain);
+      if (!latestRecord || !latestRecord.audit) {
+        res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(`<!doctype html><body style="font-family:system-ui;max-width:480px;margin:4rem auto;padding:1rem;text-align:center;"><h2>Audit not found</h2><p>We don't have a recent audit on file for <code>${escapeHtml(verified.domain)}</code>. <a href="/audit-results.html?url=https://${escapeHtml(verified.domain)}">Run a fresh audit</a>.</p></body>`);
+        return;
+      }
+      const businessName = latestRecord.sourceMeta?.businessName || verified.domain;
+      const html = require('./services/fixPlanRenderer').renderFixPlan({
+        businessName,
+        domain: verified.domain,
+        audit: latestRecord.audit
+      });
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(html);
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(`<!doctype html><body style="font-family:system-ui;max-width:480px;margin:4rem auto;padding:1rem;text-align:center;"><h2>Error</h2><p>${escapeHtml(err.message)}</p></body>`);
+    }
+    return;
+  }
+
+  // POST /api/admin/fix-plan/deliver — admin-triggered: generates a fresh
+  // signed link for the domain and emails it to the contact on file.
+  // Used after a successful $199 charge (Stripe will eventually call this)
+  // or via the Lead Pipeline drawer "Deliver Fix Plan" button.
+  if (reqUrl.pathname === '/api/admin/fix-plan/deliver' && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const body = await readJsonRequestBody(req);
+      const domain = String(body.domain || '').trim().toLowerCase();
+      if (!domain) { sendJson(res, 400, { ok: false, error: 'domain required' }); return; }
+      const record = await auditArchive.getLatestAudit(domain);
+      if (!record || !record.audit) {
+        sendJson(res, 404, { ok: false, error: 'no audit on file for that domain' });
+        return;
+      }
+      const recipient = body.recipient || record.contactInfo?.emails?.[0];
+      if (!recipient) {
+        sendJson(res, 400, { ok: false, error: 'no recipient email available' });
+        return;
+      }
+      const businessName = record.sourceMeta?.businessName || domain;
+      const token = qualifierService.signQualifierToken({ domain, ttlMs: 365 * 24 * 60 * 60 * 1000 });
+      const base = process.env.GEONEO_PUBLIC_BASE_URL || `http://127.0.0.1:${process.env.PORT || 4173}`;
+      const fixPlanUrl = `${base}/api/customer/fix-plan?token=${encodeURIComponent(token)}`;
+      const subject = `Your $199 Fix Plan for ${businessName}`;
+      const html = `<!doctype html><html><body style="font-family:system-ui;max-width:560px;margin:0 auto;padding:24px;background:#f8fafc;color:#0f172a;line-height:1.55;">
+        <div style="background:white;border-radius:12px;padding:24px;border:1px solid #e2e8f0;">
+          <h2>Your Fix Plan is ready</h2>
+          <p>Hi — your full $199 Fix Plan for <strong>${escapeHtml(businessName)}</strong> is ready.</p>
+          <p>The link below is permanent — bookmark it. It includes the prioritized fixes, paste-ready JSON-LD + llms.txt, and a 4-week implementation roadmap.</p>
+          <p style="margin:24px 0;text-align:center;"><a href="${escapeHtml(fixPlanUrl)}" style="display:inline-block;background:#0369a1;color:white;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:700;">Open my Fix Plan →</a></p>
+          <p style="font-size:0.85rem;color:#475569;">Implement at your own pace. We'll re-audit in 30 days and let you know what moved.</p>
+          <p style="font-size:0.78rem;color:#94a3b8;margin-top:1.5rem;">— GeoNeo Audit Team</p>
+        </div>
+      </body></html>`;
+      const idempotencyKey = `fixplan:${domain}:${Date.now()}`;
+      await emailOutbox.enqueueOutboxEntry({
+        idempotencyKey, type: 'fix_plan_delivery', to: recipient, subject, html, domain, reason: 'fix_plan_purchase'
+      });
+      sendJson(res, 200, { ok: true, fixPlanUrl, recipient, queued: true });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'fix_plan_deliver_failed' });
+    }
+    return;
+  }
+
+  // ===== AI Call Center =====
+  // GET /api/admin/ai-call/status — provider availability + queue summary
+  if (reqUrl.pathname === '/api/admin/ai-call/status' && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const dispatcher = require('./services/aiCallDispatcher');
+      const queue = require('./services/aiCallQueue');
+      const [providers, stats] = await Promise.all([
+        Promise.resolve(dispatcher.providerStatus()),
+        queue.getStats()
+      ]);
+      sendJson(res, 200, { ok: true, providers, queue: stats });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'ai_call_status_failed' });
+    }
+    return;
+  }
+  // POST /api/admin/ai-call/enqueue — enqueue a call for a domain
+  // Body: { domain, priceVariant?, priority?, scheduledAt? }
+  if (reqUrl.pathname === '/api/admin/ai-call/enqueue' && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const body = await readJsonRequestBody(req);
+      const domain = String(body.domain || '').trim().toLowerCase();
+      if (!domain) { sendJson(res, 400, { ok: false, error: 'domain required' }); return; }
+      const lead = await leadPipeline.getLead(domain);
+      if (!lead) { sendJson(res, 404, { ok: false, error: 'lead_not_found' }); return; }
+      if (!lead.contactInfo?.primaryPhone) { sendJson(res, 400, { ok: false, error: 'no_phone_on_file' }); return; }
+      const aiCallScriptGenerator = require('./services/aiCallScriptGenerator');
+      const aiCallQueue = require('./services/aiCallQueue');
+      const priceVariant = Number(body.priceVariant) || aiCallScriptGenerator.pickPriceVariantForLead(lead);
+      const script = aiCallScriptGenerator.generateScript({ lead, priceVariant });
+      const result = await aiCallQueue.enqueueCall({
+        lead, script, priceVariant,
+        idempotencyKey: body.idempotencyKey,
+        scheduledAt: body.scheduledAt || null,
+        priority: body.priority || 'normal'
+      });
+      sendJson(res, 200, { ok: true, ...result });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'enqueue_failed' });
+    }
+    return;
+  }
+  // POST /api/admin/ai-call/dispatch — kick off a batch dispatch right now
+  // Body: { limit?: number }
+  if (reqUrl.pathname === '/api/admin/ai-call/dispatch' && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const body = await readJsonRequestBody(req);
+      const dispatcher = require('./services/aiCallDispatcher');
+      const result = await dispatcher.dispatchBatch({ limit: Number(body.limit) || 10 });
+      sendJson(res, 200, { ok: true, ...result });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'dispatch_failed' });
+    }
+    return;
+  }
+  // GET /api/admin/ai-call/list — list calls with optional filters
+  if (reqUrl.pathname === '/api/admin/ai-call/list' && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const aiCallQueue = require('./services/aiCallQueue');
+      const calls = await aiCallQueue.listCalls({
+        state: reqUrl.searchParams.get('state'),
+        outcome: reqUrl.searchParams.get('outcome'),
+        domain: reqUrl.searchParams.get('domain'),
+        limit: Number(reqUrl.searchParams.get('limit')) || 50
+      });
+      sendJson(res, 200, { ok: true, calls });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'list_failed' });
+    }
+    return;
+  }
+  // GET /api/admin/ai-call/<id> — single call detail (includes full script)
+  const aiCallGetMatch = reqUrl.pathname.match(/^\/api\/admin\/ai-call\/([a-zA-Z0-9_]+)$/);
+  if (aiCallGetMatch && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const aiCallQueue = require('./services/aiCallQueue');
+      const call = await aiCallQueue.getCall(aiCallGetMatch[1]);
+      if (!call) { sendJson(res, 404, { ok: false, error: 'call_not_found' }); return; }
+      sendJson(res, 200, { ok: true, call });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'get_failed' });
+    }
+    return;
+  }
+  // POST /api/admin/ai-call/<id>/simulate — stub-only: simulate a call outcome
+  // Body: { outcome, summary? }. Triggers the same routing as a real webhook.
+  const aiCallSimulateMatch = reqUrl.pathname.match(/^\/api\/admin\/ai-call\/([a-zA-Z0-9_]+)\/simulate$/);
+  if (aiCallSimulateMatch && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const body = await readJsonRequestBody(req);
+      const dispatcher = require('./services/aiCallDispatcher');
+      const router = require('./services/aiCallRouter');
+      const callId = aiCallSimulateMatch[1];
+      const updated = await dispatcher.simulateOutcome(callId, body.outcome, body.summary);
+      const routed = await router.routeAfterCall(callId);
+      sendJson(res, 200, { ok: true, call: updated, routed });
+    } catch (err) {
+      sendJson(res, 400, { ok: false, error: err.message || 'simulate_failed' });
+    }
+    return;
+  }
+
+  // ===== AI Call Webhook (provider-facing) =====
+  // POST /api/ai-call/webhook?provider=bland|vapi|retell&callId=<our_id>
+  // Each provider sends a different payload shape; we normalize per-provider
+  // and route through aiCallRouter on terminal events.
+  if (reqUrl.pathname === '/api/ai-call/webhook' && req.method === 'POST') {
+    try {
+      const body = await readJsonRequestBody(req, 1024 * 1024);
+      const provider = (reqUrl.searchParams.get('provider') || body.provider || 'unknown').toLowerCase();
+      let geoneoCallId = reqUrl.searchParams.get('callId') || body.metadata?.geoneoCallId || null;
+      const aiCallQueue = require('./services/aiCallQueue');
+      const router = require('./services/aiCallRouter');
+      // Provider-specific normalization
+      let event = 'unknown';
+      let outcome = null;
+      let summary = null;
+      let transcript = null;
+      let durationSec = null;
+      let providerCost = null;
+      let aiSentiment = null;
+      let providerCallId = null;
+      let stateChange = null;
+      if (provider === 'bland') {
+        // Bland: webhook fires with status updates. status can be: in-progress, completed, failed, no-answer
+        providerCallId = body.call_id || null;
+        if (body.status === 'in-progress') { event = 'in_progress'; stateChange = 'in_progress'; }
+        else if (body.status === 'completed') {
+          event = 'completed';
+          stateChange = 'completed';
+          durationSec = body.call_length || null;
+          providerCost = body.price || null;
+          transcript = body.concatenated_transcript || (Array.isArray(body.transcripts) ? body.transcripts.map((t) => `${t.user || ''}: ${t.text || ''}`).join('\n') : null);
+          summary = body.summary || body.analysis?.summary || null;
+          aiSentiment = body.analysis?.sentiment || null;
+          outcome = (body.analysis?.outcome || '').toLowerCase() || (body.completed === true ? 'closed_won' : null);
+        } else if (body.status === 'no-answer') { event = 'no_answer'; stateChange = 'no_answer'; outcome = 'no_answer'; }
+        else if (body.status === 'failed') { event = 'failed'; stateChange = 'failed'; outcome = 'call_failed'; }
+      } else if (provider === 'vapi') {
+        providerCallId = body.call?.id || body.id || null;
+        const t = body.message?.type || body.type;
+        if (t === 'status-update' && body.message?.status === 'in-progress') { event = 'in_progress'; stateChange = 'in_progress'; }
+        else if (t === 'end-of-call-report' || t === 'call.ended') {
+          event = 'completed';
+          stateChange = 'completed';
+          durationSec = body.message?.durationSeconds || body.message?.call?.durationSeconds || null;
+          providerCost = body.message?.cost || null;
+          transcript = body.message?.transcript || null;
+          summary = body.message?.summary || null;
+          aiSentiment = body.message?.analysis?.sentiment || null;
+          outcome = body.message?.analysis?.successEvaluation === 'true' ? 'closed_won' : null;
+        }
+      } else if (provider === 'retell') {
+        providerCallId = body.call?.call_id || body.call_id || null;
+        const t = body.event;
+        if (t === 'call_started') { event = 'in_progress'; stateChange = 'in_progress'; }
+        else if (t === 'call_ended' || t === 'call_analyzed') {
+          event = 'completed';
+          stateChange = 'completed';
+          durationSec = body.call?.call_length_seconds || body.call?.duration_seconds || null;
+          providerCost = body.call?.call_cost?.combined_cost || null;
+          transcript = body.call?.transcript || null;
+          summary = body.call?.call_analysis?.call_summary || null;
+          aiSentiment = body.call?.call_analysis?.user_sentiment || null;
+          outcome = body.call?.call_analysis?.custom_analysis_data?.outcome || null;
+        }
+      } else if (provider === 'stub') {
+        event = body.event || 'completed';
+        outcome = body.outcome || null;
+        summary = body.summary || null;
+        stateChange = 'completed';
+      }
+      // Locate our internal call by either embedded ID or providerCallId lookup
+      let call = null;
+      if (geoneoCallId) call = await aiCallQueue.getCall(geoneoCallId);
+      if (!call && providerCallId) call = await aiCallQueue.getCallByProviderId(provider, providerCallId);
+      if (!call) {
+        sendJson(res, 200, { ok: true, ignored: true, reason: 'call_not_found' });
+        return;
+      }
+      // Apply state/outcome
+      if (stateChange === 'completed') {
+        await aiCallQueue.markCompleted(call.id, {
+          state: 'completed', outcome, transcript, summary, durationSec, providerCost, aiSentiment
+        });
+        await router.routeAfterCall(call.id);
+      } else if (stateChange === 'in_progress') {
+        await aiCallQueue.patchCall(call.id, { state: 'in_progress', startedAt: new Date().toISOString() });
+      } else if (stateChange === 'no_answer') {
+        await aiCallQueue.markCompleted(call.id, { state: 'no_answer', outcome: 'no_answer' });
+        await router.routeAfterCall(call.id);
+      } else if (stateChange === 'failed') {
+        await aiCallQueue.markFailed(call.id, body.error || body.failure_reason || 'provider_failure');
+        await router.routeAfterCall(call.id);
+      }
+      sendJson(res, 200, { ok: true, callId: call.id, event, outcome });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'webhook_error' });
+    }
+    return;
+  }
+
+  // ===== Human Call Queue (Dave + Matt) =====
+  if (reqUrl.pathname === '/api/admin/human-queue/list' && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const hcq = require('./services/humanCallQueue');
+      const [calls, stats] = await Promise.all([
+        hcq.listQueue({
+          assignedTo: reqUrl.searchParams.get('assignedTo'),
+          state: reqUrl.searchParams.get('state'),
+          priority: reqUrl.searchParams.get('priority'),
+          limit: Number(reqUrl.searchParams.get('limit')) || 100
+        }),
+        hcq.getStats()
+      ]);
+      sendJson(res, 200, { ok: true, calls, stats });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'human_queue_list_failed' });
+    }
+    return;
+  }
+  const hqAssignMatch = reqUrl.pathname.match(/^\/api\/admin\/human-queue\/([a-zA-Z0-9_]+)\/assign$/);
+  if (hqAssignMatch && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const body = await readJsonRequestBody(req);
+      const hcq = require('./services/humanCallQueue');
+      const updated = await hcq.assignTo(hqAssignMatch[1], body.assignedTo || null);
+      sendJson(res, 200, { ok: true, call: updated });
+    } catch (err) {
+      sendJson(res, 400, { ok: false, error: err.message || 'assign_failed' });
+    }
+    return;
+  }
+  const hqStartMatch = reqUrl.pathname.match(/^\/api\/admin\/human-queue\/([a-zA-Z0-9_]+)\/start$/);
+  if (hqStartMatch && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const hcq = require('./services/humanCallQueue');
+      const updated = await hcq.markStarted(hqStartMatch[1]);
+      sendJson(res, 200, { ok: true, call: updated });
+    } catch (err) {
+      sendJson(res, 400, { ok: false, error: err.message || 'start_failed' });
+    }
+    return;
+  }
+  const hqCompleteMatch = reqUrl.pathname.match(/^\/api\/admin\/human-queue\/([a-zA-Z0-9_]+)\/complete$/);
+  if (hqCompleteMatch && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const body = await readJsonRequestBody(req);
+      const hcq = require('./services/humanCallQueue');
+      const updated = await hcq.markCompleted(hqCompleteMatch[1], { outcome: body.outcome, note: body.note });
+      sendJson(res, 200, { ok: true, call: updated });
+    } catch (err) {
+      sendJson(res, 400, { ok: false, error: err.message || 'complete_failed' });
+    }
+    return;
+  }
+  const hqNoteMatch = reqUrl.pathname.match(/^\/api\/admin\/human-queue\/([a-zA-Z0-9_]+)\/note$/);
+  if (hqNoteMatch && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const body = await readJsonRequestBody(req);
+      const hcq = require('./services/humanCallQueue');
+      const updated = await hcq.addNote(hqNoteMatch[1], body.text);
+      sendJson(res, 200, { ok: true, call: updated });
+    } catch (err) {
+      sendJson(res, 400, { ok: false, error: err.message || 'note_failed' });
+    }
+    return;
+  }
+
+  // ===== Customer dashboard (token-gated, public) =====
+  // GET /api/customer/dashboard?token=X — return latest audit + score history
+  // + relevant action links for the dashboard UI
+  if (reqUrl.pathname === '/api/customer/dashboard' && req.method === 'GET') {
+    const token = reqUrl.searchParams.get('token') || '';
+    const verified = qualifierService.verifyQualifierToken(token);
+    if (!verified.valid) {
+      sendJson(res, 401, { ok: false, error: 'expired_or_invalid_token' });
+      return;
+    }
+    try {
+      const record = await auditArchive.getDomainHistory(verified.domain);
+      if (!record || !record.history || !record.history.length) {
+        sendJson(res, 404, { ok: false, error: 'no_audit_on_file' });
+        return;
+      }
+      const latest = record.history[0];
+      const dashboard = {
+        domain: record.domain,
+        businessName: latest.sourceMeta?.businessName || record.domain,
+        industry: latest.industry || null,
+        city: latest.city || null,
+        state: latest.state || null,
+        latestAudit: latest.audit ? {
+          overallScore: latest.audit.overallScore,
+          grade: latest.audit.grade,
+          status: latest.audit.status,
+          sectionScores: latest.audit.sectionScores || {},
+          sectionWeights: latest.audit.sectionWeights || null,
+          // ALL findings (not just top), with full detail for the deep-dive view
+          findings: (latest.audit.findings || []).map((f) => ({
+            id: f.id || f.key,
+            section: f.section,
+            title: f.title,
+            severity: f.severity,
+            detail: f.detail,
+            impact: f.impact,
+            fixDifficulty: f.fixDifficulty,
+            fixEstimate: f.fixEstimate,
+            dollarImpact: f.dollarImpact || null,
+            effortMinutes: f.effortMinutes || null,
+            evidence: f.evidence || null,
+            example: f.example || null,
+            competitorEvidence: f.competitorEvidence || null
+          })),
+          // Per-pillar deep-dive — full sub-analyzer results so the customer
+          // can drill into each one (cert details, robots.txt parse, etc.)
+          sections: latest.audit.sections || null,
+          dollarOpportunity: latest.audit.dollarOpportunity || null,
+          industryBenchmark: latest.audit.industryBenchmark || null,
+          generatedAssets: latest.audit.generatedAssets || null,
+          serpContext: latest.audit.serpContext || null,
+          generatedAt: latest.audit.generatedAt || latest.generatedAt
+        } : null,
+        history: (record.history || []).slice(0, 24).map((h) => ({
+          generatedAt: h.audit?.generatedAt || h.generatedAt,
+          audit: h.audit ? {
+            overallScore: h.audit.overallScore,
+            grade: h.audit.grade,
+            sectionScores: h.audit.sectionScores || null
+          } : null
+        })),
+        contactInfo: latest.contactInfo || null,
+        seoProvider: latest.seoProvider || null,
+        firstSeenAt: record.firstSeenAt,
+        lastAuditedAt: record.lastAuditedAt,
+        tokenExpiresAt: verified.expiresAt
+      };
+      sendJson(res, 200, { ok: true, dashboard });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'dashboard_failed' });
+    }
+    return;
+  }
+  // GET /api/admin/consent/list — operator view: every documented consent
+  if (reqUrl.pathname === '/api/admin/consent/list' && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const callConsent = require('./services/callConsent');
+      const consents = await callConsent.listConsentedDomains();
+      sendJson(res, 200, { ok: true, consents, totalCount: consents.length });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'consent_list_failed' });
+    }
+    return;
+  }
+  // POST /api/admin/consent/override — operator manually marks consent (call-in, etc.)
+  if (reqUrl.pathname === '/api/admin/consent/override' && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const body = await readJsonRequestBody(req);
+      const callConsent = require('./services/callConsent');
+      const entry = await callConsent.recordConsent({
+        domain: body.domain,
+        source: body.revoke ? 'consent_revoked' : 'admin_override',
+        by: body.by || 'admin',
+        note: body.note || null
+      });
+      sendJson(res, 200, { ok: true, entry });
+    } catch (err) {
+      sendJson(res, 400, { ok: false, error: err.message || 'consent_override_failed' });
+    }
+    return;
+  }
+
+  // GET /api/customer/fix-tracker?token=X — read this customer's fix tracker
+  if (reqUrl.pathname === '/api/customer/fix-tracker' && req.method === 'GET') {
+    const token = reqUrl.searchParams.get('token') || '';
+    const verified = qualifierService.verifyQualifierToken(token);
+    if (!verified.valid) { sendJson(res, 401, { ok: false, error: 'expired_or_invalid_token' }); return; }
+    try {
+      const fixTracker = require('./services/fixTracker');
+      // Auto-sync latest audit findings into tracker (idempotent — only adds new ones)
+      try {
+        const latest = await auditArchive.getLatestAudit(verified.domain);
+        if (latest && Array.isArray(latest.audit?.findings)) {
+          await fixTracker.syncFromAuditFindings(verified.domain, latest.audit.findings.slice(0, 25));
+        }
+      } catch {}
+      const tracker = await fixTracker.getTracker(verified.domain);
+      sendJson(res, 200, { ok: true, tracker });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'tracker_get_failed' });
+    }
+    return;
+  }
+  // POST /api/customer/fix-tracker/upsert — customer marks an item done/in-progress/etc.
+  // Body: { id?, title?, status, notes? }. Token required.
+  if (reqUrl.pathname === '/api/customer/fix-tracker/upsert' && req.method === 'POST') {
+    const token = reqUrl.searchParams.get('token') || '';
+    const verified = qualifierService.verifyQualifierToken(token);
+    if (!verified.valid) { sendJson(res, 401, { ok: false, error: 'expired_or_invalid_token' }); return; }
+    try {
+      const body = await readJsonRequestBody(req);
+      const fixTracker = require('./services/fixTracker');
+      const item = await fixTracker.upsertItem(verified.domain, {
+        id: body.id,
+        title: body.title,
+        status: body.status,
+        notes: body.notes,
+        source: body.source || 'customer'
+      });
+      sendJson(res, 200, { ok: true, item });
+    } catch (err) {
+      sendJson(res, 400, { ok: false, error: err.message || 'tracker_upsert_failed' });
+    }
+    return;
+  }
+  // POST /api/customer/reaudit?token=X — kick off a fresh deep audit for the
+  // token's domain. Same pipeline as the sweep + admin re-audit. Caps to one
+  // re-audit per 60 seconds per domain (prevents accidental double-clicks
+  // and abuse).
+  if (reqUrl.pathname === '/api/customer/reaudit' && req.method === 'POST') {
+    const token = reqUrl.searchParams.get('token') || '';
+    const verified = qualifierService.verifyQualifierToken(token);
+    if (!verified.valid) {
+      sendJson(res, 401, { ok: false, error: 'expired_or_invalid_token' });
+      return;
+    }
+    try {
+      // Throttle: refuse if last audit was within 60s
+      const existing = await auditArchive.getDomainHistory(verified.domain);
+      if (existing && existing.lastAuditedAt) {
+        const sinceMs = Date.now() - new Date(existing.lastAuditedAt).getTime();
+        if (sinceMs < 60_000) {
+          sendJson(res, 429, { ok: false, error: 'rate_limited', retryInSec: Math.ceil((60_000 - sinceMs) / 1000) });
+          return;
+        }
+      }
+      const url = `https://${verified.domain}`;
+      const latest = existing?.history?.[0];
+      // Tier the customer-pressed re-audit: maintenance customer = deep,
+      // free user re-audit (uncommon) = standard. Both get SPA render.
+      const tier = existing?.maintenanceCustomer ? 'deep' : 'standard';
+      const result = await sweepSchedulerAuditFn({
+        url,
+        industry: latest?.industry,
+        city: latest?.city,
+        state: latest?.state,
+        batchMode: false,
+        auditDepth: tier
+      });
+      if (!result || !result.audit) {
+        sendJson(res, 500, { ok: false, error: 'audit_returned_empty' });
+        return;
+      }
+      sendJson(res, 200, {
+        ok: true,
+        overallScore: result.audit.overallScore,
+        grade: result.audit.grade,
+        generatedAt: result.audit.generatedAt
+      });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'reaudit_failed' });
+    }
+    return;
+  }
+  // POST /api/admin/customer/send-dashboard-link — admin-triggered: emails
+  // the dashboard URL to the contact on file (or to a custom recipient).
+  if (reqUrl.pathname === '/api/admin/customer/send-dashboard-link' && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const body = await readJsonRequestBody(req);
+      const domain = String(body.domain || '').trim().toLowerCase();
+      if (!domain) { sendJson(res, 400, { ok: false, error: 'domain required' }); return; }
+      const record = await auditArchive.getLatestAudit(domain);
+      if (!record) { sendJson(res, 404, { ok: false, error: 'no record on file' }); return; }
+      const recipient = body.recipient || record.contactInfo?.emails?.[0];
+      if (!recipient) { sendJson(res, 400, { ok: false, error: 'no recipient email available' }); return; }
+      const token = qualifierService.signQualifierToken({ domain, ttlMs: 365 * 24 * 60 * 60 * 1000 });
+      const base = process.env.GEONEO_PUBLIC_BASE_URL || `http://127.0.0.1:${process.env.PORT || 4173}`;
+      const dashboardUrl = `${base}/customer-dashboard.html?token=${encodeURIComponent(token)}`;
+      const businessName = record.sourceMeta?.businessName || domain;
+      const subject = `Your GeoNeo dashboard for ${businessName}`;
+      const html = `<!doctype html><html><body style="font-family:system-ui;max-width:560px;margin:0 auto;padding:24px;background:#f8fafc;color:#0f172a;line-height:1.55;">
+        <div style="background:white;border-radius:12px;padding:24px;border:1px solid #e2e8f0;">
+          <h2 style="margin:0 0 14px;">Your GeoNeo dashboard is ready</h2>
+          <p>Hi — your visibility dashboard for <strong>${escapeHtml(businessName)}</strong> is here.</p>
+          <p>Bookmark this link. It includes your latest audit, score history, top fixes, and a one-click re-audit button.</p>
+          <p style="margin:24px 0;text-align:center;"><a href="${escapeHtml(dashboardUrl)}" style="display:inline-block;background:#0369a1;color:white;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:700;">Open my dashboard →</a></p>
+          <p style="font-size:0.85rem;color:#475569;">The link expires after 1 year. Reply to this email if you need a fresh one.</p>
+        </div>
+      </body></html>`;
+      const idempotencyKey = `dashlink:${domain}:${new Date().toISOString().slice(0, 10)}`;
+      await emailOutbox.enqueueOutboxEntry({
+        idempotencyKey, type: 'customer_dashboard_link', to: recipient, subject, html, domain, reason: 'dashboard_send'
+      });
+      sendJson(res, 200, { ok: true, dashboardUrl, recipient, queued: true });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'send_dashboard_failed' });
+    }
+    return;
+  }
+
+  // ===== Email Blast (admin) =====
+  if (reqUrl.pathname === '/api/admin/email-blast/preview' && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const body = await readJsonRequestBody(req);
+      const result = await emailBlast.preview(body);
+      sendJson(res, 200, { ok: true, ...result });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'preview_failed' });
+    }
+    return;
+  }
+  if (reqUrl.pathname === '/api/admin/email-blast/send' && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const body = await readJsonRequestBody(req);
+      const job = await emailBlast.send(body);
+      sendJson(res, 201, { ok: true, job });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'blast_send_failed' });
+    }
+    return;
+  }
+  if (reqUrl.pathname === '/api/admin/email-blast/send-targeted' && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const body = await readJsonRequestBody(req);
+      const job = await emailBlast.sendTargeted({
+        domains: Array.isArray(body.domains) ? body.domains : [],
+        dryRun: Boolean(body.dryRun),
+        runId: body.runId || null,
+        reasonTag: body.reasonTag || 'targeted'
+      });
+      sendJson(res, 201, { ok: true, job });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'targeted_blast_failed' });
+    }
+    return;
+  }
+  if (reqUrl.pathname === '/api/admin/email-blast/jobs' && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const jobs = await emailBlast.listJobs();
+      sendJson(res, 200, { ok: true, jobs });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'jobs_list_failed' });
+    }
+    return;
+  }
+  // GET /api/admin/email-blast/variants — A/B subject variants + per-variant stats
+  if (reqUrl.pathname === '/api/admin/email-blast/variants' && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const variants = emailBlast.SUBJECT_VARIANTS.map((v) => ({ key: v.key, desc: v.desc }));
+      const stats = await emailBlast.subjectVariantStats();
+      sendJson(res, 200, { ok: true, variants, stats });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'variants_failed' });
+    }
+    return;
+  }
+  // GET /api/admin/outbox/throttle — current throttle status (cap, used, remaining)
+  if (reqUrl.pathname === '/api/admin/outbox/throttle' && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const status = outboxSender.getThrottleStatus();
+      sendJson(res, 200, { ok: true, throttle: status });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'throttle_status_failed' });
+    }
+    return;
+  }
+  // POST /api/admin/outbox/throttle — adjust hourly cap at runtime
+  if (reqUrl.pathname === '/api/admin/outbox/throttle' && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const body = await readJsonRequestBody(req);
+      const newCap = outboxSender.setHourlyCap(body.hourlyCap);
+      sendJson(res, 200, { ok: true, hourlyCap: newCap });
+    } catch (err) {
+      sendJson(res, 400, { ok: false, error: err.message || 'throttle_set_failed' });
+    }
+    return;
+  }
+  // GET /api/admin/lead-pipeline/suppressed — list every suppressed domain
+  if (reqUrl.pathname === '/api/admin/lead-pipeline/suppressed' && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const suppressed = await leadPipeline.listSuppressed();
+      sendJson(res, 200, { ok: true, suppressed, totalCount: suppressed.length });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'list_suppressed_failed' });
+    }
+    return;
+  }
+  // POST /api/admin/lead-pipeline/unsuppress — clear suppression for one or many
+  if (reqUrl.pathname === '/api/admin/lead-pipeline/unsuppress' && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const body = await readJsonRequestBody(req);
+      const domains = Array.isArray(body.domains) ? body.domains : [];
+      const result = await leadPipeline.unsuppressDomains(domains, { by: body.by || 'admin' });
+      sendJson(res, 200, { ok: true, ...result });
+    } catch (err) {
+      sendJson(res, 400, { ok: false, error: err.message || 'unsuppress_failed' });
+    }
+    return;
+  }
+
+  // ===== Google Places API (GBP details) =====
+  // GET /api/admin/places/status — availability check (no API call)
+  if (reqUrl.pathname === '/api/admin/places/status' && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    const places = require('./services/placesClient');
+    sendJson(res, 200, { ok: true, ...places.status() });
+    return;
+  }
+  // POST /api/admin/places/match — find best GBP match for a domain/lead.
+  // Body: { domain, businessName, industry, city, state }. Returns full details.
+  if (reqUrl.pathname === '/api/admin/places/match' && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const body = await readJsonRequestBody(req);
+      const places = require('./services/placesClient');
+      const result = await places.findBestMatchByDomain({
+        domain: body.domain,
+        businessName: body.businessName,
+        industry: body.industry,
+        city: body.city,
+        state: body.state
+      });
+      sendJson(res, 200, { ok: true, ...result });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'places_match_failed' });
+    }
+    return;
+  }
+
+  // ===== Multi-LLM citation matrix =====
+  // POST /api/admin/multi-llm-matrix — run the matrix for a target.
+  // Body: { businessName, domain, industry, city, state, queries? }.
+  // Returns: { matrix, summary, providers, queries, target }.
+  if (reqUrl.pathname === '/api/admin/multi-llm-matrix' && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const body = await readJsonRequestBody(req);
+      const matrix = require('./services/multiLlmMatrix');
+      const result = await matrix.runMultiLlmMatrix({
+        businessName: body.businessName,
+        domain: body.domain,
+        industry: body.industry,
+        city: body.city,
+        state: body.state,
+        queries: body.queries
+      });
+      sendJson(res, 200, { ok: true, ...result });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'matrix_failed' });
+    }
+    return;
+  }
+  // GET /api/admin/multi-llm-matrix/status — provider availability
+  if (reqUrl.pathname === '/api/admin/multi-llm-matrix/status' && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    const matrix = require('./services/multiLlmMatrix');
+    sendJson(res, 200, { ok: true, providers: matrix.providerStatus() });
+    return;
+  }
+  // GET /api/customer/llms-txt?token=X — render a draft llms.txt for the
+  // domain. Customer can copy-paste into their site's /llms.txt file.
+  if (reqUrl.pathname === '/api/customer/llms-txt' && req.method === 'GET') {
+    const token = reqUrl.searchParams.get('token') || '';
+    const verified = qualifierService.verifyQualifierToken(token);
+    if (!verified.valid) {
+      res.writeHead(401, { 'Content-Type': 'text/plain' });
+      res.end('# Invalid or expired token\n');
+      return;
+    }
+    try {
+      const record = await auditArchive.getDomainHistory(verified.domain);
+      if (!record || !record.history || !record.history.length) {
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('# No audit on file for this domain\n');
+        return;
+      }
+      const latest = record.history[0];
+      const { generateLlmsTxt } = require('./services/geoAnalyzer');
+      const businessName = latest.sourceMeta?.businessName || verified.domain;
+      const sitemapUrls = Array.isArray(latest.audit?.sections?.sitemap?.crawledUrls)
+        ? latest.audit.sections.sitemap.crawledUrls.slice(0, 50)
+        : [];
+      const out = generateLlmsTxt({
+        businessName,
+        description: latest.sourceMeta?.description || '',
+        url: `https://${verified.domain}`,
+        industry: latest.industry,
+        city: latest.city,
+        state: latest.state,
+        primaryServices: [],
+        sitemapUrls
+      });
+      res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end(out || `# ${businessName}\n\n> Auto-generation failed — provide business description first.\n`);
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'text/plain' });
+      res.end('# Error: ' + err.message + '\n');
+    }
+    return;
+  }
+
+  // GET /api/admin/audit/full?domain=X — admin-only full archived audit.
+  // Returns everything the customer dashboard returns, no token needed
+  // (admin auth covers it). Used by the Lead Pipeline drawer "Full audit" view.
+  if (reqUrl.pathname === '/api/admin/audit/full' && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const domain = String(reqUrl.searchParams.get('domain') || '').trim().toLowerCase();
+      if (!domain) { sendJson(res, 400, { ok: false, error: 'domain required' }); return; }
+      const record = await auditArchive.getDomainHistory(domain);
+      if (!record || !record.history?.length) {
+        sendJson(res, 404, { ok: false, error: 'no_archived_audit' }); return;
+      }
+      const latest = record.history[0];
+      sendJson(res, 200, {
+        ok: true,
+        domain: record.domain,
+        businessName: latest.sourceMeta?.businessName || record.domain,
+        industry: latest.industry,
+        city: latest.city,
+        state: latest.state,
+        contactInfo: latest.contactInfo,
+        seoProvider: latest.seoProvider,
+        audit: latest.audit, // FULL audit — every field, no filtering
+        auditedAt: latest.auditedAt || latest.generatedAt,
+        firstSeenAt: record.firstSeenAt,
+        lastAuditedAt: record.lastAuditedAt,
+        history: (record.history || []).slice(0, 50).map((h) => ({
+          generatedAt: h.audit?.generatedAt || h.generatedAt,
+          source: h.source,
+          overallScore: h.audit?.overallScore,
+          grade: h.audit?.grade,
+          sectionScores: h.audit?.sectionScores
+        }))
+      });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'full_audit_failed' });
+    }
+    return;
+  }
+
+  // POST /api/admin/customer/mint-token — admin-only: sign a customer
+  // dashboard token for any domain. Used by the lead-drawer "view archived
+  // audit" button so the admin can open the same customer-facing view.
+  if (reqUrl.pathname === '/api/admin/customer/mint-token' && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const body = await readJsonRequestBody(req);
+      const domain = String(body.domain || '').trim().toLowerCase();
+      if (!domain) { sendJson(res, 400, { ok: false, error: 'domain required' }); return; }
+      const ttlMs = Math.min(365 * 24 * 60 * 60 * 1000, Number(body.ttlMs) || 30 * 24 * 60 * 60 * 1000);
+      const token = qualifierService.signQualifierToken({ domain, ttlMs });
+      sendJson(res, 200, { ok: true, token, expiresAt: new Date(Date.now() + ttlMs).toISOString() });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'mint_failed' });
+    }
+    return;
+  }
+
+  // ===== Audit Log (immutable data product) =====
+  // GET /api/admin/audit-log/stats — sharding health, total records, MB used
+  if (reqUrl.pathname === '/api/admin/audit-log/stats' && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const stats = await auditArchive.getAuditLogStats();
+      sendJson(res, 200, { ok: true, stats });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'log_stats_failed' });
+    }
+    return;
+  }
+  // GET /api/admin/audit-log/query — stream-query the immutable log
+  if (reqUrl.pathname === '/api/admin/audit-log/query' && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const filter = {
+        month: reqUrl.searchParams.get('month'),
+        monthFrom: reqUrl.searchParams.get('monthFrom'),
+        monthTo: reqUrl.searchParams.get('monthTo'),
+        domain: reqUrl.searchParams.get('domain'),
+        industry: reqUrl.searchParams.get('industry'),
+        city: reqUrl.searchParams.get('city'),
+        state: reqUrl.searchParams.get('state'),
+        source: reqUrl.searchParams.get('source'),
+        scoreMax: reqUrl.searchParams.get('scoreMax') ? Number(reqUrl.searchParams.get('scoreMax')) : null,
+        scoreMin: reqUrl.searchParams.get('scoreMin') ? Number(reqUrl.searchParams.get('scoreMin')) : null,
+        limit: Number(reqUrl.searchParams.get('limit')) || 1000
+      };
+      const result = await auditArchive.queryAuditLog(filter);
+      sendJson(res, 200, { ok: true, ...result });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'log_query_failed' });
+    }
+    return;
+  }
+
+  // ===== Industry baselines =====
+  // GET /api/admin/industry-baselines?industry=X&city=Y — peer cohort
+  // benchmark; if score is provided, also returns percentile rank
+  if (reqUrl.pathname === '/api/admin/industry-baselines' && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const ib = require('./services/industryBaselines');
+      const result = await ib.getBaseline({
+        industry: reqUrl.searchParams.get('industry') || '',
+        city: reqUrl.searchParams.get('city') || '',
+        score: Number(reqUrl.searchParams.get('score')) || null
+      });
+      if (!result) { sendJson(res, 404, { ok: false, error: 'no_cohort_data' }); return; }
+      sendJson(res, 200, { ok: true, baseline: result });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'baseline_failed' });
+    }
+    return;
+  }
+  // POST /api/admin/industry-baselines/rebuild — force rebuild from archive
+  if (reqUrl.pathname === '/api/admin/industry-baselines/rebuild' && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const ib = require('./services/industryBaselines');
+      const result = await ib.rebuild();
+      sendJson(res, 200, { ok: true, cohorts: result.cohortCount, sourceRecords: result.sourceRecords });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'rebuild_failed' });
+    }
+    return;
+  }
+
+  // ===== Org/multi-tenant control =====
+  // GET /api/admin/orgs — list active orgs (those with at least one record)
+  if (reqUrl.pathname === '/api/admin/orgs' && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      // Stream the audit-archive index for unique orgIds. This is cheap
+      // (one disk pass) and works without a separate org registry.
+      const fsApi = require('fs');
+      const readline = require('readline');
+      const indexPath = path.join(ROOT, 'data', 'audit-archive-index.ndjson');
+      const counts = new Map();
+      if (fsApi.existsSync(indexPath)) {
+        const stream = fsApi.createReadStream(indexPath, { encoding: 'utf8' });
+        const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+        for await (const line of rl) {
+          if (!line.trim()) continue;
+          try {
+            const e = JSON.parse(line);
+            const o = e.orgId || 'default';
+            counts.set(o, (counts.get(o) || 0) + 1);
+          } catch {}
+        }
+      }
+      // Always include the default org even if empty
+      if (!counts.has('default')) counts.set('default', 0);
+      const orgs = Array.from(counts.entries())
+        .map(([id, recordCount]) => ({ id, recordCount }))
+        .sort((a, b) => b.recordCount - a.recordCount);
+      sendJson(res, 200, { ok: true, orgs, currentOrg: orgContext.resolveOrgFromRequest(req) });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'orgs_list_failed' });
+    }
+    return;
+  }
+  // POST /api/admin/orgs/switch — set the geoneo_org cookie so subsequent
+  // requests carry the new org context. Returns the resolved org.
+  if (reqUrl.pathname === '/api/admin/orgs/switch' && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const body = await readJsonRequestBody(req);
+      const next = orgContext.normalizeOrgId(body.orgId);
+      const cookie = `geoneo_org=${encodeURIComponent(next)}; Path=/; SameSite=Lax; Max-Age=${30 * 24 * 60 * 60}`;
+      res.setHeader('Set-Cookie', cookie);
+      sendJson(res, 200, { ok: true, currentOrg: next });
+    } catch (err) {
+      sendJson(res, 400, { ok: false, error: err.message || 'org_switch_failed' });
+    }
+    return;
+  }
+
+  // ===== Lead Pipeline (closer command center) =====
+  if (reqUrl.pathname === '/api/admin/lead-pipeline/leads' && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const filter = { orgId: orgContext.resolveOrgFromRequest(req) };
+      ['stage', 'bucket', 'persona', 'state', 'industry', 'tier', 'search', 'tag', 'prospectFitTier', 'sortBy'].forEach((k) => {
+        const v = reqUrl.searchParams.get(k);
+        if (v) filter[k] = v;
+      });
+      ['scoreMax', 'scoreMin', 'limit', 'prospectFitMin', 'maxDomainRating', 'maxOrganicTraffic'].forEach((k) => {
+        const v = reqUrl.searchParams.get(k);
+        if (v) filter[k] = Number(v);
+      });
+      ['hasEmail', 'hasPhone', 'hasQualified', 'suppressed', 'investingInAds'].forEach((k) => {
+        const v = reqUrl.searchParams.get(k);
+        if (v) filter[k] = v === 'true';
+      });
+      const result = await leadPipeline.listLeads(filter);
+      sendJson(res, 200, { ok: true, ...result });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'list_leads_failed' });
+    }
+    return;
+  }
+  // GET /api/admin/lead-pipeline/leads/<domain>
+  const leadGetMatch = reqUrl.pathname.match(/^\/api\/admin\/lead-pipeline\/leads\/([^/]+)$/);
+  if (leadGetMatch && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const lead = await leadPipeline.getLead(decodeURIComponent(leadGetMatch[1]));
+      if (!lead) { sendJson(res, 404, { ok: false, error: 'not_found' }); return; }
+      sendJson(res, 200, { ok: true, lead });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'get_lead_failed' });
+    }
+    return;
+  }
+  // POST /api/admin/lead-pipeline/leads/<domain>/status
+  const leadStatusMatch = reqUrl.pathname.match(/^\/api\/admin\/lead-pipeline\/leads\/([^/]+)\/status$/);
+  if (leadStatusMatch && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const body = await readJsonRequestBody(req);
+      const pipeline = await leadPipeline.setStage(decodeURIComponent(leadStatusMatch[1]), body.stage, {
+        setBy: body.setBy || 'admin',
+        note: body.note || null,
+        force: body.force === true
+      });
+      sendJson(res, 200, { ok: true, pipeline });
+    } catch (err) {
+      // Surface invalid_transition errors clearly so the UI can offer a force-override
+      const isTransitionErr = err.code === 'INVALID_TRANSITION';
+      sendJson(res, isTransitionErr ? 422 : 400, {
+        ok: false,
+        error: err.message || 'set_stage_failed',
+        code: err.code || null,
+        fromStage: err.fromStage || null,
+        toStage: err.toStage || null
+      });
+    }
+    return;
+  }
+  // POST /api/admin/lead-pipeline/leads/<domain>/note
+  const leadNoteMatch = reqUrl.pathname.match(/^\/api\/admin\/lead-pipeline\/leads\/([^/]+)\/note$/);
+  if (leadNoteMatch && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const body = await readJsonRequestBody(req);
+      const note = await leadPipeline.addNote(decodeURIComponent(leadNoteMatch[1]), {
+        text: body.text,
+        author: body.author || 'admin'
+      });
+      sendJson(res, 200, { ok: true, note });
+    } catch (err) {
+      sendJson(res, 400, { ok: false, error: err.message || 'add_note_failed' });
+    }
+    return;
+  }
+  // POST /api/admin/lead-pipeline/leads/<domain>/deep-audit — fire a manual
+  // DEEP-tier audit on demand. Costs ~$0.40 per call (Ahrefs + multi-LLM
+  // matrix + Places + PageSpeed + LanguageTool + SPA render). Use for
+  // promising leads before pitching, OR to refresh data on a paid customer.
+  const leadDeepAuditMatch = reqUrl.pathname.match(/^\/api\/admin\/lead-pipeline\/leads\/([^/]+)\/deep-audit$/);
+  if (leadDeepAuditMatch && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const domain = decodeURIComponent(leadDeepAuditMatch[1]);
+      const lead = await leadPipeline.getLead(domain);
+      if (!lead) { sendJson(res, 404, { ok: false, error: 'lead not found' }); return; }
+      const url = `https://${domain}`;
+      const t0 = Date.now();
+      const result = await sweepSchedulerAuditFn({
+        url,
+        industry: lead.industry,
+        city: lead.city,
+        state: lead.state,
+        batchMode: false,
+        auditDepth: 'deep'
+      });
+      const ms = Date.now() - t0;
+      if (!result?.audit) { sendJson(res, 500, { ok: false, error: 'audit_returned_empty' }); return; }
+      sendJson(res, 200, {
+        ok: true,
+        durationMs: ms,
+        overallScore: result.audit.overallScore,
+        grade: result.audit.grade,
+        auditDepth: result.audit.auditDepth,
+        deepIntegrations: result.audit.deepIntegrations
+          ? {
+              multiLlmMatrix: result.audit.deepIntegrations.multiLlmMatrix?.summary || null,
+              ahrefs: result.audit.deepIntegrations.ahrefs ? { dr: result.audit.deepIntegrations.ahrefs.domainRating, refdomains: result.audit.deepIntegrations.ahrefs.refdomains, organicKeywords: result.audit.deepIntegrations.ahrefs.organicKeywords } : null,
+              places: result.audit.deepIntegrations.places?.matched ? { rating: result.audit.deepIntegrations.places.details?.rating, reviews: result.audit.deepIntegrations.places.details?.reviewCount } : null
+            }
+          : null
+      });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'deep_audit_failed' });
+    }
+    return;
+  }
+  // POST /api/admin/lead-pipeline/leads/<domain>/tags — add a tag
+  const leadTagAddMatch = reqUrl.pathname.match(/^\/api\/admin\/lead-pipeline\/leads\/([^/]+)\/tags$/);
+  if (leadTagAddMatch && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const body = await readJsonRequestBody(req);
+      const result = await leadPipeline.addTag(decodeURIComponent(leadTagAddMatch[1]), { tag: body.tag, by: body.by || 'admin' });
+      sendJson(res, 200, { ok: true, ...result });
+    } catch (err) {
+      sendJson(res, 400, { ok: false, error: err.message || 'add_tag_failed' });
+    }
+    return;
+  }
+  // DELETE /api/admin/lead-pipeline/leads/<domain>/tags/<tag> — remove a tag
+  const leadTagDelMatch = reqUrl.pathname.match(/^\/api\/admin\/lead-pipeline\/leads\/([^/]+)\/tags\/([^/]+)$/);
+  if (leadTagDelMatch && req.method === 'DELETE') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const result = await leadPipeline.removeTag(decodeURIComponent(leadTagDelMatch[1]), { tag: decodeURIComponent(leadTagDelMatch[2]) });
+      sendJson(res, 200, { ok: true, ...result });
+    } catch (err) {
+      sendJson(res, 400, { ok: false, error: err.message || 'remove_tag_failed' });
+    }
+    return;
+  }
+
+  // POST /api/admin/lead-pipeline/leads/<domain>/maintenance — toggle Maintenance customer flag
+  // Body: { active: true|false, plan?: 'maintenance_79' }. Triggers onboarding email on activation.
+  const leadMaintenanceMatch = reqUrl.pathname.match(/^\/api\/admin\/lead-pipeline\/leads\/([^/]+)\/maintenance$/);
+  if (leadMaintenanceMatch && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const body = await readJsonRequestBody(req);
+      const domain = decodeURIComponent(leadMaintenanceMatch[1]);
+      const active = body.active === true;
+      const result = await leadPipeline.setMaintenanceCustomer(domain, {
+        active,
+        by: body.by || 'admin',
+        plan: body.plan || 'maintenance_79'
+      });
+      // Email side-effects: onboarding on activation, cancellation ack on deactivation
+      try {
+        const record = await auditArchive.getLatestAudit(domain);
+        const recipient = body.recipient || record?.contactInfo?.emails?.[0];
+        if (recipient) {
+          const businessName = record?.sourceMeta?.businessName || domain;
+          if (active) {
+            const token = qualifierService.signQualifierToken({ domain, ttlMs: 365 * 24 * 60 * 60 * 1000 });
+            const base = process.env.GEONEO_PUBLIC_BASE_URL || `http://127.0.0.1:${process.env.PORT || 4173}`;
+            const dashboardUrl = `${base}/customer-dashboard.html?token=${encodeURIComponent(token)}`;
+            await emailOutbox.enqueueOutboxEntry({
+              idempotencyKey: `maint-onboard:${domain}:${new Date().toISOString().slice(0, 10)}`,
+              type: 'maintenance_onboarding',
+              to: recipient,
+              subject: `Welcome to GeoNeo Maintenance for ${businessName}`,
+              html: renderMaintenanceOnboardingEmail({ businessName, domain, dashboardUrl }),
+              domain, reason: 'maintenance_onboarding'
+            });
+          } else {
+            await emailOutbox.enqueueOutboxEntry({
+              idempotencyKey: `maint-cancel:${domain}:${new Date().toISOString().slice(0, 10)}`,
+              type: 'maintenance_cancellation',
+              to: recipient,
+              subject: `Maintenance ended for ${businessName}`,
+              html: customerEmails.renderMaintenanceCancellationEmail({ businessName, domain }),
+              domain, reason: 'maintenance_cancellation'
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('[maintenance] email queue failed:', err && err.message);
+      }
+      sendJson(res, 200, { ok: true, ...result });
+    } catch (err) {
+      sendJson(res, 400, { ok: false, error: err.message || 'maintenance_set_failed' });
+    }
+    return;
+  }
+  // GET /api/admin/lead-pipeline/maintenance-customers — list active subscribers
+  if (reqUrl.pathname === '/api/admin/lead-pipeline/maintenance-customers' && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const customers = await leadPipeline.listMaintenanceCustomers();
+      sendJson(res, 200, { ok: true, customers, totalCount: customers.length });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'list_maintenance_failed' });
+    }
+    return;
+  }
+  // POST /api/admin/maintenance-brief/tick — manually trigger weekly brief tick
+  if (reqUrl.pathname === '/api/admin/maintenance-brief/tick' && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const mbs = require('./services/maintenanceBriefScheduler');
+      const result = await mbs.tickMaintenanceBriefs();
+      sendJson(res, 200, { ok: true, ...result });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'brief_tick_failed' });
+    }
+    return;
+  }
+  // POST /api/admin/maintenance-brief/send — send brief for one specific domain
+  if (reqUrl.pathname === '/api/admin/maintenance-brief/send' && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const body = await readJsonRequestBody(req);
+      const domain = String(body.domain || '').trim().toLowerCase();
+      if (!domain) { sendJson(res, 400, { ok: false, error: 'domain required' }); return; }
+      const customers = await leadPipeline.listMaintenanceCustomers();
+      const customer = customers.find((c) => c.domain === domain);
+      if (!customer) { sendJson(res, 404, { ok: false, error: 'not_a_maintenance_customer' }); return; }
+      const mbs = require('./services/maintenanceBriefScheduler');
+      const result = await mbs.buildAndQueueBriefFor(customer);
+      sendJson(res, 200, { ok: result.ok, ...result });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'brief_send_failed' });
+    }
+    return;
+  }
+
+  // POST /api/admin/lead-pipeline/leads/<domain>/outcome — log a closer call disposition
+  const leadOutcomeMatch = reqUrl.pathname.match(/^\/api\/admin\/lead-pipeline\/leads\/([^/]+)\/outcome$/);
+  if (leadOutcomeMatch && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const body = await readJsonRequestBody(req);
+      const entry = await leadPipeline.recordOutcome(decodeURIComponent(leadOutcomeMatch[1]), {
+        outcome: body.outcome,
+        note: body.note || null,
+        by: body.by || 'admin'
+      });
+      sendJson(res, 200, { ok: true, outcome: entry });
+    } catch (err) {
+      sendJson(res, 400, { ok: false, error: err.message || 'record_outcome_failed' });
+    }
+    return;
+  }
+  // GET /api/admin/lead-pipeline/outcomes — outcome catalog (for UI dropdown)
+  if (reqUrl.pathname === '/api/admin/lead-pipeline/outcomes' && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    sendJson(res, 200, { ok: true, outcomes: leadPipeline.OUTCOMES });
+    return;
+  }
+  // POST /api/admin/lead-pipeline/bulk/status — change stage for many domains
+  if (reqUrl.pathname === '/api/admin/lead-pipeline/bulk/status' && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const body = await readJsonRequestBody(req);
+      const domains = Array.isArray(body.domains) ? body.domains : [];
+      const stage = String(body.stage || '').trim();
+      const setBy = body.setBy || 'admin_bulk';
+      const note = body.note || null;
+      const updated = []; const failed = [];
+      for (const d of domains) {
+        try {
+          await leadPipeline.setStage(d, stage, { setBy, note });
+          updated.push(d);
+        } catch (err) {
+          failed.push({ domain: d, error: err.message });
+        }
+      }
+      sendJson(res, 200, { ok: true, updatedCount: updated.length, failedCount: failed.length, failed });
+    } catch (err) {
+      sendJson(res, 400, { ok: false, error: err.message || 'bulk_status_failed' });
+    }
+    return;
+  }
+  // POST /api/admin/lead-pipeline/bulk/suppress — suppression list management
+  if (reqUrl.pathname === '/api/admin/lead-pipeline/bulk/suppress' && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const body = await readJsonRequestBody(req);
+      const domains = Array.isArray(body.domains) ? body.domains : [];
+      const reason = body.reason || 'manual_admin';
+      let suppressed = 0;
+      for (const d of domains) {
+        try {
+          await auditArchive.recordSuppression(d, reason);
+          suppressed++;
+        } catch {}
+      }
+      sendJson(res, 200, { ok: true, suppressedCount: suppressed });
+    } catch (err) {
+      sendJson(res, 400, { ok: false, error: err.message || 'bulk_suppress_failed' });
+    }
+    return;
+  }
+  if (reqUrl.pathname === '/api/admin/lead-pipeline/export.csv' && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const filter = {};
+      ['stage', 'bucket', 'persona', 'state', 'industry', 'tier', 'search', 'tag'].forEach((k) => {
+        const v = reqUrl.searchParams.get(k);
+        if (v) filter[k] = v;
+      });
+      ['scoreMax', 'scoreMin'].forEach((k) => {
+        const v = reqUrl.searchParams.get(k);
+        if (v) filter[k] = Number(v);
+      });
+      ['hasEmail', 'hasPhone', 'hasQualified'].forEach((k) => {
+        const v = reqUrl.searchParams.get(k);
+        if (v) filter[k] = v === 'true';
+      });
+      filter.limit = 2000;
+      const { leads } = await leadPipeline.listLeads(filter);
+      const csv = leadPipeline.leadsToCsv(leads);
+      const ts = new Date().toISOString().slice(0, 10);
+      res.writeHead(200, {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="geoneo-leads-${ts}.csv"`
+      });
+      res.end(csv);
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'csv_export_failed' });
+    }
+    return;
+  }
+
+  // ===== Audit archive (admin browse + stats) =====
+  if (reqUrl.pathname === '/api/admin/audit-archive/query' && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const filter = {};
+      ['city', 'state', 'industry'].forEach((k) => { const v = reqUrl.searchParams.get(k); if (v) filter[k] = v; });
+      ['scoreMax', 'scoreMin', 'hasOpportunityAtLeast', 'limit'].forEach((k) => { const v = reqUrl.searchParams.get(k); if (v) filter[k] = Number(v); });
+      ['hasEmail', 'hasPhone', 'notSuppressed', 'notQualified', 'neverEmailed'].forEach((k) => { const v = reqUrl.searchParams.get(k); if (v) filter[k] = v === 'true'; });
+      const result = await auditArchive.queryArchive(filter);
+      sendJson(res, 200, { ok: true, ...result });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'archive_query_failed' });
+    }
+    return;
+  }
+  if (reqUrl.pathname === '/api/admin/audit-archive/stats' && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const filter = {};
+      ['city', 'state', 'industry'].forEach((k) => { const v = reqUrl.searchParams.get(k); if (v) filter[k] = v; });
+      const stats = await auditArchive.aggregateStats(filter);
+      sendJson(res, 200, { ok: true, stats });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'archive_stats_failed' });
+    }
+    return;
+  }
+
+  // ===== Friendly markets (curated AI-call-friendly metro list) =====
+  if (reqUrl.pathname === '/api/admin/friendly-markets' && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const friendlyMarkets = require('./services/friendlyMarkets');
+      const metrosPerState = Math.max(1, Math.min(5, Number(reqUrl.searchParams.get('metrosPerState')) || 1));
+      const includeAll = reqUrl.searchParams.get('includeAllMetros') === 'true';
+      const markets = friendlyMarkets.describeFriendlyMarkets({ metrosPerState, includeAllMetros: includeAll });
+      sendJson(res, 200, { ok: true, markets, count: markets.length });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'friendly_markets_failed' });
+    }
+    return;
+  }
+
+  // ===== Scheduled sweep jobs (Prospect Hunter @ scale) =====
+  if (reqUrl.pathname === '/api/admin/scheduler/jobs' && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const jobs = await sweepScheduler.listJobs();
+      sendJson(res, 200, { ok: true, jobs });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'list_jobs_failed' });
+    }
+    return;
+  }
+  if (reqUrl.pathname === '/api/admin/scheduler/jobs' && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const body = await readJsonRequestBody(req);
+      const job = await sweepScheduler.createJob({
+        kind: body.kind === 'cron' ? 'cron' : 'now',
+        cities: body.cities,        // multi-city: [{city, state}, ...]
+        city: body.city,            // backwards-compat single city
+        state: body.state,
+        verticals: body.verticals,
+        worstN: body.worstN,
+        quantityPerVertical: body.quantityPerVertical,
+        cronSchedule: body.cronSchedule,
+        autoBlastAfter: body.autoBlastAfter,
+        label: body.label
+      });
+      sendJson(res, 201, { ok: true, job });
+    } catch (err) {
+      sendJson(res, 400, { ok: false, error: err.message || 'create_job_failed' });
+    }
+    return;
+  }
+  // Match /api/admin/scheduler/jobs/<id> (GET = full state, no separate endpoint)
+  const sweepDetailMatch = reqUrl.pathname.match(/^\/api\/admin\/scheduler\/jobs\/([^/]+)$/);
+  if (sweepDetailMatch && req.method === 'GET') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const job = await sweepScheduler.getJob(sweepDetailMatch[1]);
+      if (!job) { sendJson(res, 404, { ok: false, error: 'not_found' }); return; }
+      sendJson(res, 200, { ok: true, job });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'get_job_failed' });
+    }
+    return;
+  }
+  const sweepCancelMatch = reqUrl.pathname.match(/^\/api\/admin\/scheduler\/jobs\/([^/]+)\/cancel$/);
+  if (sweepCancelMatch && req.method === 'POST') {
+    if (!authorizeInternalApi(req)) { sendApiForbidden(res); return; }
+    try {
+      const job = await sweepScheduler.cancelJob(sweepCancelMatch[1]);
+      if (!job) { sendJson(res, 404, { ok: false, error: 'not_found' }); return; }
+      sendJson(res, 200, { ok: true, job: { id: job.id, status: job.status } });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message || 'cancel_failed' });
+    }
     return;
   }
 
@@ -8109,6 +10407,11 @@ async function requestHandler(req, res) {
     }
     try {
       const body = await readJsonRequestBody(req);
+      const required = ['businessName', 'city', 'state', 'service', 'industry'];
+      if (required.some((k) => !body[k] || String(body[k]).trim() === '')) {
+        sendJson(res, 400, { error: 'Missing required fields' });
+        return;
+      }
       const page = generateLocationServicePage({
         businessName: body.businessName,
         city: body.city,
@@ -8121,7 +10424,8 @@ async function requestHandler(req, res) {
       });
       sendJson(res, 200, { ok: true, page });
     } catch (e) {
-      sendJson(res, 500, { error: e.message || 'Page generation failed' });
+      console.error('[generate-page] unexpected error', e);
+      sendJson(res, 500, { error: 'Page generation failed' });
     }
     return;
   }
@@ -8140,15 +10444,126 @@ function ensureScheduler() {
   }
 }
 
+/**
+ * Wire the sweep scheduler to in-process discover + audit functions so it
+ * doesn't have to HTTP-call back to ourselves. discoverFn matches the same
+ * fast path used by /api/admin/lead-gen/discover (2 SerpAPI queries, single
+ * homepage enrichment). auditFn matches /api/audit-deep with admin tier.
+ */
+async function sweepSchedulerDiscoverFn({ industry, city, state, quantity }) {
+  const queryCap = quantity <= 25 ? 2 : (quantity <= 75 ? 4 : 6);
+  const marketModel = await runMarketOnlyAudit({
+    industry, city, state, zip: ''
+  }, { maxQueries: queryCap });
+  let discovered = extractLeadGenCandidates(marketModel, {
+    quantity, industry, city, state
+  });
+  if (!discovered.length) {
+    discovered = fallbackLeadGenCandidates({ industry, city, state, quantity });
+  }
+  let candidates = discovered;
+  try {
+    const ac = new AbortController();
+    const to = setTimeout(() => ac.abort(), 20000);
+    try {
+      candidates = await enrichLeadGenCandidatesContacts(discovered, { signal: ac.signal });
+    } finally {
+      clearTimeout(to);
+    }
+  } catch {
+    candidates = discovered;
+  }
+  return { candidates };
+}
+
+async function sweepSchedulerAuditFn({ url, industry, city, state, batchMode = true, skipExternalApis = false, auditDepth = 'cheap' }) {
+  // skipRender follows batchMode — sweep batches skip the 3-5s Puppeteer
+  // render pass to keep throughput at 2,500/night. Single audits + customer
+  // re-audits get the full SPA render so JS-rendered sites get accurate scores.
+  // auditDepth defaults to 'cheap' — cold sweeps stay $0.
+  // Callers (re-audit scheduler for maintenance customers, on-reply enqueue,
+  // admin "deep audit" button) override to 'standard' or 'deep'.
+  const payload = await prepareDeepAuditInputs(url, { industry, city, state, businessName: '', skipRender: batchMode });
+  if (!payload) return null;
+  const target = safeUrl(payload.finalUrl);
+  // Sweep mode = batchMode by default (skips slow optional probes to fit
+  // the 2,500/night throughput target). Override per-call if needed.
+  // skipExternalApis disables PageSpeed + LanguageTool (rate-limited) for
+  // pure structural-audit benchmarks.
+  const audit = await runDeepAudit({ ...payload, batchMode, skipExternalApis, auditDepth });
+  // Archive every sweep audit so the email-blast pipeline can pick it up.
+  // Pass through enrichment side-data when present so the archive record
+  // is fully populated for downstream filtering.
+  auditArchive.saveAudit({
+    domain: target ? target.host : '',
+    url: payload.finalUrl,
+    source: 'sweep',
+    industry, city, state,
+    audit
+  }).catch((err) => console.warn('[archive] sweep save failed:', err && err.message));
+  return { audit };
+}
+
 if (require.main === module) {
   server.listen(PORT, HOST, () => {
     console.log(`GeoNeo AI server running at http://${HOST}:${PORT}`);
     ensureScheduler();
+    // Sweep worker runs by default. For multi-instance deployments where
+    // only ONE instance should own the cron, set RUN_CRON_WORKER=0 on the
+    // others. Local dev / single-instance: just works.
+    if (process.env.RUN_CRON_WORKER !== '0') {
+      sweepScheduler.bootScheduler({
+        runAuditFn: sweepSchedulerAuditFn,
+        discoverFn: sweepSchedulerDiscoverFn,
+        getVerticalsFn: () => loadProspectVerticals(ROOT),
+        emailBlastFn: (opts) => emailBlast.sendTargeted(opts)
+      }).catch((err) => console.warn('[scheduler] boot failed:', err.message));
+      console.log('Sweep scheduler initialized');
+    } else {
+      console.log('Sweep scheduler explicitly disabled (RUN_CRON_WORKER=0)');
+    }
+    // Outbox sender — drains email queue every 60s (configurable). Same
+    // RUN_CRON_WORKER guard so multi-instance deployments only run on one node.
+    if (process.env.RUN_CRON_WORKER !== '0') {
+      try { outboxSender.startSender(); }
+      catch (err) { console.warn('[outbox-sender] boot failed:', err && err.message); }
+      // Drip campaign sequencer — fires day-3/7/14 follow-ups for prospects
+      // who haven't replied or qualified after the initial blast.
+      try { dripCampaign.startSequencer(); }
+      catch (err) { console.warn('[drip] boot failed:', err && err.message); }
+      // Re-audit scheduler — daily 4am cron walks monitored domains, re-runs
+      // audit for any older than 30 days, alerts on score moves > 10pt.
+      try {
+        reAuditScheduler.startReAuditScheduler({
+          runDeepAuditFn: sweepSchedulerAuditFn // reuses sweep audit pipeline
+        });
+      } catch (err) { console.warn('[re-audit] boot failed:', err && err.message); }
+      // Nightly data backup — tarballs data/ to data/backups/, keeps last 14.
+      try { backupScheduler.startBackupScheduler(); }
+      catch (err) { console.warn('[backup] boot failed:', err && err.message); }
+      // Industry baselines — rebuild cohort percentiles from archive at boot
+      // (cheap; one disk pass) and keep fresh on a 24h interval. Monthly
+      // cron recomputes from scratch on the 1st of each month.
+      try {
+        const ib = require('./services/industryBaselines');
+        ib.rebuildIfStale().catch((err) => console.warn('[baselines] boot rebuild failed:', err && err.message));
+        ib.startBaselineScheduler();
+      } catch (err) { console.warn('[baselines] boot failed:', err && err.message); }
+      // Maintenance weekly brief — Monday 8am ET cron picks every active
+      // $79/mo customer + queues a personalized weekly brief.
+      try {
+        const mbs = require('./services/maintenanceBriefScheduler');
+        mbs.startMaintenanceBriefScheduler({ runDeepAuditFn: sweepSchedulerAuditFn });
+      } catch (err) { console.warn('[maintenance-brief] boot failed:', err && err.message); }
+    }
   });
 }
 
 module.exports = Object.assign(requestHandler, {
   requestHandler,
+  // Real sweep audit fn — used by benchmark + cron + admin "rerun" button
+  sweepSchedulerAuditFn,
+  prepareDeepAuditInputs,
   generateLocalBuyerQueries,
   unwrapSearchRedirectUrl,
   isJunkMarketResult,

@@ -2,4 +2,8 @@
 .env
 node_modules
 data/*.json
+# Audit snapshots synced from Docker / server (hash-named JSON); do not commit.
+data/audit-archive/
+data/*.ndjson
+data/grammar-cache/
 !data/.gitkeep

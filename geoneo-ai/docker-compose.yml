@@ -5,11 +5,13 @@ services:
     container_name: geoneo-postgres
     restart: unless-stopped
     environment:
+      # WARNING: Hardcoded credentials below are for local development only.
+      # In production use Docker secrets, environment-specific config, or a vault.
       POSTGRES_USER: geoneo
       POSTGRES_PASSWORD: geoneo_local
       POSTGRES_DB: geoneo
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - geoneo_pg_data:/var/lib/postgresql/data
 

@@ -1,0 +1,26 @@
+{
+  "configured": true,
+  "target": "jaykeyservice.com",
+  "fetchedAt": "2026-05-13T22:44:18.675Z",
+  "domainRating": 1.8,
+  "urlRating": null,
+  "backlinks": 167,
+  "refdomains": 102,
+  "organicTraffic": 41,
+  "organicKeywords": 21,
+  "paidKeywords": 0,
+  "paidTraffic": 0,
+  "paidCostMonthlyUsd": null,
+  "paidPagesCount": 0,
+  "investingInAds": false,
+  "topPaidPages": [],
+  "keywordMetrics": {
+    "organicCount": 21,
+    "paidCount": 0,
+    "trafficValue": null
+  },
+  "rawAvailable": true,
+  "errors": [],
+  "partial": false,
+  "fromCache": false
+}

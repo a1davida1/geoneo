@@ -41,6 +41,54 @@
     .pillar-card.pass { border-left: 4px solid #16a34a; }
     .pillar-card.warn { border-left: 4px solid #f59e0b; }
     .pillar-card.fail { border-left: 4px solid #dc2626; }
+    /* Industry baseline strip */
+    .baseline-strip {
+      background: linear-gradient(90deg, rgba(56,189,248,0.06), rgba(74,222,128,0.04));
+      border: 1px solid #cbd5e1; border-radius: 12px;
+      padding: 1rem 1.25rem; margin: 1rem 0;
+    }
+    .baseline-strip .bs-head { font-size: 0.78rem; color: #475569; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; margin-bottom: 8px; }
+    .baseline-strip .bs-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: baseline; }
+    .baseline-strip .bs-stat { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 12px; }
+    .baseline-strip .bs-stat .k { font-size: 0.7rem; color: #64748b; text-transform: uppercase; }
+    .baseline-strip .bs-stat .v { font-size: 1.3rem; font-weight: 800; line-height: 1; }
+    .baseline-strip .bs-stat.you .v { color: #0369a1; }
+    .baseline-strip .bs-stat.median .v { color: #475569; }
+    .baseline-strip .bs-stat.top .v { color: #16a34a; }
+    .baseline-strip .bs-percentile { font-size: 0.85rem; color: #475569; margin-top: 8px; }
+    .baseline-strip .bs-percentile strong { color: #0f172a; }
+    /* Competitor section */
+    .competitor-section {
+      background: white; border: 1px solid #e2e8f0; border-radius: 12px;
+      padding: 1.25rem 1.5rem; margin: 1rem 0;
+    }
+    .competitor-section h3 { margin: 0 0 0.75rem; font-size: 1.05rem; }
+    .competitor-section .comp-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+    .competitor-section .comp-card { background: #f8fafc; border-radius: 8px; padding: 10px 12px; border-left: 3px solid #94a3b8; }
+    .competitor-section .comp-card.you { border-left-color: #0369a1; background: #eff6ff; }
+    .competitor-section .comp-card.beats { border-left-color: #dc2626; }
+    .competitor-section .comp-card .domain { font-weight: 700; font-size: 0.92rem; word-break: break-word; }
+    .competitor-section .comp-card .score { font-size: 1.5rem; font-weight: 800; margin-top: 4px; }
+    .competitor-section .comp-card .meta { font-size: 0.72rem; color: #64748b; margin-top: 2px; }
+    /* Tier pricing CTA */
+    .tier-cta {
+      background: white; border: 1px solid #e2e8f0; border-radius: 12px;
+      padding: 1.5rem; margin: 1.5rem 0;
+    }
+    .tier-cta h2 { margin: 0 0 0.25rem; font-size: 1.4rem; }
+    .tier-cta .subtitle { color: #475569; margin: 0 0 1rem; }
+    .tier-cta .tier-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 1rem 0; }
+    .tier-cta .tier-card {
+      background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;
+      padding: 14px; text-align: left; position: relative;
+    }
+    .tier-cta .tier-card.recommended { background: #0369a1; color: white; border-color: #0369a1; transform: scale(1.02); }
+    .tier-cta .tier-card.recommended .tier-name, .tier-cta .tier-card.recommended .tier-feature { color: white; }
+    .tier-cta .tier-card .tier-name { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; font-weight: 700; }
+    .tier-cta .tier-card .tier-price { font-size: 1.6rem; font-weight: 800; margin: 4px 0; }
+    .tier-cta .tier-card .tier-period { font-size: 0.78rem; opacity: 0.7; font-weight: 400; }
+    .tier-cta .tier-card .tier-feature { font-size: 0.78rem; color: #475569; margin: 4px 0; line-height: 1.4; }
+    .tier-cta .tier-card .badge { position: absolute; top: -8px; right: 8px; background: #16a34a; color: white; font-size: 0.65rem; padding: 2px 8px; border-radius: 999px; font-weight: 700; text-transform: uppercase; }
 
     .dollar-banner {
       background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
@@ -134,12 +182,110 @@
     .makeover-frame img, .makeover-frame svg { width: 100%; height: 100%; display: block; object-fit: cover; }
     .makeover-frame .annotation-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
 
+    /* ==== Prospect-page spec sections ==== */
+    .prospect-section {
+      background: white; border: 1px solid #e2e8f0; border-radius: 14px;
+      padding: 1.5rem; margin: 1rem 0;
+    }
+    .prospect-section h2 { margin: 0 0 0.5rem; font-size: 1.25rem; color: #0f172a; }
+    .prospect-section .ps-sub { color: #64748b; font-size: 0.88rem; margin: 0 0 1rem; }
+    .prospect-section .ps-empty { color: #94a3b8; font-style: italic; font-size: 0.88rem; }
+
+    /* Local rank */
+    .local-rank-stat { display: inline-block; margin-right: 1.25rem; }
+    .local-rank-stat .label { font-size: 0.72rem; text-transform: uppercase; color: #64748b; letter-spacing: 0.06em; font-weight: 700; }
+    .local-rank-stat .value { font-size: 1.7rem; font-weight: 800; color: #0f172a; line-height: 1; margin-top: 4px; }
+    .local-rank-stat.bad .value { color: #dc2626; }
+    .local-rank-stat.warn .value { color: #d97706; }
+    .local-rank-stat.good .value { color: #16a34a; }
+
+    /* Competitor table */
+    .comp-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+    .comp-table th, .comp-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #e2e8f0; }
+    .comp-table th { font-size: 0.72rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; }
+    .comp-table td.num { font-weight: 700; }
+    .comp-table tr.you td { background: #eff6ff; }
+    .comp-table tr.beats td { background: #fef2f2; }
+
+    /* Losing-to narrative */
+    .losing-narrative {
+      background: linear-gradient(135deg, #fff7ed 0%, #fef3c7 100%);
+      border-left: 4px solid #f97316; padding: 1.25rem 1.5rem;
+      border-radius: 10px; font-size: 1.05rem; color: #7c2d12;
+      line-height: 1.5;
+    }
+    .losing-narrative strong { color: #9a3412; }
+
+    /* GBP */
+    .gbp-card { display: grid; grid-template-columns: 1fr; gap: 0.75rem; }
+    .gbp-card .gbp-stats { display: flex; flex-wrap: wrap; gap: 1rem; padding: 0.75rem 1rem; background: #f8fafc; border-radius: 8px; }
+    .gbp-card .gbp-stat { display: flex; flex-direction: column; }
+    .gbp-card .gbp-stat .k { font-size: 0.72rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; }
+    .gbp-card .gbp-stat .v { font-size: 1.15rem; font-weight: 700; color: #0f172a; }
+    .gbp-card .gbp-issue { background: #fef2f2; border-left: 3px solid #dc2626; padding: 8px 12px; border-radius: 6px; font-size: 0.92rem; color: #7f1d1d; }
+
+    /* Issue list */
+    .issue-list { display: grid; gap: 8px; }
+    .issue-row {
+      display: flex; gap: 1rem; padding: 10px 14px; background: #f8fafc;
+      border-left: 4px solid #94a3b8; border-radius: 6px; align-items: center;
+    }
+    .issue-row.high { border-left-color: #dc2626; background: #fef2f2; }
+    .issue-row.medium { border-left-color: #d97706; background: #fffbeb; }
+    .issue-row .severity { font-size: 0.7rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; min-width: 60px; text-align: center; }
+    .issue-row .severity.high { background: #fee2e2; color: #991b1b; }
+    .issue-row .severity.medium { background: #fef3c7; color: #92400e; }
+    .issue-row .severity.low { background: #f1f5f9; color: #475569; }
+    .issue-row .body { flex: 1; }
+    .issue-row .body .title { font-weight: 600; font-size: 0.95rem; color: #0f172a; }
+    .issue-row .body .desc { font-size: 0.82rem; color: #64748b; margin-top: 2px; line-height: 1.4; }
+    .issue-row .impact { font-size: 0.85rem; color: #b45309; font-weight: 700; white-space: nowrap; }
+
+    /* Review gap */
+    .review-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    @media (max-width: 540px) { .review-compare { grid-template-columns: 1fr; } }
+    .review-card { padding: 1rem; border-radius: 10px; background: #f8fafc; }
+    .review-card.you { background: #eff6ff; border-left: 4px solid #0369a1; }
+    .review-card.them { background: #fef2f2; border-left: 4px solid #dc2626; }
+    .review-card .who { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; font-weight: 700; }
+    .review-card .stars { font-size: 1.4rem; font-weight: 800; margin: 4px 0; color: #0f172a; }
+    .review-card .count { font-size: 0.88rem; color: #475569; }
+
+    /* Opportunity hero */
+    .opportunity-hero {
+      background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+      color: white; padding: 1.5rem; border-radius: 14px; text-align: center;
+    }
+    .opportunity-hero .label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.9; }
+    .opportunity-hero .num { font-size: 2.5rem; font-weight: 800; margin: 0.4rem 0; }
+    .opportunity-hero .annual { font-size: 0.95rem; opacity: 0.9; }
+
+    /* Primary CTA */
+    .primary-cta {
+      background: linear-gradient(135deg, #0c4a6e 0%, #0e7490 100%);
+      color: white; padding: 2rem; border-radius: 16px; margin: 2rem 0;
+      text-align: center;
+    }
+    .primary-cta h2 { margin: 0 0 0.5rem; font-size: 1.5rem; }
+    .primary-cta p { margin: 0 0 1.25rem; font-size: 1rem; opacity: 0.95; }
+    .primary-cta .cta-btn {
+      display: inline-block; background: white; color: #0c4a6e;
+      padding: 14px 32px; border-radius: 999px; font-weight: 700; font-size: 1.05rem;
+      text-decoration: none; transition: transform 0.15s, box-shadow 0.15s;
+      cursor: pointer; border: none;
+    }
+    .primary-cta .cta-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.2); }
+    .primary-cta .cta-note { font-size: 0.78rem; opacity: 0.75; margin-top: 0.75rem; }
+
     @media print {
       body { background: white; }
       .upgrade-cta { background: white !important; color: #0369a1; border: 2px solid #0369a1; }
       .audit-hero { background: white !important; color: #0f172a; border: 2px solid #0f172a; }
       .upgrade-cta .btn-primary { display: none; }
-      details { open: true; }
+      /* Note: expanding <details> for print is handled in JS (beforeprint / matchMedia).
+         CSS cannot force the open state — `open` is an HTML attribute, not a style property. */
+      details.section-detail, details.section-detail summary { display: block; }
+      details.section-detail summary { font-weight: 600; margin-bottom: 0.35rem; }
     }
   </style>
 </head>
@@ -191,13 +337,74 @@
         </div>
       </div>
 
-      <div class="pillar-grid" id="resPillars"></div>
+      <!-- 1. LOCAL RANK POSITION -->
+      <section class="prospect-section" id="psLocalRank">
+        <h2>📍 Your local rank position</h2>
+        <p class="ps-sub">Where you actually show up in local search for the queries that matter.</p>
+        <div id="psLocalRankBody"><div class="ps-empty">Loading…</div></div>
+      </section>
 
-      <div class="dollar-banner">
+      <!-- 2. TOP COMPETITORS -->
+      <section class="prospect-section" id="psCompetitors">
+        <h2>🏆 Top competitors in your area</h2>
+        <p class="ps-sub">Who's winning the local search battle right now.</p>
+        <div id="psCompetitorsBody"><div class="ps-empty">Loading…</div></div>
+      </section>
+
+      <!-- 3. LOSING TO X BECAUSE Y -->
+      <section class="prospect-section" id="psLosingNarrative" style="display:none;">
+        <h2>🎯 Why you're behind</h2>
+        <div id="psLosingBody"></div>
+      </section>
+
+      <!-- 4. GBP ISSUES -->
+      <section class="prospect-section" id="psGbp">
+        <h2>📌 Google Business Profile issues</h2>
+        <p class="ps-sub">Your free Google listing — the #1 driver of local map-pack rankings.</p>
+        <div id="psGbpBody"><div class="ps-empty">Loading…</div></div>
+      </section>
+
+      <!-- 5. WEBSITE TECHNICAL ISSUES -->
+      <section class="prospect-section" id="psWebsiteIssues">
+        <h2>🔧 Website technical issues</h2>
+        <p class="ps-sub">What's broken on your site, ranked by revenue impact.</p>
+        <div id="psWebsiteIssuesBody"><div class="ps-empty">Loading…</div></div>
+      </section>
+
+      <!-- 6. REVIEW / REPUTATION GAPS -->
+      <section class="prospect-section" id="psReviewGap">
+        <h2>⭐ Review & reputation gaps</h2>
+        <p class="ps-sub">How your customer trust signals stack up against the local competition.</p>
+        <div id="psReviewGapBody"><div class="ps-empty">Loading…</div></div>
+      </section>
+
+      <!-- 7. OPPORTUNITY SCORE -->
+      <section id="psOpportunity" style="margin: 1.5rem 0;">
+        <div class="opportunity-hero">
+          <div class="label">Estimated monthly opportunity</div>
+          <div class="num" id="psOppMonthly">$—</div>
+          <div class="annual" id="psOppAnnual"></div>
+        </div>
+      </section>
+
+      <!-- Existing baseline + pillar grid (kept for context, but secondary now) -->
+      <div class="pillar-grid" id="resPillars" style="display:none;"></div>
+      <div id="resBaseline" class="baseline-strip" style="display:none;"></div>
+      <div id="resCompetitors" class="competitor-section" style="display:none;"></div>
+
+      <div class="dollar-banner" style="display:none;">
         <div class="sub">You're missing approximately</div>
         <div class="num" id="resDollarMonthly">$--</div>
         <div class="sub">per month in unconverted local search demand</div>
         <div class="annual" id="resDollarAnnual"></div>
+      </div>
+
+      <!-- 8. PRIMARY CTA -->
+      <div class="primary-cta">
+        <h2>Want us to fix this?</h2>
+        <p>15-minute call. We walk through what's broken, what to fix first, and whether we're a fit. No high-pressure sales — if you're better off DIY-ing it, we'll tell you.</p>
+        <button type="button" class="cta-btn" id="primaryCallCta">📞 Get a call</button>
+        <div class="cta-note">Reply to the email or click → we'll call you back within 24 hrs.</div>
       </div>
 
       <div class="findings-section" id="makeoverSection" style="display:none;">
@@ -222,6 +429,45 @@
         <h2>Top 5 issues, ranked by dollar impact</h2>
         <div id="resFindings"></div>
       </div>
+
+      <!-- Interactive qualifier widget — only renders when ?qualify=1&token=... is in URL -->
+      <section id="qualifierWidget" hidden style="background:white;border:1px solid #0284c7;border-radius:16px;padding:1.75rem 2rem;margin:1.5rem 0;box-shadow:0 8px 24px rgba(2,132,199,0.12);">
+        <div id="qualifierIntro">
+          <p style="margin:0 0 0.4rem;font-size:0.78rem;color:#0369a1;text-transform:uppercase;letter-spacing:0.08em;font-weight:700;">60-second qualifier</p>
+          <h2 style="margin:0 0 0.5rem;font-size:1.4rem;">5 questions. We score honestly.</h2>
+          <p style="margin:0;color:#475569;font-size:0.95rem;line-height:1.5;">Tells you (and us) whether we're a useful match. No spam, no follow-up if you're already in good shape.</p>
+        </div>
+        <div id="qualifierBody" style="margin-top:1.25rem;"></div>
+        <div id="qualifierProgress" style="margin-top:0.75rem;display:flex;gap:4px;">
+          <span class="qstep" data-step="0"></span>
+          <span class="qstep" data-step="1"></span>
+          <span class="qstep" data-step="2"></span>
+          <span class="qstep" data-step="3"></span>
+          <span class="qstep" data-step="4"></span>
+        </div>
+        <p id="qualifierError" style="margin:0.75rem 0 0;color:#dc2626;font-size:0.85rem;display:none;"></p>
+      </section>
+      <style>
+        #qualifierWidget .qbtn { display:block; width:100%; text-align:left; padding:12px 14px; margin:6px 0; border:1px solid #cbd5e1; border-radius:10px; background:white; color:#0f172a; font:inherit; cursor:pointer; transition: all 0.15s; }
+        #qualifierWidget .qbtn:hover { border-color:#0284c7; background:#f0f9ff; }
+        #qualifierWidget .qbtn.selected { border-color:#0369a1; background:#dbeafe; font-weight:600; }
+        #qualifierWidget .qbtn-row { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+        #qualifierWidget .qbtn-row .qbtn { flex:1; min-width:120px; text-align:center; }
+        #qualifierWidget .qquestion { font-size:1.05rem; font-weight:600; margin:0 0 0.4rem; color:#0f172a; line-height:1.4; }
+        #qualifierWidget .qreaction { padding:10px 14px; border-radius:8px; margin:8px 0 0; font-size:0.88rem; line-height:1.5; }
+        #qualifierWidget .qreaction.good { background:#dcfce7; border-left:4px solid #16a34a; color:#14532d; }
+        #qualifierWidget .qreaction.warn { background:#fef3c7; border-left:4px solid #f59e0b; color:#78350f; }
+        #qualifierWidget .qreaction.flag { background:#fee2e2; border-left:4px solid #dc2626; color:#7f1d1d; }
+        #qualifierWidget .qreaction.neutral { background:#f1f5f9; border-left:4px solid #94a3b8; color:#475569; }
+        #qualifierProgress .qstep { flex:1; height:5px; background:#e2e8f0; border-radius:3px; }
+        #qualifierProgress .qstep.done { background:#0369a1; }
+        #qualifierProgress .qstep.current { background:#38bdf8; }
+        #qualifierResult { background:linear-gradient(135deg,#0c4a6e,#075985); color:white; padding:2rem; border-radius:14px; margin-top:1rem; }
+        #qualifierResult h3 { margin:0 0 0.5rem; font-size:1.5rem; }
+        #qualifierResult .bucket-tag { display:inline-block; background:rgba(255,255,255,0.2); padding:3px 10px; border-radius:999px; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; font-weight:700; margin-bottom:0.5rem; }
+        #qualifierResult .qcta { display:inline-block; background:white; color:#0369a1; padding:11px 22px; border-radius:8px; font-weight:700; text-decoration:none; margin-top:1rem; }
+        #qualifierResult .qcta-secondary { display:inline-block; color:white; padding:11px 16px; text-decoration:underline; margin-top:1rem; margin-left:8px; opacity:0.85; }
+      </style>
 
       <div class="upgrade-cta" id="resUpgradeCta">
         <h2>Get the implementation plan: $199 Fix Plan</h2>
@@ -250,6 +496,42 @@
         <div id="resGeoBody"></div>
       </details>
 
+      <details class="section-detail">
+        <summary>NAP (Name / Address / Phone) consistency</summary>
+        <div class="meta" id="resNapMeta"></div>
+        <div id="resNapBody"></div>
+      </details>
+
+      <details class="section-detail">
+        <summary>Image audit (alt text, format, lazy-load, CLS)</summary>
+        <div class="meta" id="resImageMeta"></div>
+        <div id="resImageBody"></div>
+      </details>
+
+      <details class="section-detail">
+        <summary>Page performance + Core Web Vitals</summary>
+        <div class="meta" id="resPerformanceMeta"></div>
+        <div id="resPerformanceBody"></div>
+      </details>
+
+      <details class="section-detail">
+        <summary>Content quality (grammar, clarity, typos)</summary>
+        <div class="meta" id="resContentMeta"></div>
+        <div id="resContentBody"></div>
+      </details>
+
+      <details class="section-detail">
+        <summary>Sitemap.xml status</summary>
+        <div class="meta" id="resSitemapMeta"></div>
+        <div id="resSitemapBody"></div>
+      </details>
+
+      <details class="section-detail">
+        <summary>All findings (full list)</summary>
+        <div class="meta" id="resAllMeta"></div>
+        <div id="resAllBody"></div>
+      </details>
+
       <p class="footer-note">
         Audit produced deterministically. No LLM-generated copy in any finding. The dollar estimates use
         published industry CPL benchmarks × CTR position curves × your real audit data. Every number is
@@ -266,6 +548,182 @@
     function $(id) { return document.getElementById(id); }
     function pillarStatus(score) { return score >= 75 ? 'pass' : score >= 50 ? 'warn' : 'fail'; }
 
+    /**
+     * Render the 8 spec sections from a prospect-page-data response.
+     * `prospect` contains the URL params (used as fallback when payload is partial).
+     */
+    function renderProspectSections(payload, prospect) {
+      const audit = payload.audit;
+
+      // 1. Local rank
+      const lr = payload.localRank || {};
+      const lrBody = $('psLocalRankBody');
+      if (lr.provided && lr.totalQueriesTested) {
+        const apt = lr.avgPosition || 99;
+        const aptClass = apt <= 3 ? 'good' : apt <= 10 ? 'warn' : 'bad';
+        const visibleQ = lr.totalQueriesTested - (lr.missingFromQueries || 0);
+        lrBody.innerHTML = `
+          <div class="local-rank-stat ${aptClass}">
+            <div class="label">Avg position</div>
+            <div class="value">#${apt > 50 ? '50+' : apt}</div>
+          </div>
+          <div class="local-rank-stat ${visibleQ > lr.totalQueriesTested * 0.6 ? 'good' : visibleQ > 0 ? 'warn' : 'bad'}">
+            <div class="label">Queries you appear in</div>
+            <div class="value">${visibleQ}/${lr.totalQueriesTested}</div>
+          </div>
+          <div class="local-rank-stat ${(lr.missingFromQueries || 0) === 0 ? 'good' : 'bad'}">
+            <div class="label">Queries you're invisible for</div>
+            <div class="value">${lr.missingFromQueries || 0}</div>
+          </div>
+          <p style="margin-top:1rem;color:#475569;font-size:0.9rem;">
+            ${apt <= 3 ? 'You\'re ranking well — but the top spot has a 33% click share. Anything below #3 is leaking visits.'
+              : apt <= 10 ? 'You\'re on the first page but below the fold. Most clicks go to positions 1-3.'
+              : 'You\'re below page 1 — invisible for most local searches. This is the biggest single thing to fix.'}
+          </p>`;
+      } else {
+        lrBody.innerHTML = '<p class="ps-empty">' + escapeHtml(lr.message || 'Local rank data unavailable.') + '</p>';
+      }
+
+      // 2. Top competitors
+      const compBody = $('psCompetitorsBody');
+      const competitors = payload.competitors || [];
+      if (competitors.length) {
+        compBody.innerHTML = `
+          <table class="comp-table">
+            <thead><tr>
+              <th>Competitor</th><th>Audit</th><th>Reviews</th><th>Rating</th><th>DR</th><th>Traffic</th>
+            </tr></thead>
+            <tbody>
+              <tr class="you">
+                <td><strong>You</strong> · ${escapeHtml(payload.businessName || '')}</td>
+                <td class="num">${audit?.overallScore ?? '—'}</td>
+                <td class="num">${payload.gbp?.reviewCount ?? '—'}</td>
+                <td class="num">${payload.gbp?.rating ?? '—'}</td>
+                <td class="num">${audit?.deepIntegrations?.ahrefs?.domainRating != null ? Math.round(audit.deepIntegrations.ahrefs.domainRating) : '—'}</td>
+                <td class="num">${audit?.deepIntegrations?.ahrefs?.organicTraffic != null ? Number(audit.deepIntegrations.ahrefs.organicTraffic).toLocaleString() : '—'}</td>
+              </tr>
+              ${competitors.map((c) => `
+                <tr class="${(c.auditScore && audit?.overallScore && c.auditScore > audit.overallScore) ? 'beats' : ''}">
+                  <td>${escapeHtml(c.businessName || c.domain)}<div style="font-size:0.72rem;color:#94a3b8;">${escapeHtml(c.domain)}</div></td>
+                  <td class="num">${c.auditScore ?? '—'}</td>
+                  <td class="num">${c.reviewCount ?? '—'}</td>
+                  <td class="num">${c.rating ?? '—'}</td>
+                  <td class="num">${c.dr != null ? Math.round(c.dr) : '—'}</td>
+                  <td class="num">${c.traffic != null ? Number(c.traffic).toLocaleString() : '—'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>`;
+      } else {
+        compBody.innerHTML = '<p class="ps-empty">No competitor data available — needs a deep-tier audit + SERP integration enabled.</p>';
+      }
+
+      // 3. Losing-to narrative
+      if (payload.losingNarrative) {
+        $('psLosingNarrative').style.display = 'block';
+        $('psLosingBody').innerHTML = `<div class="losing-narrative">${escapeHtml(payload.losingNarrative)}</div>`;
+      }
+
+      // 4. GBP issues
+      const gbpBody = $('psGbpBody');
+      if (payload.gbp?.matched) {
+        const gbp = payload.gbp;
+        gbpBody.innerHTML = `
+          <div class="gbp-card">
+            <div class="gbp-stats">
+              <div class="gbp-stat"><span class="k">Rating</span><span class="v">${gbp.rating ? gbp.rating + '⭐' : 'no rating'}</span></div>
+              <div class="gbp-stat"><span class="k">Reviews</span><span class="v">${gbp.reviewCount || 0}</span></div>
+              <div class="gbp-stat"><span class="k">Photos</span><span class="v">${gbp.photoCount || 0}</span></div>
+              <div class="gbp-stat"><span class="k">Phone</span><span class="v">${gbp.phone ? '✓' : '✗ missing'}</span></div>
+              <div class="gbp-stat"><span class="k">Website link</span><span class="v">${gbp.website ? '✓' : '✗ missing'}</span></div>
+            </div>
+            ${(gbp.issues || []).length === 0
+              ? '<p style="color:#16a34a;font-weight:600;">✓ Your GBP looks healthy.</p>'
+              : '<div style="display:grid;gap:8px;">' + gbp.issues.map((i) => `<div class="gbp-issue">⚠ ${escapeHtml(i)}</div>`).join('') + '</div>'}
+          </div>`;
+      } else {
+        gbpBody.innerHTML = '<p class="ps-empty">' + escapeHtml(payload.gbp?.message || 'GBP not matched. Run a deep-tier audit.') + '</p>';
+      }
+
+      // 5. Website issues
+      const wiBody = $('psWebsiteIssuesBody');
+      const issues = payload.websiteIssues || [];
+      if (issues.length) {
+        wiBody.innerHTML = '<div class="issue-list">' + issues.map((f) => {
+          const sev = String(f.severity || 'low').toLowerCase();
+          const dollar = f.dollarImpact?.monthly;
+          return `<div class="issue-row ${sev}">
+            <span class="severity ${sev}">${sev}</span>
+            <div class="body">
+              <div class="title">${escapeHtml(f.title || f.key || '')}</div>
+              ${f.description || f.detail ? `<div class="desc">${escapeHtml(f.description || f.detail || '')}</div>` : ''}
+            </div>
+            ${dollar?.high ? `<div class="impact">$${dollar.low}–$${dollar.high}/mo</div>` : ''}
+          </div>`;
+        }).join('') + '</div>';
+      } else {
+        wiBody.innerHTML = '<p class="ps-empty">No major website issues detected.</p>';
+      }
+
+      // 6. Review gaps
+      const rg = payload.reviewGaps || {};
+      const rgBody = $('psReviewGapBody');
+      if (rg.yourReviewCount != null || rg.competitorAvgReviewCount != null) {
+        const yourCount = rg.yourReviewCount ?? 0;
+        const compCount = rg.competitorAvgReviewCount ?? 0;
+        const gap = compCount - yourCount;
+        rgBody.innerHTML = `
+          <div class="review-compare">
+            <div class="review-card you">
+              <div class="who">You</div>
+              <div class="stars">${rg.yourRating ? rg.yourRating + ' ⭐' : 'no rating'}</div>
+              <div class="count">${yourCount} reviews</div>
+            </div>
+            <div class="review-card them">
+              <div class="who">Local competitor avg</div>
+              <div class="stars">${rg.competitorAvgRating ? rg.competitorAvgRating + ' ⭐' : 'no data'}</div>
+              <div class="count">${compCount} reviews</div>
+            </div>
+          </div>
+          ${gap > 0 ? `<p style="margin-top:1rem;color:#7f1d1d;font-size:0.95rem;">You\u2019re <strong>${gap}+ reviews behind</strong> the local average. Each Google review = roughly 1-2 clicks/mo from search.</p>` : ''}`;
+      } else {
+        rgBody.innerHTML = '<p class="ps-empty">Need GBP + competitor data for review comparison.</p>';
+      }
+
+      // 7. Opportunity
+      const opp = payload.opportunity || audit?.dollarOpportunity || { monthly: { low: 0, high: 0 }, annual: { low: 0, high: 0 } };
+      $('psOppMonthly').textContent = '$' + (opp.monthly?.low || 0).toLocaleString() + ' – $' + (opp.monthly?.high || 0).toLocaleString() + '/mo';
+      $('psOppAnnual').textContent = 'Annualized: $' + (opp.annual?.low || 0).toLocaleString() + ' – $' + (opp.annual?.high || 0).toLocaleString();
+
+      // 8. Wire CTA
+      const ctaBtn = $('primaryCallCta');
+      if (ctaBtn) {
+        ctaBtn.onclick = () => {
+          // Trigger the existing qualifier flow as the consent gate.
+          const qw = document.getElementById('qualifierWidget');
+          if (qw) {
+            qw.hidden = false;
+            qw.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            // If qualifier hasn't loaded yet, kick it off
+            maybeStartQualifier(audit, true);
+          }
+        };
+      }
+    }
+
+    async function loadProspectPageData(prospect) {
+      if (!prospect.url && !prospect.domain) return null;
+      const domain = (prospect.domain || prospect.url).replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
+      const tok = new URLSearchParams(location.search).get('token') || '';
+      const params = new URLSearchParams({ domain });
+      if (tok) params.set('token', tok);
+      try {
+        const r = await fetch('/api/prospect-page-data?' + params.toString());
+        if (!r.ok) return null;
+        return await r.json();
+      } catch { return null; }
+    }
+
     function renderResults(audit, prospect) {
       $('formCard').style.display = 'none';
       $('loadingState').style.display = 'none';
@@ -281,6 +739,20 @@
       const annual = audit.dollarOpportunity?.annual || { low: 0, high: 0 };
       $('resDollarMonthly').textContent = '$' + monthly.low.toLocaleString() + ' – $' + monthly.high.toLocaleString();
       $('resDollarAnnual').textContent = 'Annualized: $' + annual.low.toLocaleString() + ' – $' + annual.high.toLocaleString();
+
+      // Render the 8 spec sections from consolidated endpoint (best-effort).
+      // Falls back to audit-only if the endpoint can't load.
+      loadProspectPageData(prospect).then((payload) => {
+        if (payload?.ok) {
+          renderProspectSections(payload, prospect);
+        } else {
+          renderProspectSections({
+            audit, businessName: prospect.businessName, gbp: { matched: false, message: 'GBP data unavailable.' },
+            competitors: [], localRank: { provided: false }, websiteIssues: (audit.findings || []).slice(0, 8),
+            opportunity: audit.dollarOpportunity, reviewGaps: {}
+          }, prospect);
+        }
+      });
 
       // Headline
       const biz = prospect.businessName || prospect.url || 'this business';
@@ -304,6 +776,11 @@
         card.innerHTML = `<div class="label">${escapeHtml(s.label)}</div><div class="value">${s.score}</div><div class="hint">${escapeHtml(s.hint)}</div>`;
         pillars.appendChild(card);
       });
+
+      // Industry baseline strip — uses audit.industryBenchmark populated by auditDeep
+      renderBaselineStrip(audit, prospect);
+      // Competitor section — pulls from /api/admin/competitors-of via public proxy
+      renderCompetitors(prospect);
 
       // Top 5 findings
       const findings = $('resFindings');
@@ -369,6 +846,283 @@
           ).join('') + '</tbody></table>' +
           (geo.blockedCrawlers?.length ? `<p style="margin-top:0.75rem;color:#dc2626;"><strong>Blocked AI crawlers:</strong> ${geo.blockedCrawlers.map(escapeHtml).join(', ')} — these can't cite your site.</p>` : '');
       }
+
+      const nap = audit.sections?.nap;
+      if (nap) {
+        const ext = nap.extracted || {};
+        const cons = nap.consistency || {};
+        $('resNapMeta').textContent = `Score: ${nap.overallScore} · ${(ext.phones || []).length} phone(s), ${(ext.addresses || []).length} address(es) detected`;
+        $('resNapBody').innerHTML =
+          (cons.phoneVariants > 1 ? `<p style="color:#dc2626;">⚠ ${cons.phoneVariants} different phone numbers detected — search engines see this as inconsistent.</p>` : '') +
+          (cons.addressVariants > 1 ? `<p style="color:#dc2626;">⚠ ${cons.addressVariants} different address formats detected — pick one canonical version.</p>` : '') +
+          ((ext.phones || []).length ? `<p><strong>Phones:</strong> ${(ext.phones || []).map(p => '<code>' + escapeHtml(p) + '</code>').join(' · ')}</p>` : '<p style="color:#dc2626;">⚠ No phone number found on the page.</p>') +
+          ((ext.addresses || []).length ? `<p><strong>Addresses:</strong> ${(ext.addresses || []).slice(0, 3).map(escapeHtml).join(' / ')}</p>` : '<p style="color:#dc2626;">⚠ No physical address found.</p>');
+      }
+
+      const images = audit.sections?.images;
+      if (images) {
+        $('resImageMeta').textContent = `Score: ${images.overallScore}` + (images.totalImages != null ? ` · ${images.totalImages} image(s) on the page` : '');
+        const a = images.altQuality || {};
+        $('resImageBody').innerHTML =
+          '<table style="width:100%;border-collapse:collapse;"><tbody>' +
+          (a.good != null ? `<tr><td style="padding:6px 0;border-bottom:1px solid #e2e8f0;">Good alt text</td><td style="text-align:right;font-weight:600;">${escapeHtml(a.good)}</td></tr>` : '') +
+          (a.missing != null ? `<tr><td style="padding:6px 0;border-bottom:1px solid #e2e8f0;">Missing alt</td><td style="text-align:right;color:#dc2626;font-weight:600;">${escapeHtml(a.missing)}</td></tr>` : '') +
+          (a.poor != null ? `<tr><td style="padding:6px 0;border-bottom:1px solid #e2e8f0;">Poor alt (file names, single words)</td><td style="text-align:right;color:#d97706;font-weight:600;">${escapeHtml(a.poor)}</td></tr>` : '') +
+          (a.stuffed != null ? `<tr><td style="padding:6px 0;border-bottom:1px solid #e2e8f0;">Stuffed alt (keyword spam)</td><td style="text-align:right;color:#d97706;font-weight:600;">${escapeHtml(a.stuffed)}</td></tr>` : '') +
+          (images.modernFormat != null ? `<tr><td style="padding:6px 0;border-bottom:1px solid #e2e8f0;">Modern formats (WebP/AVIF)</td><td style="text-align:right;font-weight:600;">${escapeHtml(images.modernFormat)}</td></tr>` : '') +
+          (images.lazyLoaded != null ? `<tr><td style="padding:6px 0;border-bottom:1px solid #e2e8f0;">Lazy-loaded</td><td style="text-align:right;font-weight:600;">${escapeHtml(images.lazyLoaded)}</td></tr>` : '') +
+          (images.clsRisk != null ? `<tr><td style="padding:6px 0;border-bottom:1px solid #e2e8f0;">CLS risk (missing dims)</td><td style="text-align:right;color:#d97706;font-weight:600;">${escapeHtml(images.clsRisk)}</td></tr>` : '') +
+          '</tbody></table>';
+      }
+
+      const performance = audit.sections?.performance;
+      if (performance) {
+        if (performance.available === false) {
+          $('resPerformanceMeta').textContent = 'PageSpeed signal unavailable.';
+          $('resPerformanceBody').innerHTML = `<p style="color:#64748b;">${escapeHtml(performance.message || performance.reason || 'No PageSpeed data for this URL.')}</p>`;
+        } else {
+          const cwv = performance.cwv || {};
+          const pillar = performance.pillar || {};
+          $('resPerformanceMeta').textContent = `Score: ${performance.overallScore} · ` +
+            `Lighthouse perf ${pillar.performance ?? '—'}/100 · LCP ${cwv.lcp?.display || '—'} · CLS ${cwv.cls?.display || '—'} · INP ${cwv.inp?.display || '—'}`;
+          $('resPerformanceBody').innerHTML =
+            '<table style="width:100%;border-collapse:collapse;"><tbody>' +
+            (pillar.performance != null ? `<tr><td style="padding:6px 0;border-bottom:1px solid #e2e8f0;">Lighthouse Performance</td><td style="text-align:right;font-weight:600;">${escapeHtml(pillar.performance)}/100</td></tr>` : '') +
+            (pillar.seo != null ? `<tr><td style="padding:6px 0;border-bottom:1px solid #e2e8f0;">Lighthouse SEO</td><td style="text-align:right;font-weight:600;">${escapeHtml(pillar.seo)}/100</td></tr>` : '') +
+            (pillar.bestPractices != null ? `<tr><td style="padding:6px 0;border-bottom:1px solid #e2e8f0;">Best Practices</td><td style="text-align:right;font-weight:600;">${escapeHtml(pillar.bestPractices)}/100</td></tr>` : '') +
+            (pillar.accessibility != null ? `<tr><td style="padding:6px 0;border-bottom:1px solid #e2e8f0;">Accessibility</td><td style="text-align:right;font-weight:600;">${escapeHtml(pillar.accessibility)}/100</td></tr>` : '') +
+            (cwv.lcp ? `<tr><td style="padding:6px 0;border-bottom:1px solid #e2e8f0;">LCP (Largest Contentful Paint)</td><td style="text-align:right;font-weight:600;color:${cwv.lcp.score >= 75 ? '#16a34a' : cwv.lcp.score >= 50 ? '#d97706' : '#dc2626'};">${escapeHtml(cwv.lcp.display || '—')}</td></tr>` : '') +
+            (cwv.cls ? `<tr><td style="padding:6px 0;border-bottom:1px solid #e2e8f0;">CLS (Cumulative Layout Shift)</td><td style="text-align:right;font-weight:600;color:${cwv.cls.score >= 75 ? '#16a34a' : cwv.cls.score >= 50 ? '#d97706' : '#dc2626'};">${escapeHtml(cwv.cls.display || '—')}</td></tr>` : '') +
+            (cwv.inp ? `<tr><td style="padding:6px 0;border-bottom:1px solid #e2e8f0;">INP (Interaction to Next Paint)</td><td style="text-align:right;font-weight:600;color:${cwv.inp.score >= 75 ? '#16a34a' : cwv.inp.score >= 50 ? '#d97706' : '#dc2626'};">${escapeHtml(cwv.inp.display || '—')}</td></tr>` : '') +
+            '</tbody></table>';
+        }
+      }
+
+      const contentSection = audit.sections?.content;
+      if (contentSection) {
+        if (contentSection.available === false) {
+          $('resContentMeta').textContent = 'Content quality signal unavailable.';
+          $('resContentBody').innerHTML = `<p style="color:#64748b;">${escapeHtml(contentSection.message || contentSection.reason || '')}</p>`;
+        } else {
+          $('resContentMeta').textContent = `Score: ${contentSection.overallScore} · ${contentSection.totalIssues} issue(s) found · ${contentSection.highSeverityCount} high severity, ${contentSection.mediumSeverityCount} medium`;
+          const issues = (contentSection.sampleIssues || []).slice(0, 8);
+          $('resContentBody').innerHTML =
+            (issues.length ? '<table style="width:100%;border-collapse:collapse;font-size:0.92em;"><thead><tr><th style="text-align:left;padding:6px 0;border-bottom:1px solid #e2e8f0;">Severity</th><th style="text-align:left;padding:6px 0;border-bottom:1px solid #e2e8f0;">Issue</th><th style="text-align:left;padding:6px 0;border-bottom:1px solid #e2e8f0;">Suggestion</th></tr></thead><tbody>' +
+              issues.map(i => `<tr><td style="padding:6px 0;border-bottom:1px solid #e2e8f0;color:${i.severity === 'high' ? '#dc2626' : i.severity === 'medium' ? '#d97706' : '#64748b'};font-weight:600;">${escapeHtml((i.severity || '').toUpperCase())}</td><td style="padding:6px 0;border-bottom:1px solid #e2e8f0;">${escapeHtml(i.shortMessage || i.message || '')}${i.context ? '<br><code style="font-size:0.85em;color:#475569;">' + escapeHtml(i.context) + '</code>' : ''}</td><td style="padding:6px 0;border-bottom:1px solid #e2e8f0;color:#475569;">${escapeHtml((i.replacements || []).slice(0, 2).join(', ') || '—')}</td></tr>`).join('') +
+              '</tbody></table>' : '<p style="color:#16a34a;">No major issues found.</p>');
+        }
+      }
+
+      const sitemap = audit.sections?.sitemap;
+      if (sitemap) {
+        $('resSitemapMeta').textContent = `Score: ${sitemap.overallScore} · status: ${sitemap.status || '—'}` + (sitemap.urlCount != null ? ` · ${sitemap.urlCount} URL(s)` : '');
+        $('resSitemapBody').innerHTML =
+          '<table style="width:100%;border-collapse:collapse;"><tbody>' +
+          (sitemap.urlCount != null ? `<tr><td style="padding:6px 0;border-bottom:1px solid #e2e8f0;">URLs in sitemap</td><td style="text-align:right;font-weight:600;">${escapeHtml(sitemap.urlCount)}</td></tr>` : '') +
+          (sitemap.staleCount != null ? `<tr><td style="padding:6px 0;border-bottom:1px solid #e2e8f0;">Stale lastmod entries</td><td style="text-align:right;color:#d97706;font-weight:600;">${escapeHtml(sitemap.staleCount)}</td></tr>` : '') +
+          (sitemap.httpUrls != null ? `<tr><td style="padding:6px 0;border-bottom:1px solid #e2e8f0;">HTTP (not HTTPS) URLs</td><td style="text-align:right;color:#dc2626;font-weight:600;">${escapeHtml(sitemap.httpUrls)}</td></tr>` : '') +
+          (sitemap.robotsHasSitemap != null ? `<tr><td style="padding:6px 0;border-bottom:1px solid #e2e8f0;">Listed in robots.txt</td><td style="text-align:right;font-weight:600;">${sitemap.robotsHasSitemap ? '✓' : '<span style="color:#dc2626;">✗</span>'}</td></tr>` : '') +
+          '</tbody></table>';
+      }
+
+      const all = audit.findings || [];
+      if (all.length) {
+        $('resAllMeta').textContent = `${all.length} finding(s) total across ${new Set(all.map(f => f.section)).size} pillar(s)`;
+        $('resAllBody').innerHTML = '<ul style="padding-left:18px;line-height:1.6;">' +
+          all.map(f => `<li><strong>[${escapeHtml(f.section || '')}]</strong> ${escapeHtml(f.title || '')} <span style="color:#64748b;font-size:0.85em;">(${escapeHtml(f.severity || 'low')})</span>${f.dollarImpact?.monthly?.high ? ` · <span style="color:#16a34a;font-weight:600;">$${escapeHtml(f.dollarImpact.monthly.low)}–$${escapeHtml(f.dollarImpact.monthly.high)}/mo</span>` : ''}</li>`).join('') +
+          '</ul>';
+      }
+    }
+
+    // ===== Qualifier widget =====
+    // Renders a 5-question multi-step form when ?qualify=1&token=... is in the URL.
+    // Pulls live reactions from /api/qualifier/reaction so the copy stays
+    // server-authoritative (no copy-paste of bucket logic into the client).
+    const qualifierState = {
+      questions: [],
+      currentIdx: 0,
+      answers: {},
+      token: null,
+      auditDollarHigh: null,
+      submitted: false
+    };
+
+    async function loadQualifierQuestions() {
+      try {
+        const res = await fetch('/api/qualifier/questions');
+        const data = await res.json();
+        if (data.ok && Array.isArray(data.questions)) qualifierState.questions = data.questions;
+      } catch {}
+    }
+
+    function visibleQuestions() {
+      return qualifierState.questions.filter((q) => {
+        if (!q.showIf) return true;
+        const [k, vals] = Object.entries(q.showIf)[0];
+        const a = qualifierState.answers[k];
+        return a && vals.includes(a);
+      });
+    }
+
+    function renderBaselineStrip(audit, prospect) {
+      const host = document.getElementById('resBaseline');
+      if (!host) return;
+      const bm = audit.industryBenchmark;
+      if (!bm || !bm.overall) { host.style.display = 'none'; return; }
+      const yourScore = audit.overallScore;
+      const cohortLabel = `${prospect.industry || 'businesses'} in ${bm.cohort?.citySize === 'micro' ? 'micro' : bm.cohort?.citySize || 'similar'} markets`;
+      const beats = yourScore > bm.overall.p50 ? 'beating' : 'below';
+      host.style.display = 'block';
+      host.innerHTML = `
+        <div class="bs-head">How you compare to peers</div>
+        <div class="bs-row">
+          <div class="bs-stat you"><div class="k">You</div><div class="v">${yourScore}</div></div>
+          <div class="bs-stat median"><div class="k">${escapeHtml(cohortLabel)} median</div><div class="v">${bm.overall.p50}</div></div>
+          <div class="bs-stat top"><div class="k">Top quartile (top 25%)</div><div class="v">${bm.overall.p75}</div></div>
+        </div>
+        <div class="bs-percentile">You're <strong>${escapeHtml(beats)}</strong> the median ${escapeHtml(prospect.industry || 'business')} in your market size${bm.percentileRank ? ' · You\u2019re in the <strong>' + escapeHtml(bm.percentileRank) + ' percentile</strong>' : ''}. Cohort: ${bm.cohort?.n || '?'} sites.</div>`;
+    }
+
+    async function renderCompetitors(prospect) {
+      const host = document.getElementById('resCompetitors');
+      if (!host) return;
+      // Use a public-safe endpoint — call the same competitor-finder via the
+      // existing audit-deep ahrefs path is overkill; instead show a placeholder
+      // that the upgrade tier will populate. For now, lightweight static block.
+      host.style.display = 'block';
+      host.innerHTML = `
+        <h3>📊 How you stack up against local competitors</h3>
+        <p style="color:#64748b;font-size:0.88rem;margin:0 0 0.75rem;">Live competitor scoring is part of the $129/mo Visibility Plan — it pulls 3 of your top local competitors and shows their score next to yours weekly. <a href="/pricing.html#visibility" style="color:#0369a1;">See pricing →</a></p>
+        <div class="comp-list">
+          <div class="comp-card you">
+            <div class="domain">${escapeHtml(prospect.domain || 'You')}</div>
+            <div class="score">${escapeHtml(prospect.score ?? '—')}</div>
+            <div class="meta">Your audit score</div>
+          </div>
+          <div class="comp-card">
+            <div class="domain">Competitor 1</div>
+            <div class="score" style="color:#94a3b8;">??</div>
+            <div class="meta">Unlocked with $129 plan</div>
+          </div>
+          <div class="comp-card">
+            <div class="domain">Competitor 2</div>
+            <div class="score" style="color:#94a3b8;">??</div>
+            <div class="meta">Unlocked with $129 plan</div>
+          </div>
+        </div>`;
+    }
+
+    function renderQuestion() {
+      const list = visibleQuestions();
+      const q = list[qualifierState.currentIdx];
+      const body = document.getElementById('qualifierBody');
+      if (!body) return;
+      if (!q) { renderQualifierSubmit(); return; }
+      body.innerHTML = '<p class="qquestion">' + escapeHtml(q.title) + '</p>' +
+        '<div class="qbtn-row">' + (q.options || []).map(opt =>
+          `<button type="button" class="qbtn" data-question="${escapeHtml(q.id)}" data-value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</button>`
+        ).join('') + '</div>' +
+        '<div id="qreactionSlot"></div>' +
+        '<div style="margin-top:14px;display:flex;justify-content:space-between;align-items:center;">' +
+        (qualifierState.currentIdx > 0 ? '<button type="button" id="qualifierBack" style="background:transparent;border:none;color:#0369a1;cursor:pointer;font:inherit;">← back</button>' : '<span></span>') +
+        '<span style="color:#94a3b8;font-size:0.82rem;">Step ' + (qualifierState.currentIdx + 1) + ' of ' + list.length + '</span>' +
+        '</div>';
+      // Mark currently-selected button
+      const existing = qualifierState.answers[q.id];
+      if (existing) {
+        const sel = body.querySelector('[data-value="' + existing + '"]');
+        if (sel) sel.classList.add('selected');
+      }
+      // Wire option clicks
+      body.querySelectorAll('.qbtn').forEach((btn) => {
+        btn.onclick = async () => {
+          const qid = btn.getAttribute('data-question');
+          const val = btn.getAttribute('data-value');
+          qualifierState.answers[qid] = val;
+          body.querySelectorAll('.qbtn').forEach((b) => b.classList.remove('selected'));
+          btn.classList.add('selected');
+          // Show server-side reaction copy
+          try {
+            const params = new URLSearchParams({ questionId: qid, value: val });
+            if (qualifierState.auditDollarHigh) params.set('dollarHigh', qualifierState.auditDollarHigh);
+            const r = await fetch('/api/qualifier/reaction?' + params.toString());
+            const data = await r.json();
+            const slot = document.getElementById('qreactionSlot');
+            if (slot && data.ok && data.reaction) {
+              slot.innerHTML = `<div class="qreaction ${data.reaction.tone}">${escapeHtml(data.reaction.text)}</div>`;
+            }
+          } catch {}
+          // Auto-advance after a short pause so the user reads the reaction
+          setTimeout(() => {
+            qualifierState.currentIdx++;
+            updateProgress();
+            renderQuestion();
+          }, qualifierState.currentIdx === visibleQuestions().length - 1 ? 700 : 1100);
+        };
+      });
+      const backBtn = document.getElementById('qualifierBack');
+      if (backBtn) backBtn.onclick = () => {
+        qualifierState.currentIdx = Math.max(0, qualifierState.currentIdx - 1);
+        updateProgress();
+        renderQuestion();
+      };
+    }
+
+    function updateProgress() {
+      const total = visibleQuestions().length;
+      const cur = qualifierState.currentIdx;
+      document.querySelectorAll('#qualifierProgress .qstep').forEach((el, i) => {
+        el.classList.remove('done', 'current');
+        if (i < cur) el.classList.add('done');
+        else if (i === cur && i < total) el.classList.add('current');
+      });
+    }
+
+    async function renderQualifierSubmit() {
+      const body = document.getElementById('qualifierBody');
+      body.innerHTML = '<p style="color:#475569;font-size:0.95rem;">Submitting your responses…</p>';
+      try {
+        const res = await fetch('/api/qualify/' + encodeURIComponent(qualifierState.token), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ answers: qualifierState.answers })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          body.innerHTML = '<p style="color:#dc2626;">Could not submit: ' + escapeHtml(data.error || 'unknown') + '</p>';
+          return;
+        }
+        const c = data.copy || {};
+        document.getElementById('qualifierIntro').style.display = 'none';
+        document.getElementById('qualifierProgress').style.display = 'none';
+        body.innerHTML = `<div id="qualifierResult">
+          <span class="bucket-tag">${escapeHtml((data.bucket || '').replace(/_/g, ' '))} · ${escapeHtml(data.priority || '')}</span>
+          <h3>${escapeHtml(c.headline || 'Thanks for your answers.')}</h3>
+          <p style="margin:0 0 0.5rem;font-size:1rem;line-height:1.55;opacity:0.95;">${escapeHtml(c.body || '')}</p>
+          ${c.ctaLabel ? `<a class="qcta" href="${escapeHtml(c.ctaHref || '#')}">${escapeHtml(c.ctaLabel)}</a>` : ''}
+          ${c.secondaryCtaLabel ? `<a class="qcta-secondary" href="${escapeHtml(c.secondaryCtaHref || '#')}">${escapeHtml(c.secondaryCtaLabel)}</a>` : ''}
+        </div>`;
+        qualifierState.submitted = true;
+      } catch (err) {
+        body.innerHTML = '<p style="color:#dc2626;">Could not submit: ' + escapeHtml(err.message || 'network error') + '</p>';
+      }
+    }
+
+    async function maybeStartQualifier(audit, force = false) {
+      const params = new URLSearchParams(location.search);
+      // Auto-start when ?qualify=1 in URL OR when manually triggered by CTA click.
+      if (!force && params.get('qualify') !== '1') return;
+      const token = params.get('token');
+      // Without a token we can still show the qualifier (the user can opt in
+      // by replying to the email). Token only required to PERSIST the answers.
+      qualifierState.token = token || null;
+      qualifierState.auditDollarHigh = audit?.dollarOpportunity?.monthly?.high || null;
+      const widget = document.getElementById('qualifierWidget');
+      if (widget) widget.hidden = false;
+      // Avoid re-loading questions if already present from a prior call.
+      if (!qualifierState.questions.length) await loadQualifierQuestions();
+      updateProgress();
+      renderQuestion();
     }
 
     // Auto-run if URL params present
@@ -398,6 +1152,7 @@
         const data = await res.json();
         if (!res.ok || !data.audit) throw new Error(data.error || 'audit failed');
         renderResults(data.audit, input);
+        maybeStartQualifier(data.audit);
       } catch (err) {
         $('loadingState').style.display = 'none';
         $('formCard').style.display = 'block';
@@ -448,6 +1203,37 @@
     // Auto-run if params provided
     const initial = readParams();
     if (initial.url) runAudit(initial);
+
+    /** Expand all pillar detail sections for print/PDF; restore prior open state after. */
+    (function setupAuditResultsPrintDetails() {
+      let snapshot = null;
+      function expandForPrint() {
+        if (snapshot) return;
+        snapshot = [];
+        document.querySelectorAll('#resultsCard details').forEach(function (el) {
+          snapshot.push({ el: el, wasOpen: el.open });
+          el.open = true;
+        });
+      }
+      function restoreAfterPrint() {
+        if (!snapshot) return;
+        snapshot.forEach(function (row) {
+          row.el.open = row.wasOpen;
+        });
+        snapshot = null;
+      }
+      window.addEventListener('beforeprint', expandForPrint);
+      window.addEventListener('afterprint', restoreAfterPrint);
+      if (window.matchMedia) {
+        var mq = window.matchMedia('print');
+        function mqPrint(e) {
+          if (e.matches) expandForPrint();
+          else restoreAfterPrint();
+        }
+        if (mq.addEventListener) mq.addEventListener('change', mqPrint);
+        else if (mq.addListener) mq.addListener(mqPrint);
+      }
+    })();
   </script>
 </body>
 </html>

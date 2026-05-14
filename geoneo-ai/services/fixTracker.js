@@ -156,11 +156,45 @@ async function deleteItem(domain, id) {
   throw wrap;
 }
 
+/**
+ * Sync the latest audit's findings into the tracker as `not_started` items
+ * (only for findings that don't already exist by `source` key). Existing
+ * items are preserved with their status — even if the finding "disappeared"
+ * (= probably fixed). Returns { added, existing, total } counts.
+ *
+ * Used by the customer dashboard to auto-populate the tracker when the
+ * customer first opens it, and by the maintenance brief to keep it in sync
+ * after each weekly re-audit.
+ */
+async function syncFromAuditFindings(domain, findings = []) {
+  if (!Array.isArray(findings) || !findings.length) return { added: 0, existing: 0, total: 0 };
+  const tracker = await getTracker(domain);
+  const existingSources = new Set((tracker.items || []).map((i) => i.source).filter(Boolean));
+  let added = 0;
+  for (const f of findings) {
+    if (!f || !f.title) continue;
+    const key = `audit_finding:${f.key || f.title}`.slice(0, 120);
+    if (existingSources.has(key)) continue;
+    try {
+      await upsertItem(domain, {
+        title: f.title.slice(0, MAX_TITLE_LEN),
+        source: key,
+        status: 'not_started',
+        notes: (f.detail || '').slice(0, 1000)
+      });
+      added++;
+    } catch {}
+  }
+  const after = await getTracker(domain);
+  return { added, existing: existingSources.size, total: after.items.length };
+}
+
 module.exports = {
   getTracker,
   upsertItem,
   deleteItem,
   validateItem,
+  syncFromAuditFindings,
   MAX_ITEMS_PER_DOMAIN,
   FILE
 };

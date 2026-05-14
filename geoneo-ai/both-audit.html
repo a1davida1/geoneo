@@ -72,7 +72,8 @@
         <label>
           Industry / vertical <span style="color:#ef4444;">(required)</span>
           <select id="bothIndustry" required></select>
-          <input id="bothIndustryCustom" type="text" placeholder="Custom vertical" style="display:none;margin-top:0.5rem;" />
+          <label for="bothIndustryCustom" class="sr-only">Custom vertical</label>
+          <input id="bothIndustryCustom" type="text" placeholder="Custom vertical" style="display:none;margin-top:0.5rem;" aria-hidden="true" />
         </label>
 
         <!-- Lead Capture (required for free scan persistence and follow-up) -->
@@ -106,7 +107,8 @@
             <select id="bothCityPreset" class="city-preset" aria-label="Choose a city from list (optional)">
               <option value="">Select a state first…</option>
             </select>
-            <input id="bothCity" name="city" type="text" placeholder="Or type any city" />
+            <label for="bothCity" class="sr-only">Custom city</label>
+            <input id="bothCity" name="city" type="text" placeholder="Or type any city" aria-label="Custom city" />
           </label>
           <label>
             State

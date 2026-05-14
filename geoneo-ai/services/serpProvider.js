@@ -224,6 +224,11 @@ class SerpApiProvider {
     endpoint.searchParams.set('gl', this.config.gl || 'us');
     endpoint.searchParams.set('num', String(options.num || 10));
     endpoint.searchParams.set('api_key', apiKey);
+    // start = page offset (0, 10, 20, …). Lets us pull page-2/page-3 results
+    // when the caller wants deeper discovery coverage.
+    if (Number.isFinite(Number(options.start)) && Number(options.start) > 0) {
+      endpoint.searchParams.set('start', String(Number(options.start)));
+    }
     if (options.uule) {
       endpoint.searchParams.set('uule', options.uule);
     }
@@ -239,6 +244,81 @@ class SerpApiProvider {
       throw err;
     }
     return response.json();
+  }
+
+  /**
+   * Multi-page SERP fetch: returns a single merged response with organic_results
+   * concatenated across pages 1..N (deduped by url). Useful when discovery
+   * needs deeper coverage than the standard num=30 single-page call.
+   *
+   * Example: getSearchResultsPaginated('plumber branson', 'Branson, MO',
+   * { pages: 3, perPage: 10 }) → up to 30 organic from pages 1+2+3.
+   */
+  async getSearchResultsPaginated(query, location, options = {}) {
+    const pages = Math.max(1, Math.min(5, Number(options.pages) || 1));
+    const perPage = Math.max(10, Math.min(100, Number(options.perPage) || 10));
+    if (pages === 1) {
+      return this.getSearchResults(query, location, { ...options, num: perPage, start: 0 });
+    }
+    const merged = { organic_results: [], local_results: null, search_metadata: null, search_parameters: null, _pageRaws: [] };
+    const seen = new Set();
+    for (let p = 0; p < pages; p++) {
+      const start = p * perPage;
+      try {
+        const raw = await this.getSearchResults(query, location, { ...options, num: perPage, start });
+        merged._pageRaws.push(raw);
+        if (p === 0) {
+          merged.search_metadata = raw.search_metadata;
+          merged.search_parameters = raw.search_parameters;
+          merged.local_results = raw.local_results || raw.local_pack || null;
+        }
+        const page = Array.isArray(raw.organic_results) ? raw.organic_results : [];
+        for (const item of page) {
+          const key = (item.link || item.url || item.title || '').toLowerCase();
+          if (key && !seen.has(key)) {
+            seen.add(key);
+            merged.organic_results.push({ ...item, _serpPage: p + 1 });
+          }
+        }
+        if (page.length < 3) break; // no more results
+      } catch (err) {
+        // Stop pagination on error but return what we have so far
+        if (p === 0) throw err;
+        break;
+      }
+    }
+    return merged;
+  }
+
+  /**
+   * Google Maps (engine=google_maps) search to pull a deeper set of GMB
+   * businesses than the standard local_pack (which caps at 3). Returns
+   * a normalized list of { title, domain, url, rating, reviews, position }.
+   */
+  async getMapsResults(query, location, options = {}) {
+    const apiKey = this.config.apiKey || process.env.SERP_API_KEY;
+    if (!apiKey) throw new Error('SERP_API_KEY required for maps');
+    const endpoint = new URL('https://serpapi.com/search.json');
+    endpoint.searchParams.set('engine', 'google_maps');
+    endpoint.searchParams.set('q', query);
+    endpoint.searchParams.set('type', 'search');
+    if (location) endpoint.searchParams.set('location', location);
+    endpoint.searchParams.set('hl', this.config.hl || 'en');
+    endpoint.searchParams.set('api_key', apiKey);
+    if (Number.isFinite(Number(options.start)) && Number(options.start) > 0) {
+      endpoint.searchParams.set('start', String(Number(options.start)));
+    }
+    const response = await withTimeout(
+      (signal) => fetch(endpoint.toString(), { signal }),
+      options.timeoutMs || this.config.timeoutMs || DEFAULT_TIMEOUT_MS
+    );
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      throw new Error(`Maps request failed ${response.status}: ${body.slice(0, 200)}`);
+    }
+    const json = await response.json();
+    const items = json.local_results || json.place_results || [];
+    return Array.isArray(items) ? items : [];
   }
 
   async getSerpScreenshot(query, location, options = {}) {

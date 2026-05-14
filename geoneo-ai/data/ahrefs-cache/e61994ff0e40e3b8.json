@@ -1,0 +1,26 @@
+{
+  "configured": true,
+  "target": "yellowstonelandscape.com",
+  "fetchedAt": "2026-05-13T22:36:36.309Z",
+  "domainRating": 46,
+  "urlRating": null,
+  "backlinks": 4975,
+  "refdomains": 858,
+  "organicTraffic": 7121,
+  "organicKeywords": 888,
+  "paidKeywords": 0,
+  "paidTraffic": 0,
+  "paidCostMonthlyUsd": null,
+  "paidPagesCount": 0,
+  "investingInAds": false,
+  "topPaidPages": [],
+  "keywordMetrics": {
+    "organicCount": 888,
+    "paidCount": 0,
+    "trafficValue": null
+  },
+  "rawAvailable": true,
+  "errors": [],
+  "partial": false,
+  "fromCache": false
+}

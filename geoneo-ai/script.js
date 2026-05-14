@@ -273,7 +273,8 @@
       let data = {};
       try {
         data = await res.json();
-      } catch {
+      } catch (e) {
+        console.error('loadPublicCitiesForPreset: failed to parse JSON for', code, e);
         data = {};
       }
       if (!res.ok || !data || !Array.isArray(data.cities) || !data.cities.length) {
@@ -290,7 +291,8 @@
         const match = Array.from(cityPresetSelect.options).some((o) => o.value === savedTyped);
         if (match) cityPresetSelect.value = savedTyped;
       }
-    } catch {
+    } catch (e) {
+      console.error('loadPublicCitiesForPreset failed for state', code, e);
       cityPresetSelect.innerHTML =
         '<option value="">Could not load — type your city below</option>';
     }
@@ -406,11 +408,16 @@
   /** Prospect verticals: data/prospect-verticals.json via /api/geo/prospect-verticals */
   async function fetchProspectVerticalGroupsPublic() {
     try {
-      const res = await fetch('/api/geo/prospect-verticals');
+      const fetchOpts = {};
+      if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+        fetchOpts.signal = AbortSignal.timeout(15000);
+      }
+      const res = await fetch('/api/geo/prospect-verticals', fetchOpts);
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data || !Array.isArray(data.groups)) return [];
       return data.groups;
-    } catch {
+    } catch (err) {
+      console.error('fetchProspectVerticalGroupsPublic failed:', err);
       return [];
     }
   }
@@ -2208,8 +2215,10 @@
     });
   }
 
-  void (async function geoNeoBootstrap() {
-    await initProspectVerticalDropdowns();
+  void (function geoNeoBootstrap() {
+    initProspectVerticalDropdowns().catch(function (err) {
+      console.error('[GeoNeo] prospect vertical dropdowns failed', err);
+    });
     attachHttpsPrefillToUrlInputs();
 
     const scanFormEl = document.getElementById('scanForm');
@@ -2252,5 +2261,5 @@
     setMode('website');
     onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
-  })();
+  }());
 })();

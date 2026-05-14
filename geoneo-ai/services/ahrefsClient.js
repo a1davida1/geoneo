@@ -62,31 +62,53 @@ async function ahrefsGet(endpoint, params, env = process.env) {
 }
 
 function compactAhrefsPayload(domain, responses) {
-  const ratingData = responses.domainRating?.data || responses.domainRating || {};
-  const backlinkData = responses.backlinksStats?.data || responses.backlinksStats || {};
-  const organicData = responses.organicOverview?.data || responses.organicOverview || {};
-  const organicKwData = responses.organicKeywords?.data || responses.organicKeywords || {};
-  const paidKwData = responses.paidKeywords?.data || responses.paidKeywords || {};
-  
-  // Extract keyword counts
-  const organicKeywords = organicData.keywords ?? organicData.organic_keywords ?? organicKwData.total ?? null;
-  const paidKeywords = paidKwData.total ?? paidKwData.keywords ?? null;
-  
+  // v3 wraps metrics inside `metrics` (single endpoint may return `domain_rating`
+  // at top level, others under `metrics`/`stats`). Cover all observed shapes.
+  const ratingRoot = responses.domainRating || {};
+  const ratingData = ratingRoot.metrics || ratingRoot.domain_rating || ratingRoot.data || ratingRoot;
+  const backlinkRoot = responses.backlinksStats || {};
+  const backlinkData = backlinkRoot.metrics || backlinkRoot.stats || backlinkRoot.data || backlinkRoot;
+  const organicRoot = responses.organicOverview || {};
+  const organicData = organicRoot.metrics || organicRoot.data || organicRoot;
+  const organicKwRoot = responses.organicKeywords || {};
+  const organicKwData = organicKwRoot.organic_keywords || organicKwRoot.keywords || organicKwRoot.data || organicKwRoot;
+  const paidPagesRoot = responses.paidPages || {};
+  const paidPagesData = paidPagesRoot.pages || paidPagesRoot.data || (Array.isArray(paidPagesRoot) ? paidPagesRoot : []);
+
+  const organicKeywords = organicData.org_keywords ?? organicData.organic_keywords ?? organicData.keywords ?? (Array.isArray(organicKwData) ? organicKwData.length : null);
+  const paidKeywords = organicData.paid_keywords ?? null;
+  const paidTraffic = organicData.paid_traffic ?? null;
+  const paidCost = organicData.paid_cost ?? null; // Ahrefs returns cost in cents
+  const paidPagesCount = organicData.paid_pages ?? null;
+  const investingInAds = (paidKeywords > 0) || (paidTraffic > 0); // qualifier signal
+
   return {
     configured: true,
     target: domain,
     fetchedAt: new Date().toISOString(),
-    domainRating: ratingData.domain_rating ?? ratingData.domainRating ?? ratingData.dr ?? null,
-    urlRating: ratingData.url_rating ?? ratingData.urlRating ?? ratingData.ur ?? null,
-    backlinks: backlinkData.live ?? backlinkData.backlinks ?? backlinkData.all_time ?? null,
-    refdomains: backlinkData.live_refdomains ?? backlinkData.refdomains ?? backlinkData.all_time_refdomains ?? null,
-    organicTraffic: organicData.traffic ?? organicData.organic_traffic ?? null,
+    domainRating: ratingData.domain_rating ?? ratingData.dr ?? null,
+    urlRating: ratingData.url_rating ?? ratingData.ur ?? null,
+    backlinks: backlinkData.live ?? backlinkData.backlinks ?? null,
+    refdomains: backlinkData.live_refdomains ?? backlinkData.refdomains ?? null,
+    organicTraffic: organicData.org_traffic ?? organicData.organic_traffic ?? organicData.traffic ?? null,
     organicKeywords,
     paidKeywords,
+    paidTraffic,
+    paidCostMonthlyUsd: paidCost != null ? Math.round(paidCost / 100) : null,
+    paidPagesCount,
+    investingInAds,
+    topPaidPages: Array.isArray(paidPagesData) ? paidPagesData.slice(0, 5).map((p) => ({
+      url: p.url || p.raw_url || null,
+      monthlyTraffic: p.sum_traffic ?? null,
+      monthlyValue: p.value ?? null,
+      adsCount: p.ads_count ?? null,
+      topKeyword: p.top_keyword ?? null,
+      keywordCount: p.keywords ?? null
+    })) : [],
     keywordMetrics: {
       organicCount: organicKeywords,
       paidCount: paidKeywords,
-      trafficValue: organicData.traffic_value ?? organicData.organic_traffic_value ?? null
+      trafficValue: organicData.org_traffic_value ?? organicData.organic_traffic_value ?? organicData.traffic_value ?? null
     },
     rawAvailable: true
   };
@@ -147,16 +169,23 @@ async function enrichDomainWithAhrefs(domainInput, opts = {}) {
     }
   }
 
-  const params = { target: domain, mode: 'domain' };
-  const kwParams = { target: domain, mode: 'domain', limit: 10 }; // lightweight keyword sample
+  // Ahrefs v3 requires `date` (YYYY-MM-DD). mode=subdomains is critical:
+  // most sites have traffic on www.example.com, not the apex. mode=domain
+  // gave us 0/0 even when Ahrefs UI showed thousands of keywords.
+  const today = new Date().toISOString().slice(0, 10);
+  const baseParams = { target: domain, mode: 'subdomains', date: today, country: 'us', protocol: 'both' };
+  const kwParams = { ...baseParams, limit: 10 };
   const responses = {};
   const errors = [];
+  // v3 endpoints. /site-explorer/paid-keywords doesn't exist; use the metrics
+  // endpoint for paid totals and /site-explorer/paid-pages for ad-spending pages.
+  // paid_traffic > 0 = high-intent prospect (already buying ads).
   const calls = [
-    ['domainRating', '/site-explorer/domain-rating', params],
-    ['backlinksStats', '/site-explorer/backlinks-stats', params],
-    ['organicOverview', '/site-explorer/overview', params],
-    ['organicKeywords', '/site-explorer/organic-keywords', kwParams],
-    ['paidKeywords', '/site-explorer/paid-keywords', kwParams]
+    ['domainRating', '/site-explorer/domain-rating', { ...baseParams, select: 'domain_rating' }],
+    ['backlinksStats', '/site-explorer/backlinks-stats', { ...baseParams, select: 'live,live_refdomains' }],
+    ['organicOverview', '/site-explorer/metrics', { ...baseParams, select: 'org_traffic,org_keywords,org_traffic_value,paid_keywords,paid_traffic,paid_cost,paid_pages' }],
+    ['organicKeywords', '/site-explorer/organic-keywords', { ...kwParams, select: 'keyword,best_position,volume' }],
+    ['paidPages', '/site-explorer/paid-pages', { ...kwParams, select: 'url,sum_traffic,value,ads_count,top_keyword,keywords' }]
   ];
 
   const results = await Promise.allSettled(

@@ -1,0 +1,26 @@
+{
+  "configured": true,
+  "target": "permitcalculator.com",
+  "fetchedAt": "2026-05-14T00:20:25.223Z",
+  "domainRating": 3.2,
+  "urlRating": null,
+  "backlinks": 130,
+  "refdomains": 88,
+  "organicTraffic": 10,
+  "organicKeywords": 20,
+  "paidKeywords": 0,
+  "paidTraffic": 0,
+  "paidCostMonthlyUsd": null,
+  "paidPagesCount": 0,
+  "investingInAds": false,
+  "topPaidPages": [],
+  "keywordMetrics": {
+    "organicCount": 20,
+    "paidCount": 0,
+    "trafficValue": null
+  },
+  "rawAvailable": true,
+  "errors": [],
+  "partial": false,
+  "fromCache": false
+}

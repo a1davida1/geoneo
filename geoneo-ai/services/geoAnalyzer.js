@@ -15,14 +15,18 @@
  *  3. Authority + identity signals — same as E-E-A-T (handled separately)
  */
 
+// All `[\s\S]*?` quantifiers BOUNDED to {0,N} to prevent catastrophic
+// backtracking on large pages (500KB+ dealer/CMS pages). Without bounds,
+// these regexes spin at 99% CPU for minutes when the closing tag doesn't
+// appear within reasonable distance — observed on reliablechevy.com.
 const PASSAGE_PATTERNS = {
   // Q&A blocks score highest — exactly what AI engines lift verbatim
   qa_blocks: {
     weight: 25,
     detectors: [
-      { name: 'faq_schema', re: /<script[^>]+ld\+json[^>]*>[\s\S]*?"FAQPage"[\s\S]*?<\/script>/i },
-      { name: 'details_summary', re: /<details[^>]*>[\s\S]*?<summary[^>]*>[\s\S]*?<\/summary>[\s\S]*?<\/details>/i },
-      { name: 'h_question', re: /<h[2-4][^>]*>[\s\S]*?\?[\s\S]*?<\/h[2-4]>/i }
+      { name: 'faq_schema', re: /<script[^>]+ld\+json[^>]*>[\s\S]{0,3000}?"FAQPage"[\s\S]{0,3000}?<\/script>/i },
+      { name: 'details_summary', re: /<details[^>]*>[\s\S]{0,2000}?<summary[^>]*>[\s\S]{0,500}?<\/summary>[\s\S]{0,2000}?<\/details>/i },
+      { name: 'h_question', re: /<h[2-4][^>]*>[\s\S]{0,300}?\?[\s\S]{0,300}?<\/h[2-4]>/i }
     ],
     minToPass: 1
   },
@@ -30,8 +34,8 @@ const PASSAGE_PATTERNS = {
   definition_blocks: {
     weight: 15,
     detectors: [
-      { name: 'dl_dt_dd', re: /<dl[^>]*>[\s\S]*?<dt[^>]*>[\s\S]*?<\/dt>[\s\S]*?<dd[^>]*>[\s\S]*?<\/dd>[\s\S]*?<\/dl>/i },
-      { name: 'definition_phrase', re: /\b(?:[A-Z][a-z]+(?:\s+[a-z]+)*)\s+is\s+(?:a|an|the)\s+\w+/i },
+      { name: 'dl_dt_dd', re: /<dl[^>]*>[\s\S]{0,500}?<dt[^>]*>[\s\S]{0,300}?<\/dt>[\s\S]{0,300}?<dd[^>]*>[\s\S]{0,500}?<\/dd>[\s\S]{0,500}?<\/dl>/i },
+      { name: 'definition_phrase', re: /\b(?:[A-Z][a-z]+(?:\s+[a-z]+){0,4})\s+is\s+(?:a|an|the)\s+\w+/i },
       { name: 'what_is_heading', re: /<h[2-4][^>]*>\s*(?:what\s+is|what\s+does|how\s+does|how\s+to)/i }
     ],
     minToPass: 1
@@ -40,7 +44,8 @@ const PASSAGE_PATTERNS = {
   list_blocks: {
     weight: 12,
     detectors: [
-      { name: 'ordered_list', re: /<ol[^>]*>(?:\s*<li[^>]*>[\s\S]*?<\/li>\s*){2,}<\/ol>/i },
+      // Bounded inner quantifier {0,500}? prevents nested-backtracking blowup
+      { name: 'ordered_list', re: /<ol[^>]*>(?:\s*<li[^>]*>[\s\S]{0,500}?<\/li>\s*){2,5}<\/ol>/i },
       { name: 'numbered_steps', re: /\b(?:step\s*\d+|first[,.]?\s|second[,.]?\s|then[,.]?\s|finally[,.]?\s)/i },
       { name: 'howto_schema', re: /"@type":\s*"HowTo"/i }
     ],
@@ -70,7 +75,8 @@ const PASSAGE_PATTERNS = {
   paragraph_answers: {
     weight: 10,
     detectors: [
-      { name: 'short_paragraph_after_h', re: /<h[2-4][^>]*>[\s\S]{1,200}<\/h[2-4]>\s*<p[^>]*>[\s\S]{40,400}<\/p>/i },
+      // Use lazy + bounded so giant pages don't trigger backtracking
+      { name: 'short_paragraph_after_h', re: /<h[2-4][^>]*>[\s\S]{1,200}?<\/h[2-4]>\s*<p[^>]*>[\s\S]{40,400}?<\/p>/i },
       { name: 'tldr_marker', re: /\b(?:TL;DR|tldr|in\s+short|the\s+short\s+answer|bottom\s+line)\b/i }
     ],
     minToPass: 1
@@ -80,7 +86,7 @@ const PASSAGE_PATTERNS = {
     weight: 5,
     detectors: [
       { name: 'toc_links', re: /<a[^>]+href=["']#[a-zA-Z]/i },
-      { name: 'nav_landmark', re: /<nav[^>]*>[\s\S]*?<\/nav>/i }
+      { name: 'nav_landmark', re: /<nav[^>]*>[\s\S]{0,5000}?<\/nav>/i }
     ],
     minToPass: 1
   },
@@ -254,7 +260,7 @@ function generateLlmsTxt({ businessName, description, url, industry, city, state
 /**
  * Top-level GEO audit. Returns score, sub-section results, fixes.
  */
-function analyzeGeo({ html, robotsTxt, llmsTxtContent, llmsFullTxtContent, businessFacts = {} }) {
+function analyzeGeo({ html, robotsTxt, llmsTxtContent, llmsFullTxtContent, businessFacts = {}, url = '' }) {
   const passage = scorePassageCitability(html || '');
   const crawlers = analyzeAiCrawlerAccess(robotsTxt || '');
   const llms = analyzeLlmsTxt(llmsTxtContent, llmsFullTxtContent);
@@ -263,9 +269,21 @@ function analyzeGeo({ html, robotsTxt, llmsTxtContent, llmsFullTxtContent, busin
   const crawlersScore = Math.round(((Object.keys(crawlers).length - blockedCrawlers.length) / Object.keys(crawlers).length) * 100);
   const llmsTxtScore = llms.llmsTxt.present ? 100 : 0;
 
-  // Weighted overall: passage citability is the biggest lever (50%),
-  // crawler access is binary-but-critical (30%), llms.txt is emerging (20%)
-  const overall = Math.round(passage.score * 0.5 + crawlersScore * 0.3 + llmsTxtScore * 0.2);
+  // Hreflang sub-check (free, no extra fetch). Score=100 (not-applicable)
+  // for sites without hreflang so single-region sites aren't penalized.
+  let hreflang = null;
+  try {
+    const { checkHreflang } = require('./hreflangChecker');
+    hreflang = checkHreflang({ html: html || '', url });
+  } catch {}
+  const hreflangScore = hreflang ? hreflang.score : 100;
+  const hreflangFindings = hreflang ? hreflang.findings : [];
+
+  // Weighted overall: passage 45%, crawlers 25%, llms.txt 15%, hreflang 15%
+  // (only meaningful when applicable; otherwise contributes 100% baseline).
+  const overall = Math.round(
+    passage.score * 0.45 + crawlersScore * 0.25 + llmsTxtScore * 0.15 + hreflangScore * 0.15
+  );
   const status = overall >= 75 ? 'pass' : overall >= 50 ? 'warn' : 'fail';
 
   const fixes = buildGeoFixes({
@@ -275,6 +293,15 @@ function analyzeGeo({ html, robotsTxt, llmsTxtContent, llmsFullTxtContent, busin
     blockedCrawlers,
     businessFacts
   });
+  // Merge hreflang findings into the geo fixes array
+  for (const hf of hreflangFindings) {
+    fixes.push({
+      key: hf.key,
+      severity: hf.severity,
+      title: hf.title,
+      detail: hf.detail
+    });
+  }
 
   return {
     overallScore: overall,
@@ -286,9 +313,11 @@ function analyzeGeo({ html, robotsTxt, llmsTxtContent, llmsFullTxtContent, busin
     llmsTxt: llms.llmsTxt,
     llmsFullTxt: llms.llmsFullTxt,
     llmsTxtScore,
-    weights: { passage: 0.5, crawlers: 0.3, llmsTxt: 0.2 },
+    hreflang,
+    hreflangScore,
+    weights: { passage: 0.45, crawlers: 0.25, llmsTxt: 0.15, hreflang: 0.15 },
     fixes,
-    note: 'GEO scoring based on AI-search citation signals: passage extractability, crawler access (GPTBot/ClaudeBot/PerplexityBot/etc), llms.txt standard. No runtime LLM calls — pure structural analysis.'
+    note: 'GEO scoring: passage extractability, crawler access (GPTBot/ClaudeBot/PerplexityBot/etc), llms.txt standard, hreflang validity. No runtime LLM calls.'
   };
 }
 

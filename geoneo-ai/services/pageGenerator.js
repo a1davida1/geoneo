@@ -22,6 +22,15 @@ function titleCase(str) {
   return normalize(str).replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+function escapeHtml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 /**
  * Generate a location + service page template.
  */
@@ -34,32 +43,37 @@ function generateLocationServicePage({
   phone = '',
   address = '',
   yearsInBusiness = '',
-  schemaType = 'LocalBusiness'
+  schemaType = 'LocalBusiness',
+  baseUrl = 'https://example.com'
 }) {
-  const safeCity = titleCase(city);
-  const safeState = state.toUpperCase();
-  const safeService = titleCase(service);
-  const safeIndustry = titleCase(industry || service);
-  const safeName = normalize(businessName) || `${safeService} in ${safeCity}`;
+  const formattedCity = titleCase(city);
+  const formattedState = state.toUpperCase();
+  const formattedService = titleCase(service);
+  const formattedIndustry = titleCase(industry || service);
+  const formattedName = normalize(businessName) || `${formattedService} in ${formattedCity}`;
+  const safeName = escapeHtml(formattedName);
+  const safeCity = escapeHtml(formattedCity);
+  const safeState = escapeHtml(formattedState);
+  const safeService = escapeHtml(formattedService);
 
-  const slug = slugify(`${safeService} ${safeCity} ${safeState}`);
-  const title = `${safeService} in ${safeCity}, ${safeState} | ${safeName}`;
-  const metaDesc = `Expert ${safeService.toLowerCase()} in ${safeCity}, ${safeState}. ${yearsInBusiness ? `${yearsInBusiness} years serving the area. ` : ''}Call ${phone || 'today'} for fast, reliable service.`;
+  const slug = slugify(`${formattedService} ${formattedCity} ${formattedState}`);
+  const title = `${formattedService} in ${formattedCity}, ${formattedState} | ${formattedName}`;
+  const metaDesc = `Expert ${formattedService.toLowerCase()} in ${formattedCity}, ${formattedState}. ${yearsInBusiness ? `${yearsInBusiness} years serving the area. ` : ''}Call ${phone || 'today'} for fast, reliable service.`;
 
   const schema = {
     '@context': 'https://schema.org',
     '@type': schemaType,
-    name: safeName,
+    name: formattedName,
     address: address ? {
       '@type': 'PostalAddress',
       streetAddress: address,
-      addressLocality: safeCity,
-      addressRegion: safeState
+      addressLocality: formattedCity,
+      addressRegion: formattedState
     } : undefined,
     telephone: phone || undefined,
     areaServed: {
       '@type': 'City',
-      name: safeCity
+      name: formattedCity
     },
     description: metaDesc
   };
@@ -71,26 +85,26 @@ function generateLocationServicePage({
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${title}</title>
   <meta name="description" content="${metaDesc}">
-  <link rel="canonical" href="https://example.com/${slug}">
+  <link rel="canonical" href="${escapeHtml(baseUrl)}/${escapeHtml(slug)}">
   <script type="application/ld+json">${JSON.stringify(schema, null, 2)}</script>
 </head>
 <body>
   <header>
-    <h1>${safeService} in ${safeCity}, ${safeState}</h1>
-    ${phone ? `<a href="tel:${phone.replace(/[^\d+]/g, '')}" class="cta-phone">${phone}</a>` : ''}
+    <h1>${escapeHtml(formattedService)} in ${escapeHtml(formattedCity)}, ${escapeHtml(formattedState)}</h1>
+    ${phone ? `<a href="tel:${escapeHtml(phone.replace(/[^\d+]/g, ''))}" class="cta-phone">${escapeHtml(phone)}</a>` : ''}
   </header>
 
   <main>
     <section>
-      <h2>Professional ${safeService} Services in ${safeCity}</h2>
-      <p>${safeName} has been providing trusted ${safeService.toLowerCase()} throughout ${safeCity} and the surrounding ${safeState} area${yearsInBusiness ? ` for ${yearsInBusiness}` : ''}.</p>
+      <h2>Professional ${escapeHtml(formattedService)} Services in ${escapeHtml(formattedCity)}</h2>
+      <p>${escapeHtml(formattedName)} has been providing trusted ${escapeHtml(formattedService.toLowerCase())} throughout ${escapeHtml(formattedCity)} and the surrounding ${escapeHtml(formattedState)} area${yearsInBusiness ? ` for ${escapeHtml(yearsInBusiness)}` : ''}.</p>
     </section>
 
     <section>
       <h2>Why Choose Us for ${safeService} in ${safeCity}?</h2>
       <ul>
         <li>Local experts who know ${safeCity} inside and out</li>
-        <li>Fast response times across the ${safeCity} metro</li>
+        <li>Fast response times across the ${formattedCity} metro</li>
         <li>Transparent pricing with no hidden fees</li>
         <li>Fully licensed, bonded, and insured</li>
       </ul>
@@ -98,7 +112,7 @@ function generateLocationServicePage({
 
     <section>
       <h2>Service Areas</h2>
-      <p>We proudly serve all neighborhoods in ${safeCity} and nearby communities in ${safeState}.</p>
+      <p>We proudly serve all neighborhoods in ${formattedCity} and nearby communities in ${formattedState}.</p>
     </section>
   </main>
 

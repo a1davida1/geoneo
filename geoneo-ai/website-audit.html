@@ -71,7 +71,8 @@
         <label>
           Industry / vertical
           <select id="websiteIndustry"></select>
-          <input id="websiteIndustryCustom" type="text" placeholder="Custom vertical (e.g. epoxy flooring)" style="display:none;margin-top:0.5rem;" />
+          <label for="websiteIndustryCustom" class="sr-only">Custom vertical</label>
+          <input id="websiteIndustryCustom" type="text" placeholder="Custom vertical (e.g. epoxy flooring)" style="display:none;margin-top:0.5rem;" aria-hidden="true" />
         </label>
 
         <!-- Lead Capture (required for free scan persistence) -->
@@ -105,7 +106,8 @@
             <select id="websiteCityPreset" class="city-preset" aria-label="Choose a city from list (optional)">
               <option value="">Select a state first…</option>
             </select>
-            <input id="websiteCity" name="city" type="text" placeholder="Or type any city" />
+            <label for="websiteCity" class="sr-only">City (type to enter)</label>
+            <input id="websiteCity" name="city" type="text" placeholder="Or type any city" aria-label="City (type to enter)" />
           </label>
           <label>
             State (optional)

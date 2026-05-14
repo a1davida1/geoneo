@@ -45,15 +45,137 @@ function candidateKey(candidate) {
   return normalizeDomainToken(candidate.domain || candidate.website || candidate.url || candidate.companyName || candidate.businessName);
 }
 
-function isBusinessCandidate(row) {
+// Domains that are aggregators / directories / social / publishers — never the
+// "real" business site we want to audit. Match against root domain.
+const AGGREGATOR_BLOCKLIST = [
+  // generic local directories
+  'yelp.com', 'tripadvisor.com', 'bbb.org', 'angi.com', 'angieslist.com', 'homeadvisor.com',
+  'mapquest.com', 'thumbtack.com', 'nextdoor.com', 'foursquare.com',
+  'yellowpages.com', 'superpages.com', 'citysearch.com', 'manta.com', 'dexknows.com',
+  'whitepages.com', 'expertise.com', 'three-best-rated.com', 'threebestrated.com',
+  'porch.com', 'houzz.com', 'buildzoom.com', 'bark.com',
+  'modernize.com', 'networx.com', 'homeguide.com', 'sears.com',
+  'contractorconnection.com', 'serviceseeking.com', 'taskrabbit.com',
+  'handy.com', 'fivelistly.com', 'quora.com',
+  // social / search
+  'facebook.com', 'instagram.com', 'twitter.com', 'x.com', 'pinterest.com',
+  'tiktok.com', 'youtube.com', 'linkedin.com', 'reddit.com', 'quora.com',
+  'google.com', 'bing.com', 'duckduckgo.com',
+  // category-specific verticals (listings, not the businesses themselves)
+  'weddingwire.com', 'theknot.com', 'zola.com', 'eventbrite.com', 'ticketmaster.com',
+  'opentable.com', 'resy.com', 'yelp.co.uk',
+  'zillow.com', 'realtor.com', 'redfin.com', 'trulia.com', 'homes.com',
+  'vrbo.com', 'airbnb.com', 'booking.com', 'hotels.com', 'expedia.com', 'kayak.com',
+  'avvo.com', 'findlaw.com', 'justia.com', 'lawyers.com', 'martindale.com',
+  'healthgrades.com', 'zocdoc.com', 'vitals.com', 'webmd.com',
+  // wikipedia / news / publishing
+  'wikipedia.org', 'wikimedia.org', 'medium.com', 'substack.com',
+  'nytimes.com', 'washingtonpost.com', 'usatoday.com', 'cnn.com', 'foxnews.com',
+  'npr.org', 'bbc.com', 'huffpost.com', 'forbes.com', 'inc.com', 'entrepreneur.com'
+];
+
+// Title patterns that mean "listicle / roundup article", not a real business site.
+const LISTICLE_TITLE_PATTERNS = [
+  /^\s*top\s+\d+\b/i,
+  /^\s*best\s+\d+\b/i,
+  /^\s*\d+\s+best\b/i,
+  /^\s*the\s+\d+\s+(best|top)\b/i,
+  /\b(best|top)\s+\d+\s+(of|in|for)\b/i,
+  /\bbest\s+(of\s+)?(the\s+)?\d{4}\b/i, // "best of 2024"
+  /\b(best|top)\s+[a-z\s]{3,40}\s+(in|near|of|for)\s+[A-Z][a-z]/i, // "best plumbers in Branson"
+  /\broundup\b/i,
+  /\bcompare\s+the\s+best\b/i,
+  /\bawards?\s*\|?\s*\d{4}\b/i // "Awards | 2024"
+];
+
+// URL paths that signal an article, not a homepage.
+const ARTICLE_PATH_PATTERNS = [
+  /\/blog\//i,
+  /\/article(s)?\//i,
+  /\/news\//i,
+  /\/press\//i,
+  /\/\d{4}\/\d{2}\//, // /2024/05/
+  /\/best-(of|the)\b/i,
+  /\/top-\d+\b/i,
+  /\/reviews?\//i,
+  /\/category\//i,
+  /\/tag\//i,
+  /\/author\//i
+];
+
+function isBlockedAggregator(domain) {
+  if (!domain) return false;
+  return AGGREGATOR_BLOCKLIST.some((suffix) => domain === suffix || domain.endsWith(`.${suffix}`));
+}
+
+function looksLikeListicleTitle(title) {
+  const t = normalizeString(title);
+  if (!t) return false;
+  return LISTICLE_TITLE_PATTERNS.some((rx) => rx.test(t));
+}
+
+function looksLikeArticlePath(urlOrWebsite) {
+  const u = normalizeString(urlOrWebsite);
+  if (!u) return false;
+  let pathname = '';
+  try { pathname = new URL(u.startsWith('http') ? u : `https://${u}`).pathname || '/'; }
+  catch { return false; }
+  if (pathname === '/' || pathname === '') return false;
+  return ARTICLE_PATH_PATTERNS.some((rx) => rx.test(pathname));
+}
+
+/**
+ * Reject before reaching the candidate list:
+ *   - aggregators / directories / social / news publishers
+ *   - listicle / roundup article titles
+ *   - URLs that point at /blog/ /article/ /2024/05/ etc instead of a homepage
+ *
+ * Returns { ok, reason }. `ok=false` means do not include as a candidate.
+ */
+function classifyCandidateQuality(row) {
+  const domain = normalizeDomainToken(row.domain || row.website || row.url);
+  if (!domain) return { ok: false, reason: 'no_domain' };
+
   const resultType = normalizeString(row.resultType).toLowerCase();
   const category = normalizeString(row.category).toLowerCase();
-  if (resultType && !['local_business', 'business', 'organic_business', 'website'].includes(resultType)) return false;
-  if (category && category !== 'business') return false;
-  const domain = normalizeDomainToken(row.domain || row.website || row.url);
-  if (!domain) return false;
-  const blocked = ['yelp.com', 'tripadvisor.com', 'facebook.com', 'bbb.org', 'angi.com', 'homeadvisor.com', 'mapquest.com'];
-  return !blocked.some((suffix) => domain === suffix || domain.endsWith(`.${suffix}`));
+  // Whitelist permissive — only reject EXPLICIT non-business types like
+  // "article", "video", "pdf". Unknown/missing → allow and let other
+  // signals (aggregator blocklist, listicle title, article path) decide.
+  // 'unknown' = SerpAPI didn't classify it. Don't reject those — let other
+  // signals (aggregator blocklist, listicle title, article path) decide.
+  const ALLOWED_RESULT_TYPES = ['local_business', 'business', 'organic_business', 'website', 'organic', 'unknown', '', null, undefined];
+  const ALLOWED_CATEGORIES = ['business', 'local', 'unknown', 'organic', '', null, undefined];
+  if (resultType && !ALLOWED_RESULT_TYPES.includes(resultType)) {
+    return { ok: false, reason: `result_type:${resultType}` };
+  }
+  if (category && !ALLOWED_CATEGORIES.includes(category)) {
+    return { ok: false, reason: `category:${category}` };
+  }
+
+  if (isBlockedAggregator(domain)) {
+    return { ok: false, reason: 'aggregator_or_directory' };
+  }
+
+  if (looksLikeListicleTitle(row.title || row.businessName || row.name)) {
+    return { ok: false, reason: 'listicle_title' };
+  }
+
+  if (looksLikeArticlePath(row.url || row.website)) {
+    return { ok: false, reason: 'article_path' };
+  }
+
+  // SLD-level hint: if the second-level label itself contains "best", "top10",
+  // "reviews", treat as suspicious unless source already classified it as business.
+  const sld = domain.split('.').slice(0, -1).join('.');
+  if (/^(best|top\d|topten|reviews?|guide)/i.test(sld) && resultType !== 'local_business') {
+    return { ok: false, reason: 'reviewish_sld' };
+  }
+
+  return { ok: true };
+}
+
+function isBusinessCandidate(row) {
+  return classifyCandidateQuality(row).ok;
 }
 
 function rowToCandidate(row, opts = {}, source = 'market') {
@@ -87,17 +209,119 @@ function extractLeadGenCandidates(marketModel, opts = {}) {
   ];
   const seen = new Set();
   const out = [];
+  const rejectedByDomain = new Map(); // dedup: same domain across queries = one entry
   for (const row of rows) {
-    if (!row || !isBusinessCandidate(row)) continue;
+    if (!row) continue;
+    const quality = classifyCandidateQuality(row);
+    if (!quality.ok) {
+      const dom = normalizeDomainToken(row.domain || row.website || row.url) || `_${rejectedByDomain.size}`;
+      const existing = rejectedByDomain.get(dom);
+      if (existing) {
+        existing.appearances += 1;
+      } else {
+        rejectedByDomain.set(dom, {
+          domain: dom,
+          title: normalizeString(row.title || row.businessName || row.name),
+          reason: quality.reason,
+          appearances: 1
+        });
+      }
+      continue;
+    }
     const candidate = rowToCandidate(row, opts);
+    candidate.title = normalizeString(row.title || candidate.businessName);
     const key = candidateKey(candidate);
     if (!key || seen.has(key)) continue;
     seen.add(key);
     out.push(candidate);
     if (out.length >= quantity) break;
   }
+  // Tag the array with diagnostic info that the discovery endpoint can surface.
+  Object.defineProperty(out, '_rejected', { value: Array.from(rejectedByDomain.values()).slice(0, 50), enumerable: false });
   return out;
 }
+
+/**
+ * 7-bucket SEO owner classifier.
+ *
+ * Buckets (from "shoestring" to "white shoe"):
+ *   diy_self          — owner built it themselves, no SEO tooling
+ *   diy_with_help     — DIY platform but a Yoast/RankMath plugin is on
+ *   local_marketer    — single freelancer / web designer footprint
+ *   boutique_agency   — small agency (custom WP + GTM + 2-3 SEO tools)
+ *   national_agency   — major SEO/marketing agency vendor footprint
+ *   inhouse_team      — enterprise CMS + sophisticated markup
+ *   unknown           — not enough signal
+ *
+ * Returns { classification, confidence, evidence[], scores{} } so the UI can
+ * show *why* and the closer can read it back without inventing reasons.
+ */
+const NATIONAL_AGENCY_VENDORS = [
+  { rx: /\bscorpion(\.co|inc|healthcare|cms)\b|cdn\.scorpion/i, label: 'Scorpion footprint detected' },
+  { rx: /\bthryv\b/i, label: 'Thryv footprint detected' },
+  { rx: /\bblue\s*corona\b/i, label: 'Blue Corona footprint detected' },
+  { rx: /\brev[\s-]?local\b/i, label: 'RevLocal footprint detected' },
+  { rx: /\bweb\s*fx\b/i, label: 'WebFX footprint detected' },
+  { rx: /\bhibu\b/i, label: 'Hibu footprint detected' },
+  { rx: /\brankings?\.io\b/i, label: 'Rankings.io footprint detected' },
+  { rx: /\bsearchkings?\b/i, label: 'SearchKings footprint detected' },
+  { rx: /\bnetsertive\b/i, label: 'Netsertive footprint detected' },
+  { rx: /\bsurefire\s*local\b/i, label: 'Surefire Local footprint detected' },
+  { rx: /\bbrightlocal\b/i, label: 'BrightLocal tooling detected' },
+  { rx: /\bhennessey\s*digital\b/i, label: 'Hennessey Digital footprint detected' },
+  { rx: /\bsmile\s*group\b/i, label: 'Smile Group footprint detected' },
+  { rx: /\bjuris\s*page\b/i, label: 'JurisPage footprint detected' },
+  { rx: /\b(podium|birdeye)\b/i, label: 'Podium / Birdeye review tooling' }
+];
+
+const BOUTIQUE_AGENCY_HINTS = [
+  /website (?:by|design(?:ed)? by|powered by|built by) [a-z0-9 .,&'-]{3,40}/i,
+  /(digital marketing|seo agency|web design agency|marketing agency) [a-z]{3,30}/i,
+  /<a[^>]*href="https?:\/\/[^"]+(agency|marketing|media|design)[^"]*"[^>]*>/i
+];
+
+const PRO_TOOLING_HINTS = [
+  { rx: /yoast (seo|premium)/i, label: 'Yoast SEO plugin' },
+  { rx: /rank\s*math/i, label: 'RankMath SEO plugin' },
+  { rx: /all in one seo/i, label: 'AIOSEO plugin' },
+  { rx: /(gtm-[a-z0-9]+|googletagmanager\.com)/i, label: 'Google Tag Manager' },
+  { rx: /(google-?analytics|gtag\(|datalayer|UA-\d{4,}-\d|G-[A-Z0-9]{6,})/i, label: 'Google Analytics' },
+  { rx: /(facebook\.com\/tr|fbq\(['"]init['"])/i, label: 'Meta Pixel' },
+  { rx: /(linkedin\.com\/insight|_linkedin_partner_id)/i, label: 'LinkedIn Insight Tag' },
+  { rx: /hotjar\.com/i, label: 'Hotjar analytics' },
+  { rx: /clarity\.ms/i, label: 'Microsoft Clarity' }
+];
+
+const DIY_PLATFORM_HINTS = [
+  { rx: /wixsite\.com|wixstatic\.com|wix-\w+\.com/i, label: 'Wix site' },
+  { rx: /godaddysites\.com|godaddy[\s-]*website[\s-]*builder/i, label: 'GoDaddy site builder' },
+  { rx: /weebly\.com/i, label: 'Weebly' },
+  { rx: /sites\.google\.com/i, label: 'Google Sites' },
+  { rx: /yola\.(com|net)/i, label: 'Yola' },
+  { rx: /jimdo(site|free)?\.com/i, label: 'Jimdo' },
+  { rx: /strikingly\.com/i, label: 'Strikingly' }
+];
+
+const ENTERPRISE_CMS_HINTS = [
+  { rx: /\bdrupal\b|\/sites\/default\/files\//i, label: 'Drupal' },
+  { rx: /\badobe\s*experience\s*manager\b|aem\.live/i, label: 'Adobe Experience Manager' },
+  { rx: /\bsitecore\b/i, label: 'Sitecore' },
+  { rx: /\bcontentful\b/i, label: 'Contentful headless CMS' },
+  { rx: /\bcontentstack\b/i, label: 'Contentstack' },
+  { rx: /\bsanity(\.io)?\b/i, label: 'Sanity headless CMS' },
+  { rx: /\bnext\.js\b|__NEXT_DATA__/i, label: 'Next.js application' },
+  { rx: /\bgatsby\.js\b|___gatsby/i, label: 'Gatsby site' }
+];
+
+const COMMON_CMS_HINTS = [
+  { rx: /\/wp-(content|includes)\//i, label: 'WordPress' },
+  { rx: /elementor/i, label: 'Elementor builder' },
+  { rx: /\bdivi(-builder)?\b/i, label: 'Divi theme/builder' },
+  { rx: /squarespace\.com|static\.squarespace\.com/i, label: 'Squarespace' },
+  { rx: /webflow\.com|wf-domain/i, label: 'Webflow' },
+  { rx: /shopify\.com|cdn\.shopify\.com/i, label: 'Shopify' },
+  { rx: /duda\b|dudamobile/i, label: 'Duda' }
+];
 
 function assessSeoProvider(input = {}) {
   const htmlLower = normalizeString(input.html).toLowerCase();
@@ -106,10 +330,8 @@ function assessSeoProvider(input = {}) {
   const audit = input.auditResult || {};
   const seoSignals = audit?.siteProfile?.seoSignals || {};
   const googleSeo = Number(audit?.googleGrades?.seo);
-  const signals = [];
 
-  /** Raw HTML (when present) + visible excerpt + title so CMS/stack regexes match while plain-text cues still apply. */
-  function matchesOnPage(pattern) {
+  function onPage(pattern) {
     return (
       (htmlLower && pattern.test(htmlLower)) ||
       (textLower && pattern.test(textLower)) ||
@@ -117,54 +339,155 @@ function assessSeoProvider(input = {}) {
     );
   }
 
-  const agencyPatterns = [
-    /website (?:by|design(?:ed)? by|powered by) [a-z0-9 .,&-]*(agency|marketing|media|seo|web)/i,
-    /(digital marketing|seo agency|web design agency|marketing agency)/i,
-    /(brightlocal|scorpion|thryv|hennessey|rankings\.io|blue corona|revlocal|webfx)/i
-  ];
-  const proPatterns = [
-    /(yoast seo|rank math|all in one seo|semrush|schema\.org|localbusiness)/i,
-    /(google tag manager|gtm-|google analytics|dataLayer)/i,
-    /(wordpress|wp-content|elementor|divi|webflow|squarespace)/i
-  ];
-  const diyPatterns = [
-    /<title>\s*(home|welcome)\s*<\/title>/i,
-    /^\s*(home|welcome)\s*$/i,
-    /(wixsite|godaddysites|weebly|sites\.google\.com)/i
-  ];
+  const evidence = {
+    national: [],
+    boutique: [],
+    diy: [],
+    pro: [],
+    enterprise: [],
+    cms: []
+  };
 
-  for (const pattern of agencyPatterns) {
-    if (matchesOnPage(pattern)) signals.push({ type: 'agency', evidence: pattern.toString() });
-  }
-  for (const pattern of proPatterns) {
-    if (matchesOnPage(pattern)) signals.push({ type: 'pro', evidence: pattern.toString() });
-  }
-  for (const pattern of diyPatterns) {
-    if (matchesOnPage(pattern)) signals.push({ type: 'diy', evidence: pattern.toString() });
-  }
-  if (Number(seoSignals.schemaCount || 0) > 0 && (seoSignals.canonical || seoSignals.robotsMeta || seoSignals.sitemap)) {
-    signals.push({ type: 'pro', evidence: 'Structured data plus canonical/robots/sitemap signals present.' });
-  }
-  if (Number.isFinite(googleSeo) && googleSeo >= 85) {
-    signals.push({ type: 'pro', evidence: `Google SEO grade is strong (${googleSeo}/100).` });
-  }
-  if (Number.isFinite(googleSeo) && googleSeo < 55 && Number(seoSignals.schemaCount || 0) === 0 && !seoSignals.canonical) {
-    signals.push({ type: 'diy', evidence: `Low SEO grade (${googleSeo}/100) with missing core technical SEO signals.` });
+  for (const v of NATIONAL_AGENCY_VENDORS) if (onPage(v.rx)) evidence.national.push(v.label);
+  for (const v of DIY_PLATFORM_HINTS) if (onPage(v.rx)) evidence.diy.push(v.label);
+  for (const v of ENTERPRISE_CMS_HINTS) if (onPage(v.rx)) evidence.enterprise.push(v.label);
+  for (const v of PRO_TOOLING_HINTS) if (onPage(v.rx)) evidence.pro.push(v.label);
+  for (const v of COMMON_CMS_HINTS) if (onPage(v.rx)) evidence.cms.push(v.label);
+  for (const rx of BOUTIQUE_AGENCY_HINTS) {
+    const m = htmlLower && htmlLower.match(rx);
+    if (m && m[0]) evidence.boutique.push(`Footer/credit line: "${m[0].slice(0, 90)}"`);
   }
 
-  if (signals.some((s) => s.type === 'agency')) {
-    return { classification: 'agency', confidence: 'high', evidence: signals.filter((s) => s.type === 'agency').map((s) => s.evidence).slice(0, 4) };
-  }
-  if (signals.some((s) => s.type === 'pro')) {
-    return { classification: 'pro', confidence: 'medium', evidence: signals.filter((s) => s.type === 'pro').map((s) => s.evidence).slice(0, 4) };
-  }
-  if (signals.some((s) => s.type === 'diy')) {
-    return { classification: 'diy_local', confidence: 'medium', evidence: signals.filter((s) => s.type === 'diy').map((s) => s.evidence).slice(0, 4) };
-  }
+  if (Number(seoSignals.schemaCount || 0) >= 2) evidence.pro.push(`${seoSignals.schemaCount} JSON-LD schema blocks present`);
+  if (seoSignals.canonical && seoSignals.sitemap && seoSignals.robotsMeta) evidence.pro.push('Canonical + sitemap + robots meta all present');
+  if (Number.isFinite(googleSeo) && googleSeo >= 85) evidence.pro.push(`Strong technical SEO grade (${googleSeo}/100)`);
+  if (Number.isFinite(googleSeo) && googleSeo < 50 && Number(seoSignals.schemaCount || 0) === 0) evidence.diy.push(`Weak SEO grade (${googleSeo}/100) with no schema`);
+
+  // No data at all
   if (!htmlLower && !textLower && !title) {
-    return { classification: 'unknown', confidence: 'low', evidence: ['No page HTML/title available for attribution.'] };
+    return {
+      classification: 'unknown',
+      label: 'Unknown',
+      confidence: 'low',
+      evidence: ['No page HTML/title available for attribution'],
+      scores: {}
+    };
   }
-  return { classification: 'unknown', confidence: 'low', evidence: ['No clear SEO provider footprint detected.'] };
+
+  const proCount = evidence.pro.length;
+  const cmsCount = evidence.cms.length;
+  const diyCount = evidence.diy.length;
+  const boutiqueCount = evidence.boutique.length;
+  const nationalCount = evidence.national.length;
+  const enterpriseCount = evidence.enterprise.length;
+
+  // National agency: explicit vendor footprint wins immediately.
+  if (nationalCount > 0) {
+    return {
+      classification: 'national_agency',
+      label: 'National agency',
+      confidence: 'high',
+      evidence: evidence.national.slice(0, 4),
+      scores: { national: nationalCount, boutique: boutiqueCount, pro: proCount, diy: diyCount }
+    };
+  }
+
+  // Enterprise team: AEM/Sitecore/Drupal/Next.js + at least 1 pro signal.
+  if (enterpriseCount > 0 && proCount >= 1) {
+    return {
+      classification: 'inhouse_team',
+      label: 'In-house team',
+      confidence: enterpriseCount >= 2 || proCount >= 3 ? 'high' : 'medium',
+      evidence: [...evidence.enterprise, ...evidence.pro].slice(0, 4),
+      scores: { enterprise: enterpriseCount, pro: proCount }
+    };
+  }
+
+  // Boutique agency: explicit footer credit beats heuristics.
+  if (boutiqueCount > 0 && proCount >= 1) {
+    return {
+      classification: 'boutique_agency',
+      label: 'Boutique agency',
+      confidence: 'high',
+      evidence: [...evidence.boutique, ...evidence.pro].slice(0, 4),
+      scores: { boutique: boutiqueCount, pro: proCount }
+    };
+  }
+
+  // DIY platform with help (Wix + Yoast, etc.) or strong pro tooling without diy markers.
+  if (diyCount > 0 && proCount >= 1) {
+    return {
+      classification: 'diy_with_help',
+      label: 'DIY with help',
+      confidence: 'medium',
+      evidence: [...evidence.diy, ...evidence.pro].slice(0, 4),
+      scores: { diy: diyCount, pro: proCount }
+    };
+  }
+
+  // Pure DIY platform.
+  if (diyCount > 0) {
+    return {
+      classification: 'diy_self',
+      label: 'DIY (owner-built)',
+      confidence: 'high',
+      evidence: evidence.diy.slice(0, 4),
+      scores: { diy: diyCount }
+    };
+  }
+
+  // Local marketer / freelancer: WordPress with 2+ pro tools, no agency credit.
+  if (cmsCount > 0 && proCount >= 2) {
+    return {
+      classification: 'local_marketer',
+      label: 'Local marketer / freelancer',
+      confidence: proCount >= 3 ? 'medium' : 'low',
+      evidence: [...evidence.cms, ...evidence.pro].slice(0, 4),
+      scores: { cms: cmsCount, pro: proCount }
+    };
+  }
+
+  // CMS only or pro tooling only — partial signal.
+  if (proCount >= 2 || cmsCount >= 1) {
+    return {
+      classification: 'local_marketer',
+      label: 'Local marketer / freelancer',
+      confidence: 'low',
+      evidence: [...evidence.cms, ...evidence.pro].slice(0, 4),
+      scores: { cms: cmsCount, pro: proCount }
+    };
+  }
+
+  // Some pro signal but no CMS — could be DIY with one plugin.
+  if (proCount === 1) {
+    return {
+      classification: 'diy_with_help',
+      label: 'DIY with help',
+      confidence: 'low',
+      evidence: evidence.pro.slice(0, 4),
+      scores: { pro: proCount }
+    };
+  }
+
+  // Boutique credit alone (footer says "website by X agency") with no other tooling
+  // is still a useful signal — call it local_marketer at low confidence.
+  if (boutiqueCount > 0) {
+    return {
+      classification: 'local_marketer',
+      label: 'Local marketer / freelancer',
+      confidence: 'low',
+      evidence: evidence.boutique.slice(0, 4),
+      scores: { boutique: boutiqueCount }
+    };
+  }
+
+  return {
+    classification: 'unknown',
+    label: 'Unknown',
+    confidence: 'low',
+    evidence: ['No clear CMS, agency, or SEO tooling footprint detected'],
+    scores: {}
+  };
 }
 
 function uniqueMatches(text, regex, limit = 5) {
@@ -182,11 +505,89 @@ function uniqueMatches(text, regex, limit = 5) {
   return out;
 }
 
+/**
+ * Reverse common email obfuscations so the regex below can catch them:
+ *   "name [at] domain.com"      → "name@domain.com"
+ *   "name (at) domain (dot) com" → "name@domain.com"
+ *   "name AT domain DOT com"     → "name@domain.com"
+ *   "name @ domain . com"        → "name@domain.com"
+ */
+function deobfuscateEmails(input) {
+  if (!input) return '';
+  let s = String(input);
+  s = s.replace(/\s*[\[\(\{]\s*at\s*[\]\)\}]\s*/gi, '@');
+  s = s.replace(/\s+at\s+(?=[a-z0-9.-]+\.[a-z]{2,})/gi, '@');
+  s = s.replace(/\s*[\[\(\{]\s*dot\s*[\]\)\}]\s*/gi, '.');
+  s = s.replace(/\s+dot\s+(?=[a-z]{2,})/gi, '.');
+  s = s.replace(/\s+@\s+/g, '@');
+  return s;
+}
+
+/**
+ * Pull emails + phones out of one HTML payload.
+ * Handles tel:/mailto: hrefs, visible-text matches, JSON-LD telephone fields,
+ * and "name [at] domain dot com" obfuscation.
+ */
+function extractContactsFromHtml(html) {
+  const raw = String(html || '');
+  if (!raw) return { phones: [], emails: [], hasAddress: false };
+
+  const textForEmails = deobfuscateEmails(raw);
+
+  const mailtoRe = /href=["']mailto:([^"'?]+)/gi;
+  const telRe = /href=["']tel:([^"']+)/gi;
+  const phoneTextRe = /(?:\+?1[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}/g;
+  const emailTextRe = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
+
+  const phoneSet = new Set();
+  const emailSet = new Set();
+
+  let m;
+  while ((m = mailtoRe.exec(raw)) !== null) {
+    if (m[1]) emailSet.add(m[1].trim().toLowerCase());
+  }
+  while ((m = telRe.exec(raw)) !== null) {
+    if (m[1]) phoneSet.add(m[1].replace(/[^\d+]/g, ''));
+  }
+  for (const match of textForEmails.match(emailTextRe) || []) {
+    emailSet.add(match.trim().toLowerCase());
+  }
+  for (const match of raw.match(phoneTextRe) || []) {
+    const cleaned = match.replace(/[^\d+]/g, '');
+    if (cleaned.replace(/\D/g, '').length >= 10) phoneSet.add(cleaned);
+  }
+
+  // Filter out obvious junk emails (pixel tracking, image filenames, etc.)
+  const isUsableEmail = (e) => {
+    if (!/@/.test(e)) return false;
+    if (/\.(png|jpg|jpeg|gif|svg|webp|ico)$/i.test(e)) return false;
+    if (/(sentry|wixpress|squarespace-cdn|cloudfront|gstatic|googleusercontent)/i.test(e)) return false;
+    if (/^(no-?reply|donotreply|postmaster|webmaster|abuse|hostmaster)@/i.test(e)) return false;
+    return true;
+  };
+
+  return {
+    phones: Array.from(phoneSet).slice(0, 6),
+    emails: Array.from(emailSet).filter(isUsableEmail).slice(0, 6),
+    hasAddress: /\b\d{1,6}\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+(St|Ave|Rd|Blvd|Dr|Ln|Way|Ct|Pl|Hwy)\b/.test(raw)
+  };
+}
+
 function extractContactInfo(input = {}) {
   const text = normalizeString(input.text || input.html || input.visibleText);
   const signals = input?.auditResult?.siteProfile?.contactSignals || {};
-  const phones = uniqueMatches(text, /(?:\+?1[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}/g, 5);
-  const emails = uniqueMatches(text, /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, 5);
+  // Use the new HTML extractor when we have HTML; fall back to plain-text regex otherwise.
+  let phones = [];
+  let emails = [];
+  if (input.html || /<[a-z][^>]*>/i.test(text)) {
+    const c = extractContactsFromHtml(input.html || text);
+    phones = c.phones;
+    emails = c.emails;
+  } else if (text) {
+    const detext = deobfuscateEmails(text);
+    phones = uniqueMatches(text, /(?:\+?1[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}/g, 5);
+    emails = uniqueMatches(detext, /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, 5);
+  }
   const hasPhone = Boolean(signals.phone || phones.length);
   const hasEmail = Boolean(signals.email || emails.length);
   const hasAddress = Boolean(signals.address);
@@ -207,6 +608,42 @@ function extractContactInfo(input = {}) {
     phones,
     emails,
     bestChannel
+  };
+}
+
+/**
+ * Merge multiple raw contact lookups into a single dedup'd result.
+ * Used when discovery fetches /, /contact, and /about for one candidate.
+ */
+function mergeContacts(...lookups) {
+  const phones = new Set();
+  const emails = new Set();
+  let hasAddress = false;
+  for (const lookup of lookups) {
+    if (!lookup) continue;
+    (lookup.phones || []).forEach((p) => phones.add(p));
+    (lookup.emails || []).forEach((e) => emails.add(e.toLowerCase()));
+    if (lookup.hasAddress) hasAddress = true;
+  }
+  const phoneList = Array.from(phones).slice(0, 6);
+  const emailList = Array.from(emails).slice(0, 6);
+  const hasPhone = phoneList.length > 0;
+  const hasEmail = emailList.length > 0;
+  const score = Math.min(100,
+    (hasPhone ? 35 : 0) +
+    (hasEmail ? 35 : 0) +
+    (hasAddress ? 15 : 0) +
+    (hasPhone || hasEmail ? 15 : 0)
+  );
+  return {
+    score,
+    hasPhone,
+    hasEmail,
+    hasAddress,
+    hasStrongCta: hasPhone || hasEmail,
+    phones: phoneList,
+    emails: emailList,
+    bestChannel: hasEmail ? 'email' : (hasPhone ? 'phone' : 'research_needed')
   };
 }
 
@@ -262,15 +699,26 @@ function scoreLeadOpportunity({ candidate = {}, scores = {}, contactInfo = {}, s
     reasons.push('Contact info needs research.');
   }
 
-  if (seoProvider.classification === 'diy_local' || seoProvider.classification === 'unknown') {
-    score += 14;
-    reasons.push('No strong agency footprint detected.');
-  } else if (seoProvider.classification === 'pro') {
+  // Owner-type bias: easier sales when there's no agency contract in the way.
+  const ownerType = seoProvider.classification || 'unknown';
+  if (ownerType === 'diy_self' || ownerType === 'unknown') {
+    score += 16;
+    reasons.push('No strong agency footprint detected — owner likely controls the site.');
+  } else if (ownerType === 'diy_with_help') {
+    score += 12;
+    reasons.push('DIY site with light help — owner can authorize changes quickly.');
+  } else if (ownerType === 'local_marketer') {
     score += 6;
-    reasons.push('Some SEO tooling present, but not clearly agency-managed.');
-  } else if (seoProvider.classification === 'agency') {
-    score -= 12;
-    reasons.push('Agency footprint detected; tougher replacement sale.');
+    reasons.push('Local freelancer footprint — owner often pays per-project, easy to displace.');
+  } else if (ownerType === 'boutique_agency') {
+    score -= 4;
+    reasons.push('Boutique agency footprint — contract likely, target the gaps they aren\u2019t covering.');
+  } else if (ownerType === 'national_agency') {
+    score -= 14;
+    reasons.push('National agency vendor footprint — tougher replacement sale, focus on AI-search gap.');
+  } else if (ownerType === 'inhouse_team') {
+    score -= 10;
+    reasons.push('In-house team / enterprise CMS — pitch as a vendor for the AI/GEO layer they don\u2019t cover.');
   }
 
   const clamped = Math.max(0, Math.min(100, Math.round(score)));
@@ -503,11 +951,14 @@ function estimateSeoBudget(ahrefs = {}, seoProvider = {}, audit = {}) {
   if (schemaCount > 0) { score += 5; signals.push('Structured data implementation'); }
   if (hasCanonical && hasSitemap) { score += 5; signals.push('Technical SEO basics in place'); }
   
-  // Provider classification adjustment
+  // Provider classification adjustment — uses 7-bucket owner type.
   const providerTier = seoProvider.classification || 'unknown';
-  if (providerTier === 'agency') { score += 15; signals.push('Agency footprint detected (managed program)'); }
-  else if (providerTier === 'pro') { score += 10; signals.push('Pro tools detected (active optimization)'); }
-  else if (providerTier === 'diy_local') { score += 2; signals.push('DIY signals (minimal professional investment)'); }
+  if (providerTier === 'national_agency') { score += 25; signals.push('National agency vendor footprint (managed program, $5k+/mo typical)'); }
+  else if (providerTier === 'inhouse_team') { score += 22; signals.push('In-house team / enterprise CMS (large internal budget)'); }
+  else if (providerTier === 'boutique_agency') { score += 15; signals.push('Boutique agency footprint (managed program, $1.5-5k/mo typical)'); }
+  else if (providerTier === 'local_marketer') { score += 8; signals.push('Local freelancer footprint (project-based or $300-1500/mo)'); }
+  else if (providerTier === 'diy_with_help') { score += 4; signals.push('DIY platform with one SEO plugin (minimal active management)'); }
+  else if (providerTier === 'diy_self') { score += 1; signals.push('Pure DIY site (no professional investment)'); }
   
   // Calculate estimated budget range
   // Score 0-20: $0-500 (minimal/no SEO)
@@ -594,7 +1045,8 @@ function predictSeoQuality(ahrefs = {}, audit = {}, seoProvider = {}) {
   
   // Is the SEO measurable/trackable?
   const isMeasurable = dr > 0 || organicKws > 0 || traffic > 0;
-  const isActivelyManaged = seoProvider.classification === 'agency' || seoProvider.classification === 'pro' || organicKws > 200;
+  const managedClassifications = new Set(['national_agency', 'boutique_agency', 'inhouse_team', 'local_marketer']);
+  const isActivelyManaged = managedClassifications.has(seoProvider.classification) || organicKws > 200;
   const hasRoomForImprovement = overallQuality < 70;
   
   return {
@@ -665,7 +1117,9 @@ function buildAdvancedLeadInsights({ candidate = {}, scores = {}, leadScore = {}
     ahrefs: getAhrefsIntegrationStatus(),
     riskFlags: [
       aiCallCompliance.aiCallRisk === 'high' ? 'High call compliance risk: require explicit consent and disclosure.' : '',
-      seoProvider.classification === 'agency' ? 'Agency footprint detected: harder close.' : '',
+      seoProvider.classification === 'national_agency' ? 'National agency vendor: harder close, target the AI/GEO gap they don\u2019t cover.' : '',
+      seoProvider.classification === 'boutique_agency' ? 'Boutique agency: contract likely, position as complementary AI-search layer.' : '',
+      seoProvider.classification === 'inhouse_team' ? 'In-house team: pitch as a vendor for the AI-search layer they don\u2019t own.' : '',
       !canEmail && !canCall ? 'No direct contact path found.' : '',
       Number(scores.overall || 0) > 80 ? 'Strong audit score: lower pain angle.' : '',
       seoQuality.isActivelyManaged && seoQuality.overallQuality > 70 ? 'Well-managed SEO: needs sophisticated pitch angle.' : '',
@@ -848,6 +1302,13 @@ module.exports = {
   extractLeadGenCandidates,
   assessSeoProvider,
   extractContactInfo,
+  extractContactsFromHtml,
+  mergeContacts,
+  deobfuscateEmails,
+  classifyCandidateQuality,
+  isBlockedAggregator,
+  looksLikeListicleTitle,
+  looksLikeArticlePath,
   scoreLeadOpportunity,
   buildOutreachPlan,
   getAiCallComplianceForState,

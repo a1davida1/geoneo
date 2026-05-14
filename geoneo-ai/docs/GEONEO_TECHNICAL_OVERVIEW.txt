@@ -1,0 +1,329 @@
+================================================================================
+GEONEO AI — TECHNICAL DEPTH OVERVIEW
+================================================================================
+Generated from repository source under geoneo-ai/. This document describes
+architecture, persistence, authentication, audit pipelines, and operational
+surfaces at an engineering depth suitable for onboarding or handoff.
+
+Product one-liner (from package.json):
+  "GeoNeo AI — Search visibility platform for local businesses"
+
+
+--------------------------------------------------------------------------------
+1. RUNTIME STACK
+--------------------------------------------------------------------------------
+
+Backend
+  - Single-process Node.js HTTP server (HTTP module), entry: server.js (~10k+
+    LOC). No Express/Fastify; routing is explicit if-blocks on req.url.pathname
+    and req.method inside requestHandler().
+
+Frontend
+  - Plain HTML/CSS/JS: public index and assets, operator shell at admin/,
+    additional static audit/report pages (*.html). Client logic driven by
+    script.js for the marketing/audit funnel.
+
+Workers / jobs
+  - node-cron in-process for recurring work (weekly score, Prospect Hunter sweeps,
+    maintenance briefs, etc.). Multi-instance deployments should set
+    RUN_CRON_WORKER=1 on exactly one instance to avoid duplicate sweeps
+    (.env.example documents this).
+
+Browser automation
+  - puppeteer-core for capture/rendering-related paths where headless Chrome is
+    required.
+
+Dependencies (package.json excerpt)
+  - dotenv            — env loading
+  - he                — HTML entity handling (e.g. text extraction pipelines)
+  - node-cron         — schedules
+  - puppeteer-core    — headless browser
+
+Engines
+  - Node >= 18
+
+
+--------------------------------------------------------------------------------
+2. CONFIGURATION & ENVIRONMENT VARIABLES (REPRESENTATIVE)
+--------------------------------------------------------------------------------
+
+Secrets & access
+  - GEONEO_INTERNAL_API_SECRET — If unset: only loopback (127.0.0.1, ::1,
+    ::ffff:127.0.0.1) may hit protected routes. If set: non-loopback callers
+    must send Authorization: Bearer <same value>. Comparison uses crypto.
+    timingSafeEqual in services/apiAccess.js.
+
+Path overrides (tests / multi-tenant tooling)
+  - GEONEO_AUDITS_PATH          — alternate audits.json location
+  - GEONEO_COMPETITORS_PATH    — competitor tracking JSON
+  - GEONEO_FIX_TRACKER_PATH    — fix tracker store
+  - GEONEO_EMAIL_OUTBOX_PATH   — outbound email queue file
+
+Operational
+  - TZ — cron alignment (docs recommend America/Chicago for weekly 03:00 slot)
+  - HOST — bind address; 0.0.0.0 exposes LAN/WAN (.env.example warns)
+  - ALLOW_INSECURE_FETCH — dev-only fetch behavior guard
+  - RUN_CRON_WORKER — enable cron on this process only if multiple replicas
+  - DATABASE_URL — optional Postgres; compose file provides local postgres:16;
+    comment in docker-compose.yml: app still defaults to JSON unless wired
+  - RESEND_API_KEY / RESEND_FROM — optional transactional email provider
+  - PAGESPEED_API_KEY — Google PageSpeed / PSI–related calls
+  - LANGUAGETOOL_DISABLED_RULES — comma-separated LT rule IDs to silence noise
+    (.env.example)
+
+Qualifier tokens
+  - services/qualifier.js uses GEONEO_QUALIFIER_SECRET or falls back to
+    GEONEO_INTERNAL_API_SECRET or a dev default string (must be rotated for
+    production).
+
+
+--------------------------------------------------------------------------------
+3. ACCESS CONTROL MODEL
+--------------------------------------------------------------------------------
+
+A) authorizeInternalApi(req) — operators / tooling
+   - Loopback: always allowed.
+   - Remote: denied unless GEONEO_INTERNAL_API_SECRET is set AND Bearer matches
+     (timing-safe).
+
+B) authorizeInternalOrMember(req)
+   - True for internal callers as above OR allows the request through for
+     "public member" surfaces; enforcement then happens in handlers via domain
+     lookup + eligibility (403 membership_required when ineligible).
+
+C) Member eligibility (programming guide)
+   - Routes like /api/score, /api/member/brief, /api/competitors/dashboard,
+     /api/fix-tracker require internal auth AND isEligibleForWeeklyScore(latest
+     audit for domain). Eligibility tied to productType membership, paid tier
+     thresholds, or recent one-time purchases (see PROGRAMMING_GUIDE.md).
+
+D) Unauthenticated endpoints
+   - Examples: /api/score/health for lightweight uptime-style checks.
+
+
+--------------------------------------------------------------------------------
+4. PRIMARY HTTP SURFACES (CONDENSED CATALOG)
+--------------------------------------------------------------------------------
+
+Public / lead intake
+  - GET  /api/audit — Live audit + lead validation + persistence + tier-filtered
+    response body.
+  - GET  /api/audit-report — HTML report for audit id
+  - GET  /api/audit-report/download — downloadable HTML
+  - POST /api/leads — supplementary lead ingestion where implemented
+
+Deep diagnostics
+  - GET /api/audit-deep — Full deep orchestrator response (many sub-analyzers)
+
+Member / retention (typically internal-auth + eligibility)
+  - GET /api/score, /api/score/history, /api/score/run-weekly
+  - GET /api/member/brief, /api/member/technical
+  - GET /api/competitors/dashboard
+  - GET /api/fix-tracker, POST /api/fix-tracker
+
+Customer-facing JSON (some paths under /api/customer/* in server.js)
+  - Dashboard, fix tracker aliases, re-audit, llms.txt helper, fix-plan, etc.
+
+Admin / GTM / ops (internal auth)
+  - GET /admin/, /admin/leads — static operator UI
+  - GET /api/admin/summary — JSON snapshot (counts, paths, pipeline hints)
+  - Lead gen: POST /api/admin/lead-gen/discover, deep-discover, runs,
+    geography helpers, Ahrefs status, Places match, industry baselines
+  - Lead pipeline: listing, suppression, bulk status, CSV export, outcomes
+  - Email blast: preview, send, targeted send, jobs, variants
+  - Outbox throttle GET/POST
+  - Scheduler job listing/control
+  - Audit archive: query, stats
+  - AI call queue / webhook / dispatch / human queue
+  - POST /api/pipeline/:domain — pipeline stage updates for a domain
+
+Other notable routes (grep-derived)
+  - /api/citation-fixer, /api/neo-club, /api/instant-makeover, /api/closer-sheet
+  - /api/inbound/email (inbound plumbing)
+  - /api/geo/* (prospect verticals, US states, cities)
+  - /api/qualifier/* (question/reaction flows)
+  - POST /api/internal/generate-page (programmatic HTML generation path)
+
+This list is non-exhaustive; server.js is the source of truth for every pathname.
+
+
+--------------------------------------------------------------------------------
+5. AUDIT ENGINES — QUICK VS DEEP
+--------------------------------------------------------------------------------
+
+Architectural separation (engineering invariant)
+  - Audit/scoring logic is kept separate from package/tier filtering. Customer-
+    facing payloads are deterministic filtered views of richer internal structs.
+
+Deep audit orchestrator — services/auditDeep.js
+  - runDeepAudit() accepts pre-fetched inputs (html, finalUrl, robotsTxt,
+    optional llms.txt bodies, industry/geo, businessFacts, SERP context,
+    sitemap XML). The orchestrator does NOT own HTTP fetch — server prepares
+    inputs (prepareDeepAuditInputs and related helpers).
+  - Fans out parallel sub-analyzers with per-section timeouts (SECTION_TIMEOUT_MS
+    8000ms default; PageSpeed bucket 18000ms; grammar/content bucket 14000ms).
+  - Sub-modules (non-exhaustive):
+      schemaAnalyzer, eeatAnalyzer, geoAnalyzer (+ generateLlmsTxt),
+      sitemapValidator, napChecker, imageAuditor, pageSpeedClient,
+      grammarChecker (LanguageTool path + he for HTML entity decode), and
+      dollarLiftEngine for stamping monetary estimates onto findings.
+  - Explicit comment: NO LLM in the orchestrator; sub-analyzers may use measured
+    / constrained LLM use (e.g. multi-LLM citation matrix) but not open-ended
+    generation in the orchestrator itself.
+
+Dollar lift
+  - estimateForFinding / estimateSpecificLoss tie findings to business framing;
+    SERP-derived missingCount, totalQueries, avgPosition feed Opportunity math.
+
+Grammar / LanguageTool
+  - grammarChecker analyzes visible text; LANGUAGETOOL_DISABLED_RULES env trims
+    noisy rules.
+
+
+--------------------------------------------------------------------------------
+6. DATA PERSISTENCE — JSON-FIRST
+--------------------------------------------------------------------------------
+
+Primary ledger
+  - data/audits.json — append/update style store for audits + leads. Writes
+    should follow atomic temp-then-rename patterns per programming guide rules.
+
+Operational JSON stores (representative filenames)
+  - data/pipeline.json — sales pipeline stages
+  - data/email-outbox.json — outbound email queue when provider not configured
+  - data/competitors*.json — competitor intelligence (exact name via env)
+  - data/ai-call-queue.json, human-call-queue.json — call workflows
+  - data/qualifier-responses.json — qualifier tokens + archive
+  - data/industry-baselines.json — computed baselines cache
+  - data/prospect-verticals.json — served via /api/geo/prospect-verticals
+
+Audit archive (services/auditArchive.js) — IMPORTANT FOR HASH FILENAMES
+  - Directory: data/audit-archive/<sha1-domain-prefix-20chars>.json
+  - Index:    data/audit-archive-index.ndjson (one JSON object per line)
+  - Purpose: durable per-domain history for blasts, re-audit diffs, trend
+    queries; flat NDJSON for streaming scans without loading every blob.
+  - domainHash(domain) = sha1(normalized hostname).slice(0,20) — THAT is why
+    Docker-synced filenames look like opaque hex strings.
+  - Idempotency: dedupe window 1 hour per (domain, source).
+  - Retention cap: MAX_HISTORY_PER_DOMAIN (=24 entries / domain oldest dropped).
+  - Concurrency: in-process mutex per domain; parallel domains OK.
+  - Atomic writes for per-domain files; NDJSON appends capped for POSIX
+    atomic-append assumptions (PIPE_BUF / line byte cap documented in-module).
+
+Caches (typically gitignored locally)
+  - data/grammar-cache/ — LanguageTool-ish cache blobs
+  - Other caches referenced in backupScheduler exclusions: ahrefs-cache,
+    screenshots/, serp-screenshots/
+
+Backups — services/backupScheduler.js
+  - Tars selective data/* trees; excludes bulky regenerable dirs (backups dir
+    itself, grammar-cache, ahrefs-cache, screenshots, serp-screenshots).
+
+
+--------------------------------------------------------------------------------
+7. SCHEDULERS & EMAIL
+--------------------------------------------------------------------------------
+
+weeklyScoreScheduler / weeklyScore health endpoints integrate with visibility
+history (services/scoreHistory.js pattern).
+
+Outbound email
+  - With RESEND_* configured, sends through provider.
+  - Without: messages land in JSON outbox with idempotency + attempt counters
+    (PROGRAMMING_GUIDE.md).
+
+Cron gating
+  - RUN_CRON_WORKER separates "web replica" vs "worker replica" responsibilities
+    in scaled deployments (.env.example).
+
+
+--------------------------------------------------------------------------------
+8. INTEGRATIONS (THIRD PARTY)
+--------------------------------------------------------------------------------
+
+Configurable / optional depending on keys and product path:
+  - Google PageSpeed Insights API — performance section
+  - Resend — email
+  - Ahrefs API client — services/ahrefsClient.js / lead gen enrichment
+  - Google Places–style matching — placesClient.js + admin routes
+  - SERP providers — serpProvider.js (Google/Bing/DuckDuckGo style fallbacks used
+    in tests per guide)
+  - LanguageTool-public or compatible endpoint — grammar/content signals
+  - Puppeteer — rendered capture where required
+
+FETCH safety
+  - AbortController/timeouts wired in modern server paths for outbound HTTP;
+    ALLOW_INSECURE_FETCH gates relaxed TLS behaviors for dev troubleshooting.
+
+
+--------------------------------------------------------------------------------
+9. TESTING
+--------------------------------------------------------------------------------
+
+Command: cd geoneo-ai && npm test
+Harness: Node built-in --test runner (test/*.test.js)
+
+Coverage expectations (engineering docs)
+  - Tier/package filtering correctness
+  - Quick-win counting, lift estimation
+  - Lead record shapes + upgrade credits
+  - Enterprise API behavior (authorizeInternalApi matrix in
+    test/enterpriseApi.test.js)
+
+Notable quirks (PROGRAMMING_GUIDE)
+  - Free-tier /api/audit tests need full contact fields unless testing non-free
+    packages intentionally.
+  - Tests that intercept Google SERP should aggregate all google.com/search
+    requests when multiple queries fire (local visibility adds extra queries).
+
+
+--------------------------------------------------------------------------------
+10. DOCKER — LOCAL DATABASE ONLY (CURRENT STATE)
+--------------------------------------------------------------------------------
+
+docker-compose.yml defines postgres:16 on 127.0.0.1:5432 with dev credentials.
+Comment states GeoNeo continues to rely on JSON stores unless DATABASE_URL is
+actually plumbed through application code paths. Treat Postgres volume as opt-
+in infra for future or parallel features.
+
+
+--------------------------------------------------------------------------------
+11. SECURITY & OPS NOTES FOR PRODUCTION
+--------------------------------------------------------------------------------
+
+High risk if misconfigured
+  - Leaving GEONEO_INTERNAL_API_SECRET unset while binding HOST=0.0.0.0 —
+    rely on firewall + VPN; documented warning in .env.example.
+  - Qualifier default secret string in code path — MUST override in prod.
+
+Data sensitivity
+  - audits.json and archive files bundle PII (contact, phones) + competitive
+    intel. Exclude from repos (root .gitignore patterns under geoneo-ai/data/*).
+
+Internal vs customer views
+  - fullAuditResult vs customerResult separation is a core integrity rule
+    (ENGINEERING_RULES.md).
+
+
+--------------------------------------------------------------------------------
+12. WHERE TO DIG DEEPER (SOURCE MAP)
+--------------------------------------------------------------------------------
+
+Documentation (this repo)
+  - docs/README.md — index of product/engineering Markdown
+  - docs/ARCHITECTURE.md — MVP-era endpoint list + data layers
+  - docs/PROGRAMMING_GUIDE.md — auth rules, eligibility, tester notes
+  - docs/MVP.md, docs/ENGINEERING_RULES.md — scope + invariants
+
+Code hotspots
+  - server.js — all routes, HTML embedding, middleware-like guards inline
+  - services/apiAccess.js — internal auth primitives
+  - services/auditDeep.js — canonical deep-response assembly + timeouts
+  - services/auditArchive.js — hash filenames + NDJSON index semantics
+  - services/leadGenBatch.js, leadPipeline.js — GTM mechanics
+  - services/weeklyScoreScheduler.js, scheduler.js — job wiring
+
+
+--------------------------------------------------------------------------------
+END OF TECHNICAL OVERVIEW
+--------------------------------------------------------------------------------
